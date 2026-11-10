@@ -78,9 +78,9 @@ import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
 import com.campusmarket.app.navigation.keepSnackbarsAbove
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.ui.platform.LocalDensity
 
 private const val LOAD_OLDER_THRESHOLD = 5
 
@@ -88,7 +88,6 @@ private const val LOAD_OLDER_THRESHOLD = 5
  * One conversation: header (other person → profile, listing → detail), history paged backwards (newest at the
  * bottom), live messages, optimistic sending with retry, read receipts, report / block.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ConversationScreen(route: ConversationRoute, nav: NavController) {
     val vm = koinViewModel<ConversationViewModel>(key = "conversation:${route.conversationId}") { parametersOf(route) }
@@ -126,7 +125,8 @@ fun ConversationScreen(route: ConversationRoute, nav: NavController) {
             is UiState.Error -> ErrorState(s.error, body, onRetry = vm::loadConversation)
             is UiState.Content -> BoxWithConstraints(body) {
                 // Typing in landscape leaves only a strip above the keyboard: give it to the messages and the composer.
-                val roomForStrip = !WindowInsets.isImeVisible || maxHeight >= CompactChatHeight
+                val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+                val roomForStrip = !imeVisible || maxHeight >= CompactChatHeight
                 Column(Modifier.fillMaxSize()) {
                     val c = s.value
                     val state by vm.state.collectAsStateWithLifecycle()
