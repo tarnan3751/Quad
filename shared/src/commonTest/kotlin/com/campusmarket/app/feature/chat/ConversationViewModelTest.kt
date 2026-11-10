@@ -48,7 +48,7 @@ class ConversationViewModelTest {
 
     /** Mutable fake server for one conversation. */
     private inner class FakeChatServer {
-        val conversation = Conversation("c1", listingSummary(sellerId = "u2"), other, "See you then", NOW - 1_000, 1, NOW - 50_000)
+        var conversation = Conversation("c1", listingSummary(sellerId = "u2"), other, "See you then", NOW - 1_000, 1, NOW - 50_000)
         var newest = mutableListOf(msg("m2", "u2", "See you then", NOW - 1_000), msg("m1", me, "Is it still available?", NOW - 2_000))
         val older = listOf(msg("m0", me, "Hi!", NOW - 3 * 86_400_000L))
         var sendStatus: HttpStatusCode? = null
@@ -303,6 +303,29 @@ class ConversationViewModelTest {
         assertNull(vm.state.value.restriction)
         // BlockUserDialog shows the "Blocked …" / "Unblocked …" snackbar itself: no second one from here.
         assertNull(withTimeoutOrNull(1_000) { h.userMessages.messages.first() })
+        vm.close()
+    }
+
+    @Test
+    fun comingBackPicksUpABlockMadeElsewhere() = runTest {
+        val (server, h, live) = setUp()
+        val vm = vm(h, live)
+        vm.setVisible(true)
+        advanceUntilIdle()
+        assertNull(vm.state.value.restriction)
+
+        // Blocked from their profile, opened from this chat; then back here.
+        vm.setVisible(false)
+        server.conversation = server.conversation.copy(otherUser = other.copy(blockedByMe = true))
+        vm.setVisible(true)
+        advanceUntilIdle()
+        assertEquals(SendRestriction.BlockedByMe, vm.state.value.restriction)
+
+        vm.setVisible(false)
+        server.conversation = server.conversation.copy(otherUser = other.copy(blockedByMe = false))
+        vm.setVisible(true)
+        advanceUntilIdle()
+        assertNull(vm.state.value.restriction)
         vm.close()
     }
 

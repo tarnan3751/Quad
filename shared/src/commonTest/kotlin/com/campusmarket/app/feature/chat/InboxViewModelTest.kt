@@ -26,6 +26,8 @@ import kotlinx.coroutines.test.setMain
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 
 /** Inbox live updates: bump / create rows, unread badges, read events, fallback sync. */
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -40,10 +42,12 @@ class InboxViewModelTest {
         conversation("c2", "u3", NOW - 5_000, 1),
     )
     private val c9 = conversation("c9", "u9", NOW + 50, 1, "New buyer here")
+    private var offline = false
 
     private fun TestScope.setUp(status: ChatSocket.Status = ChatSocket.Status.Connected): Triple<InboxViewModel, VmHarness, FakeLiveChat> {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         val h = VmHarness(this) { req ->
+            if (offline) throw kotlinx.io.IOException("offline")
             when (req.url.encodedPath) {
                 ApiRoutes.CONVERSATIONS -> respondJson(Page.serializer(Conversation.serializer()), Page(page, null))
                 ApiRoutes.conversation("c9") -> respondJson(Conversation.serializer(), c9)
@@ -146,6 +150,22 @@ class InboxViewModelTest {
         runCurrent()
         assertEquals(before + 1, h.requests(HttpMethod.Get, ApiRoutes.CONVERSATIONS).size)
         assertEquals(1, live.reconnectRequests)
+        vm.close()
+    }
+
+    @Test
+    fun openedOfflineLoadsByItselfOnceTheConnectionIsBack() = runTest {
+        offline = true
+        val (vm, _, live) = setUp(status = ChatSocket.Status.Reconnecting)
+        runCurrent()
+        assertNotNull(vm.conversations.state.value.error)
+
+        offline = false
+        live.status.value = ChatSocket.Status.Connected
+        advanceTimeBy(1_000)
+        runCurrent()
+        assertEquals(listOf("c1:0", "c2:1"), vm.rows())
+        assertNull(vm.conversations.state.value.error)
         vm.close()
     }
 }

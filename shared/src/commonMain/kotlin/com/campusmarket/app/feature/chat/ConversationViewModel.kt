@@ -160,10 +160,16 @@ class ConversationViewModel(
         }
     }
 
-    fun loadConversation() {
-        load(_conversation) {
+    fun loadConversation(quietly: Boolean = false) {
+        load(_conversation, keepContent = quietly) {
             api.conversation(conversationId).also { c ->
-                if (c.otherUser.blockedByMe) _state.update { it.copy(restriction = SendRestriction.BlockedByMe) }
+                _state.update {
+                    when {
+                        c.otherUser.blockedByMe -> it.copy(restriction = SendRestriction.BlockedByMe)
+                        it.restriction == SendRestriction.BlockedByMe -> it.copy(restriction = null)
+                        else -> it
+                    }
+                }
             }
         }
     }
@@ -182,6 +188,8 @@ class ConversationViewModel(
         if (resumedOnce) {
             live.reconnectNow()
             viewModelScope.launch { syncNewest() }
+            // Back from their profile or the listing: they may have been blocked / unblocked, or the item sold.
+            loadConversation(quietly = true)
         }
         resumedOnce = true
         maybeMarkRead()
