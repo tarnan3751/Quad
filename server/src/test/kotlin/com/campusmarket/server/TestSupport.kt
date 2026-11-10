@@ -51,6 +51,8 @@ object TestEnv {
         publicBaseUrl = "http://localhost",
         devMode = true,
         uploadsDir = Files.createTempDirectory("cm-uploads").toString(),
+        // tests read the counts right after changing listings; the cache has its own tests
+        categoryCountsTtlSeconds = 0,
     )
 
     val db: Db by lazy {

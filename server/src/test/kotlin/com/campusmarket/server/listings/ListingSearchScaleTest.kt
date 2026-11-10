@@ -108,7 +108,7 @@ class ListingSearchScaleTest {
         val filters = mapOf("category" to "BIKES,FURNITURE", "condition" to "GOOD", "minPrice" to "300", "maxPrice" to "800")
         val filterSql = "l.category IN ('BIKES', 'FURNITURE') AND l.condition = 'GOOD' AND l.price_cents BETWEEN 300 AND 800"
         for ((q, fullText) in listOf("tv" to false, "zq" to false, "desk" to true, "zebra" to true)) {
-            for (sort in listOf("RELEVANCE", "PRICE_ASC")) {
+            for (sort in listOf("RELEVANCE", "NEWEST", "PRICE_ASC")) {
                 val want = reference(env, q, fullText, sort, hidden, filterSql)
                 val got = allPages(viewer, ApiRoutes.LISTINGS, 7, filters + mapOf("q" to q, "sort" to sort)).ids()
                 assertEquals(want, got, "q=$q sort=$sort filtered")

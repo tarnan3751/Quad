@@ -71,6 +71,8 @@ Decisions made while implementing the server that go beyond `CONTRACT.md`. Clien
 - `RELEVANCE` is three classes, each newest first: every term in the title, then some of the terms in the title, then
   description only (substring queries: title starts with the text, title contains it, description only). It is not a
   score: a listing that repeats a word doesn't move up.
+- `GET /categories` counts may be up to ~30 s behind (see Performance); don't expect a count to move the moment a
+  listing is posted or sold. Blocking a seller changes them at once.
 - A cursor is only valid with the sort/filters that produced it: restart from page 1 whenever query, filters or sort change.
 - `/me/listings?status=ACTIVE,SOLD` uses the same list format.
 - Edit/delete someone else's listing → 403; editing a non-ACTIVE listing → 409; deleting RESERVED/SOLD → 409.
@@ -82,7 +84,8 @@ Decisions made while implementing the server that go beyond `CONTRACT.md`. Clien
 Synthetic dataset: 300,000 listings on five campuses (the largest has 110,000 ACTIVE ones), 30,000 users, 250,000
 conversations with 2.1 M messages, 106,000 orders, 400,000 favorites; rows in random physical order (worse than a real
 table, which is roughly in posting order). Whole request over loopback, median of 40 after warm-up, best of three
-rounds, page of 20, viewer with 40 blocks. "Before" is the release before the search indexes (V6_listings_1).
+rounds, page of 20, viewer with 40 blocks. "Before" is the release before the search indexes (V6_listings_1); the
+rows with three numbers also show the release with V6 only.
 
 | `GET /listings` on the large campus | before | now |
 |---|---|---|
@@ -95,15 +98,31 @@ rounds, page of 20, viewer with 40 blocks. "Before" is the release before the se
 | `q=desk`, `q=calc`, `q=textbook`, `q=pickup` (common words) | 22-27 ms | 1.8-3.1 ms |
 | `q=tv stand`, `q=wireless charger`, `q=ikea desk`, `q=mini fridge` | 6-16 ms | 2.8-3.9 ms |
 | `q=zzzz` (rare word) | 3.0 ms | 3.3 ms |
-| `q=a&category=BIKES` | 12.8 ms | 2.4 ms |
-| `q=tv&category=BIKES` / `q=zq&category=BIKES` | 13.3 / 18.3 ms | 7.3 / 11.4 ms |
+| `q=a&category=BIKES` | 12.8 ms | 2.0 ms |
+| `q=tv&category=BIKES`, `q=the&category=BIKES`, `q=z&category=BIKES` | 13 ms, then 6.6-8.1 ms | 5.4-6.7 ms |
+| `q=zq&category=BIKES`, `q=%&category=BIKES`, `q=zq&minPrice=1000&maxPrice=2000` (no match) | 18 ms, then 10.2-10.6 ms | 8.7-9.1 ms |
+| `q=desk&category=BIKES` | 16.2 ms (also with V6) | 4.9 ms |
+| `q=zq` or `q=a` with category + condition + price (14 listings pass) | 2.7-3.2 ms | 2.9-3.5 ms |
 | no `q`: every sort, category / condition / price filters, page 1 and 2 | 0.8-1.5 ms | 0.8-1.5 ms |
 
 Other reads, unchanged and all served by an index: favorites, my listings, a seller's listings and profile 1.0-2.7 ms;
 inbox and orders (also for an account with ~3,000 conversations and ~1,500 orders) 1.8-2.3 ms; listing, conversation,
 messages and order pages 0.9-1.6 ms; ratings, blocks, the report and dispute queues and the moderation log 0.9-2.1 ms.
-`GET /categories` reads one index entry per ACTIVE listing of the campus: 20-29 ms at 110,000 of them, in
-proportion for smaller campuses. The admin-only staff list (2.5 ms) and user search (13 ms) read the whole `users` table.
+
+| Other reads | before | now |
+|---|---|---|
+| `GET /categories`, large campus | 17-29 ms | 1.0 ms (the 17-29 ms once per campus every 30 s) |
+| `GET /mod/staff` | 2.5-4.6 ms | 0.8 ms |
+| `GET /mod/users/search`: `q=user 123`, `q=u12`, `q=23@state`, `q=zz` (none), `q=edu` (everyone) | 13-17 ms (`user 123`; all of them scanned `users`) | 2.2, 3.2, 2.4, 1.5, 0.9 ms |
+
+- `GET /categories` counts one index entry per ACTIVE listing of the campus, so each instance keeps a campus's counts
+  in memory for `CATEGORY_COUNTS_TTL_SECONDS` (default 30; 0 counts every time) and for at most 500 campuses. The
+  counts a caller sees can therefore lag up to that long behind listings being posted, sold or removed; the listings
+  of sellers the caller has blocked are few, are counted on every request and are taken off at once. The ETag is of
+  the body actually sent, so it only changes when the served counts do.
+- The staff list has its own small index. The user search works like the listing search: users in name order first
+  (a text most users match fills the 20 results there), else the one- and two-character pieces of email and name
+  (`users_search_grams_idx`).
 
 How text search stays quick (see `ListingBrowse.textSearch`):
 - Each relevance class is first looked for among the next 1,000 listings of the campus in order (newest first, or by
@@ -112,11 +131,19 @@ How text search stays quick (see `ListingBrowse.textSearch`):
   substring queries the two `search_grams` indexes, which hold every one- and two-character piece of each ACTIVE
   listing's title and description per campus. A search is one to seven short statements instead of one scan of the
   campus (which also kept three CPU cores busy for those 60 ms).
-- The weak spot is a text that is rare among the newest listings combined with a filter: the walk has to read until
-  it has seen 1,000 listings that pass the filter (the 7-11 ms rows above).
+- With filters the walk takes the next 1,000 listings that pass them from `listings_browse_filter_idx`, which carries
+  category, condition and price, and fetches only those (newest-first orders; a price order reads the price index and
+  checks the rest on the rows).
+- The weak spot is still a short text that is rare among the newest listings combined with a filter (the 8.7-9.1 ms
+  rows): three classes, each a walk over 1,000 filtered listings and then an index fetch, seven statements in all,
+  about half of the time spent planning them. Tried and dropped: counting each class's matches among the newest
+  1,000 listings first, to skip the walks that can't succeed. It brought those rows to 6.5-7.1 ms but cost 1.6-2 ms
+  on searches whose title class is rare and whose description class is common (`q=the`, `q=it`, `q=z`: 3.3 -> 5.0-5.4 ms),
+  which are far more frequent.
 - Costs: the gram indexes are 75 MB next to a 211 MB table (26 MB for the full-text index); indexing one listing takes
   about 0.25 ms for a typical description and 4.5 ms for a 4,000-character one. The migration took 75 s here
-  (185,000 ACTIVE listings on all campuses) and blocks listing writes while it runs.
+  (185,000 ACTIVE listings on all campuses) and blocks listing writes while it runs. `listings_browse_filter_idx`
+  adds 15 MB, the three `users` indexes 4 MB for 30,000 users.
 
 ## Chat
 - Cursors are opaque; messages come newest-first; conversations ordered by last activity.

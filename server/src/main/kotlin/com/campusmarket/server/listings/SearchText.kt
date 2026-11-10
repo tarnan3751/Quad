@@ -35,8 +35,10 @@ internal sealed interface TextMatch {
                 MatchTier(
                     RANK_TITLE,
                     Cond("l.search @@ ?::tsquery", inTitle),
-                    // title lexemes are the weight-A ones of l.search; the first condition is for listings_title_search_idx
-                    Cond("$ACTIVE AND to_tsvector('english', l.title) @@ ?::tsquery AND l.search @@ ?::tsquery", tsquery, inTitle),
+                    // Title lexemes are the weight-A ones of l.search; the first condition is for listings_title_search_idx.
+                    // COALESCE keeps the second from being looked up in listings_search_idx as well, where the same
+                    // lexemes also bring every description that has them.
+                    Cond("$ACTIVE AND to_tsvector('english', l.title) @@ ?::tsquery AND COALESCE(l.search @@ ?::tsquery, false)", tsquery, inTitle),
                 ),
             )
             if (terms > 1) {
@@ -60,9 +62,14 @@ internal sealed interface TextMatch {
         override fun any(campus: String): MatchTier = MatchTier(
             0f,
             Cond("(l.title ILIKE ? ESCAPE '!' OR l.description ILIKE ? ESCAPE '!')", containsPattern, containsPattern),
+            // Two index lookups rather than one OR of both: Postgres tests an OR on every candidate row, grams included,
+            // and computing a row's grams costs far more than the ILIKE they stand in for.
             Cond(
-                """$ACTIVE AND (($TITLE_GRAMS @> search_pattern_grams(?, ?) AND l.title ILIKE ? ESCAPE '!')
-                    OR ($DESCRIPTION_GRAMS @> search_pattern_grams(?, ?) AND l.description ILIKE ? ESCAPE '!'))""",
+                """l.id IN (SELECT l.id FROM listings l
+                            WHERE $ACTIVE AND $TITLE_GRAMS @> search_pattern_grams(?, ?) AND l.title ILIKE ? ESCAPE '!'
+                            UNION ALL
+                            SELECT l.id FROM listings l
+                            WHERE $ACTIVE AND $DESCRIPTION_GRAMS @> search_pattern_grams(?, ?) AND l.description ILIKE ? ESCAPE '!')""",
                 campus, text, containsPattern, campus, text, containsPattern,
             ),
         )

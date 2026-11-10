@@ -32,6 +32,8 @@ internal data class SearchParams(
     val maxPriceCents: Int? = null,
     val sort: ListingSort? = null,
 ) {
+    val hasFilters: Boolean get() = categories.isNotEmpty() || conditions.isNotEmpty() || minPriceCents != null || maxPriceCents != null
+
     companion object {
         fun parse(qp: Parameters): SearchParams {
             val min = qp.cents("minPrice")
@@ -67,14 +69,27 @@ internal inline fun <reified E : Enum<E>> Parameters.enumSet(name: String): Set<
 private const val VISIBLE_TO_VIEWER =
     "$SELLER_IN_GOOD_STANDING AND NOT EXISTS (SELECT 1 FROM blocks b WHERE b.blocker_id = ? AND b.blocked_id = l.seller_id)"
 
+private const val CAMPUS_CATEGORY_COUNTS =
+    """SELECT l.category, count(*) FROM listings l JOIN users s ON s.id = l.seller_id
+       WHERE l.campus_domain = ? AND l.status = 'ACTIVE' AND $SELLER_IN_GOOD_STANDING"""
+
 /** How many listings a text search reads in order, per relevance class, before turning to the text indexes. */
 private const val WALK_WINDOW = 1000
 
 /** One row of a keyset-paged listing query, before rendering. */
 private data class Hit(val id: UUID, val key: Keyset)
 
-/** Paged / aggregated listing reads. */
-internal class ListingBrowse(private val deps: AppDeps) {
+/** Campuses whose category counts are kept in memory at once; the least recently asked for goes first. */
+private const val MAX_CACHED_CAMPUSES = 500
+
+/** Paged / aggregated listing reads. [nanoTime] is the clock of the category-count cache. */
+internal class ListingBrowse(private val deps: AppDeps, private val nanoTime: () -> Long = System::nanoTime) {
+
+    private class CampusCounts(val loadedAt: Long, val byCategory: Map<String, Int>)
+
+    private val campusCounts = object : LinkedHashMap<String, CampusCounts>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, CampusCounts>): Boolean = size > MAX_CACHED_CAMPUSES
+    }
 
     /** GET /listings: ACTIVE listings on the caller's campus, minus blocked and suspended sellers. */
     suspend fun search(viewer: UserPrincipal, p: SearchParams, page: PageParams): Page<ListingSummary> = deps.db.tx { c ->
@@ -113,9 +128,11 @@ internal class ListingBrowse(private val deps: AppDeps) {
      */
     private fun Connection.textSearch(viewer: UserPrincipal, p: SearchParams, match: TextMatch, sort: ListingSort, after: Keyset?, count: Int): List<Hit> {
         val ranked = sort == ListingSort.RELEVANCE
+        val newestFirst = ranked || sort == ListingSort.NEWEST
         val order = order(if (ranked) ListingSort.NEWEST else sort)
         val tiers = if (ranked) match.ranked(viewer.campusDomain) else listOf(match.any(viewer.campusDomain))
         val hits = ArrayList<Hit>(count)
+        var parallelOff = false
         var windowIsPartOfCampus: Boolean? = null
         for (tier in tiers) {
             val need = count - hits.size
@@ -124,14 +141,28 @@ internal class ListingBrowse(private val deps: AppDeps) {
             val start = after?.takeIf { !ranked || it.rank == tier.rank }
 
             fun fetch(indexed: Boolean): List<Hit> {
-                val sql = Sql("SELECT l.id, l.price_cents, l.created_at FROM (SELECT l.id, l.price_cents, l.created_at, l.seller_id")
+                val sql = Sql("SELECT l.id, l.price_cents, l.created_at FROM (")
                 if (indexed) {
                     // `|| ''` keeps the planner off the campus and status indexes: this is for the rows the text index finds
-                    sql.add(" FROM listings l WHERE l.campus_domain || '' = ? AND l.status || '' = 'ACTIVE'", viewer.campusDomain)
+                    sql.add(
+                        "SELECT l.id, l.price_cents, l.created_at, l.seller_id FROM listings l WHERE l.campus_domain || '' = ? AND l.status || '' = 'ACTIVE'",
+                        viewer.campusDomain,
+                    )
                     sql.filters(p).after(sort, start).add(" AND ${tier.indexed.sql} ORDER BY $order) l", *tier.indexed.params)
                 } else {
-                    sql.add(", l.title, l.description, l.search FROM listings l WHERE l.campus_domain = ? AND l.status = 'ACTIVE'", viewer.campusDomain)
-                    sql.filters(p).after(sort, start).add(" ORDER BY $order LIMIT $WALK_WINDOW) l")
+                    val window = Sql("SELECT l.id, l.price_cents, l.created_at, l.seller_id, l.title, l.description, l.search FROM listings l WHERE l.campus_domain = ? AND l.status = 'ACTIVE'", viewer.campusDomain)
+                    window.filters(p).after(sort, start).add(" ORDER BY $order LIMIT $WALK_WINDOW")
+                    if (p.hasFilters && newestFirst) {
+                        // Which listings pass the filters is read from listings_browse_filter_idx alone (it holds the
+                        // filter columns), so only those are fetched, not everything in between.
+                        sql.add(
+                            """SELECT w.id, w.price_cents, w.created_at, t.seller_id, t.title, t.description, t.search
+                               FROM (${window.toString().replaceFirst(", l.seller_id, l.title, l.description, l.search", "")}) w JOIN listings t ON t.id = w.id) l""",
+                            *window.paramsArray(),
+                        )
+                    } else {
+                        sql.add("$window) l", *window.paramsArray())
+                    }
                 }
                 // the sellers are only looked up for the matches, in order, until the page is full
                 sql.add(" JOIN users s ON s.id = l.seller_id WHERE $VISIBLE_TO_VIEWER", viewer.id)
@@ -144,7 +175,15 @@ internal class ListingBrowse(private val deps: AppDeps) {
             if (rows.size < need) {
                 // the walk stopped at the window, not at the page size; unless the window was the whole campus, it may have missed rows
                 val partial = windowIsPartOfCampus ?: windowIsPartOfCampus(viewer, p).also { windowIsPartOfCampus = it }
-                if (partial) rows = fetch(indexed = true)
+                if (partial) {
+                    if (!parallelOff) {
+                        // An index fetch reads few rows; starting parallel workers for it (the planner does, for the
+                        // two-index lookups) costs more than the fetch.
+                        createStatement().use { it.execute("SET LOCAL max_parallel_workers_per_gather = 0") }
+                        parallelOff = true
+                    }
+                    rows = fetch(indexed = true)
+                }
             }
             hits += rows
         }
@@ -226,15 +265,36 @@ internal class ListingBrowse(private val deps: AppDeps) {
         c.render(viewer, hits, page.limit)
     }
 
-    /** GET /categories: every category, with the number of listings the caller would find by browsing it. */
+    /**
+     * GET /categories: every category, with the number of listings the caller would find by browsing it.
+     *
+     * Counting reads an index entry per ACTIVE listing of the campus, so the campus's counts are kept in memory for
+     * [com.campusmarket.server.AppConfig.categoryCountsTtlSeconds] and may lag that long behind new, sold or removed
+     * listings (each server instance on its own). The listings of sellers the caller has blocked are few and are
+     * counted on every request, so blocking someone shows at once.
+     */
     suspend fun categories(viewer: UserPrincipal): List<CategoryInfo> = deps.db.tx { c ->
-        val counts = c.query(
-            """SELECT l.category, count(*) FROM listings l JOIN users s ON s.id = l.seller_id
-               WHERE l.campus_domain = ? AND l.status = 'ACTIVE' AND $SELLER_IN_GOOD_STANDING
-                 AND NOT EXISTS (SELECT 1 FROM blocks b WHERE b.blocker_id = ? AND b.blocked_id = l.seller_id)
-               GROUP BY l.category""",
-            viewer.campusDomain, viewer.id,
-        ) { it.getString(1) to it.getInt(2) }.toMap()
+        val ttlNanos = deps.config.categoryCountsTtlSeconds * 1_000_000_000L
+        val counts = if (ttlNanos <= 0) {
+            c.query(
+                "$CAMPUS_CATEGORY_COUNTS AND NOT EXISTS (SELECT 1 FROM blocks b WHERE b.blocker_id = ? AND b.blocked_id = l.seller_id) GROUP BY l.category",
+                viewer.campusDomain, viewer.id,
+            ) { it.getString(1) to it.getInt(2) }.toMap()
+        } else {
+            val now = nanoTime()
+            val cached = synchronized(campusCounts) { campusCounts[viewer.campusDomain] }?.takeIf { now - it.loadedAt < ttlNanos }
+            // two requests that find it expired both count; that is cheaper than making either wait
+            val campus = cached ?: CampusCounts(now, c.query("$CAMPUS_CATEGORY_COUNTS GROUP BY l.category", viewer.campusDomain) { it.getString(1) to it.getInt(2) }.toMap())
+                .also { synchronized(campusCounts) { campusCounts[viewer.campusDomain] = it } }
+            val blocked = c.query(
+                """SELECT l.category, count(*) FROM blocks b JOIN listings l ON l.seller_id = b.blocked_id JOIN users s ON s.id = l.seller_id
+                   WHERE b.blocker_id = ? AND l.campus_domain = ? AND l.status = 'ACTIVE' AND $SELLER_IN_GOOD_STANDING
+                   GROUP BY l.category""",
+                viewer.id, viewer.campusDomain,
+            ) { it.getString(1) to it.getInt(2) }.toMap()
+            // the two were counted at different moments: never show a negative number
+            campus.byCategory.mapValues { (category, n) -> (n - (blocked[category] ?: 0)).coerceAtLeast(0) }
+        }
         ListingCategory.entries.map { CategoryInfo(it, it.label, counts[it.name] ?: 0) }
     }
 

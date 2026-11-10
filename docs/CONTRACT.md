@@ -89,7 +89,7 @@ Passwords: bcrypt (`at.favre.lib:bcrypt`, cost 12; cost 4 is fine in tests). Rat
 | 🔒 GET `/me/favorites` | → `Page<ListingSummary>` | Newest-favorited first; hides REMOVED/DELETED. |
 | 🔒 GET `/me/listings` | → `Page<ListingSummary>` | Caller's listings, all statuses except DELETED. Optional `status`. |
 | 🔒 GET `/users/{id}/listings` | → `Page<ListingSummary>` | That user's ACTIVE listings (same campus). |
-| 🔒 GET `/categories` | → `List<CategoryInfo>` | With ACTIVE counts for the caller's campus. |
+| 🔒 GET `/categories` | → `List<CategoryInfo>` | With ACTIVE counts for the caller's campus. The campus counts are cached per server instance and may be up to `CATEGORY_COUNTS_TTL_SECONDS` (30 s) stale; the caller's blocks apply immediately. |
 
 ### Chat — owner: server-chat (`server/.../chat/`)
 | | | |
@@ -197,6 +197,7 @@ order is only logged: reverse the transfer by hand).
 
 `PORT`, `DATABASE_URL`, `DATABASE_USER`, `DATABASE_PASSWORD`, `DATABASE_POOL_SIZE` (default 10), `PUBLIC_BASE_URL`, `JWT_SECRET`, `DEV_MODE`, `ALLOWED_EMAIL_SUFFIXES`, `ADMIN_EMAILS`,
 `UPLOADS_DIR`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `PLATFORM_FEE_BPS`, `APP_DEEP_LINK_BASE`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `MAIL_FROM`, `LEGAL_ENTITY_NAME`, `SUPPORT_EMAIL`.
+`CATEGORY_COUNTS_TTL_SECONDS` (default 30; 0 turns the `/categories` count cache off).
 `PHOTO_VARIANT_BACKFILL` (default true) makes the variants of photos stored before variants existed, in the background at start.
 `AUTO_RELEASE_HOURS` (default 72, whole hours ≥ 1) is read by the payments feature (`PaymentOptions.fromEnv`); it applies
 to every waiting order (the deadline is computed at read time). The Terms (`/legal/terms`) state 72 hours: change them
