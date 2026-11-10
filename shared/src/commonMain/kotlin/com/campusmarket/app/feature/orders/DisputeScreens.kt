@@ -83,7 +83,7 @@ fun ReportProblemScreen(route: ReportProblemRoute, nav: NavController) {
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Column(
-                    Modifier.fillMaxWidth().widthIn(max = 560.dp).padding(horizontal = Spacing.screen, vertical = Spacing.lg),
+                    Modifier.widthIn(max = 560.dp).fillMaxWidth().padding(horizontal = Spacing.screen, vertical = Spacing.lg),
                     verticalArrangement = Arrangement.spacedBy(Spacing.md),
                 ) {
                     Text("What went wrong with “${order.listing.title}”?", style = MaterialTheme.typography.headlineSmall)

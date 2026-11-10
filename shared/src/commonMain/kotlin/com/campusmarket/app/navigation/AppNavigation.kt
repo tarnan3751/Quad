@@ -208,9 +208,10 @@ fun AppNavigation() {
 @Composable
 private fun AuthShell(snackbar: SnackbarHostState) {
     val nav = rememberNavController()
+    // No side insets here: the Welcome hero runs to the screen edge, under a display cutout. The auth screens keep
+    // their own content clear of it.
     Scaffold(
-        modifier = Modifier.besideCutouts(),
-        snackbarHost = { SnackbarHost(snackbar, Modifier.aboveSystemBars()) { AppSnackbar(it) } },
+        snackbarHost = { SnackbarHost(snackbar, Modifier.besideCutouts().aboveSystemBars()) { AppSnackbar(it) } },
         contentWindowInsets = WindowInsets(0),
     ) { padding ->
         NavHost(
@@ -336,8 +337,8 @@ private fun NavDestination?.isOn(routeClass: KClass<*>): Boolean =
 private fun NavDestination.isTabRoot(): Boolean = TopLevelTab.entries.any { hasRoute(it.routeClass) }
 
 /**
- * Keeps the app out from under a display cutout or a side navigation bar (landscape). Applied once around each shell,
- * so screens only deal with the top and bottom insets.
+ * Keeps the app out from under a display cutout or a side navigation bar (landscape). Applied once around the
+ * signed-in shell, so its screens only deal with the top and bottom insets.
  */
 @Composable
 private fun Modifier.besideCutouts(): Modifier = windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))

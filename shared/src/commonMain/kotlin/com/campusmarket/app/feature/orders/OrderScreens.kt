@@ -448,13 +448,13 @@ fun RateOrderScreen(route: RateOrderRoute, nav: NavController) {
             when {
                 order.status != OrderStatus.COMPLETED -> EmptyState(
                     "Not ready to rate yet",
-                    Modifier.fillMaxSize().padding(padding),
+                    Modifier.fillMaxSize(),
                     message = "You can rate ${other.displayName} once the order is completed.",
                     icon = Icons.Filled.Star,
                 )
                 order.iHaveRated -> EmptyState(
                     "Already rated",
-                    Modifier.fillMaxSize().padding(padding),
+                    Modifier.fillMaxSize(),
                     message = "Thanks! You've rated ${other.displayName} for this order.",
                     icon = Icons.Filled.CheckCircle,
                     actionLabel = "Done",
@@ -465,7 +465,7 @@ fun RateOrderScreen(route: RateOrderRoute, nav: NavController) {
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Column(
-                        Modifier.fillMaxWidth().widthIn(max = 480.dp).padding(horizontal = Spacing.xl, vertical = Spacing.lg),
+                        Modifier.widthIn(max = 480.dp).fillMaxWidth().padding(horizontal = Spacing.xl, vertical = Spacing.lg),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(Spacing.md),
                     ) {

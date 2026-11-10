@@ -261,7 +261,7 @@ private fun ListingForm(
 
     FormColumn(modifier.fillMaxSize(), scroll = scroll, horizontalAlignment = Alignment.CenterHorizontally) {
         Column(
-            Modifier.fillMaxWidth().widthIn(max = 640.dp).padding(horizontal = Spacing.screen, vertical = Spacing.md),
+            Modifier.widthIn(max = 640.dp).fillMaxWidth().padding(horizontal = Spacing.screen, vertical = Spacing.md),
             verticalArrangement = Arrangement.spacedBy(Spacing.lg),
         ) {
             if (intro != null) {
