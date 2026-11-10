@@ -851,46 +851,32 @@ fun SettingsScreen(nav: NavController) {
             },
             dismissButton = { TextButton(onClick = vm::cancelDelete) { Text("Keep my account") } },
         )
-        DeleteStep.Confirm -> AlertDialog(
-            onDismissRequest = vm::cancelDelete,
-            title = { Text("Confirm deletion") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                    Text("Type ${SettingsState.DELETE_KEYWORD} to permanently delete ${user.email}.")
-                    AppTextField(
-                        value = state.deleteText,
-                        onValueChange = vm::onDeleteText,
-                        label = "Type ${SettingsState.DELETE_KEYWORD}",
-                        enabled = !state.deleting,
-                    )
-                    InlineError(state.deleteError)
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = vm::confirmDelete,
-                    enabled = state.deleteConfirmed && !state.deleting,
-                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                ) {
-                    if (state.deleting) CircularProgressIndicator(Modifier.padding(end = 8.dp).size(16.dp), strokeWidth = 2.dp)
-                    Text("Delete account")
-                }
-            },
-            dismissButton = { TextButton(onClick = vm::cancelDelete, enabled = !state.deleting) { Text("Cancel") } },
-        )
-        DeleteStep.BlockedByOrders -> AlertDialog(
-            onDismissRequest = vm::dismissBlocked,
-            title = { Text("You have open orders") },
-            text = {
-                Text(
-                    "An order that's awaiting payment, paid or on hold has to be completed or cancelled before you can delete your account. " +
-                        "Finish or cancel it, then try again.",
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = { vm.dismissBlocked(); nav.navigate(OrdersRoute()) }) { Text("View orders") }
-            },
-            dismissButton = { TextButton(onClick = vm::dismissBlocked) { Text("OK") } },
+        DeleteStep.Confirm -> ConfirmDialog(
+            title = "Confirm deletion",
+            confirmLabel = "Delete account",
+            onConfirm = vm::confirmDelete,
+            onDismiss = vm::cancelDelete,
+            destructive = true,
+            loading = state.deleting,
+            confirmEnabled = state.deleteConfirmed,
+        ) {
+            Text("Type ${SettingsState.DELETE_KEYWORD} to permanently delete ${user.email}.")
+            AppTextField(
+                value = state.deleteText,
+                onValueChange = vm::onDeleteText,
+                label = "Type ${SettingsState.DELETE_KEYWORD}",
+                enabled = !state.deleting,
+            )
+            InlineError(state.deleteError)
+        }
+        DeleteStep.BlockedByOrders -> ConfirmDialog(
+            title = "You have open orders",
+            message = "An order that's awaiting payment, paid or on hold has to be completed or cancelled before you can delete your account. " +
+                "Finish or cancel it, then try again.",
+            confirmLabel = "View orders",
+            onConfirm = { vm.dismissBlocked(); nav.navigate(OrdersRoute()) },
+            onDismiss = vm::dismissBlocked,
+            dismissLabel = "OK",
         )
     }
 }

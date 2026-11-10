@@ -17,9 +17,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -48,6 +45,7 @@ import com.campusmarket.app.ui.components.AppTopBar
 import com.campusmarket.app.ui.components.Avatar
 import com.campusmarket.app.ui.components.ChipTone
 import com.campusmarket.app.ui.components.CollectEvents
+import com.campusmarket.app.ui.components.ConfirmDialog
 import com.campusmarket.app.ui.components.EmptyState
 import com.campusmarket.app.ui.components.ErrorState
 import com.campusmarket.app.ui.components.InlineError
@@ -140,30 +138,20 @@ private fun StaffContent(nav: NavController) {
     pending?.let { member ->
         val target = roleToggleTarget(member) ?: return@let
         val promote = target == UserRole.MODERATOR
-        AlertDialog(
-            onDismissRequest = { if (!action.submitting) pending = null },
-            title = { Text(if (promote) "Make ${member.user.displayName} a moderator?" else "Remove ${member.user.displayName}'s moderator access?") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                    Text(
-                        if (promote) "${member.email} will be able to review reports, remove listings, suspend students and decide disputes on every campus, starting right away. You can remove it at any time."
-                        else "${member.user.displayName} goes back to being a regular student and loses the moderation tools right away. Their past decisions stay in the log.",
-                    )
-                    InlineError(action.error)
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    enabled = !action.submitting,
-                    onClick = { vm.setRole(member, target) },
-                    colors = if (promote) ButtonDefaults.textButtonColors() else ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                ) {
-                    if (action.submitting) CircularProgressIndicator(Modifier.padding(end = 8.dp).size(16.dp), strokeWidth = 2.dp)
-                    Text(if (promote) "Make moderator" else "Remove access")
-                }
-            },
-            dismissButton = { TextButton(enabled = !action.submitting, onClick = { pending = null }) { Text("Cancel") } },
-        )
+        ConfirmDialog(
+            title = if (promote) "Make ${member.user.displayName} a moderator?" else "Remove ${member.user.displayName}'s moderator access?",
+            confirmLabel = if (promote) "Make moderator" else "Remove access",
+            onConfirm = { vm.setRole(member, target) },
+            onDismiss = { pending = null },
+            destructive = !promote,
+            loading = action.submitting,
+        ) {
+            Text(
+                if (promote) "${member.email} will be able to review reports, remove listings, suspend students and decide disputes on every campus, starting right away. You can remove it at any time."
+                else "${member.user.displayName} goes back to being a regular student and loses the moderation tools right away. Their past decisions stay in the log.",
+            )
+            InlineError(action.error)
+        }
     }
 }
 

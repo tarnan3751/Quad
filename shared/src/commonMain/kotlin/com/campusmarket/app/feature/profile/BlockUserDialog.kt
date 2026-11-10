@@ -3,23 +3,16 @@ package com.campusmarket.app.feature.profile
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.campusmarket.app.data.ApiClient
 import com.campusmarket.app.data.ApiError
+import com.campusmarket.app.ui.components.ConfirmDialog
 import com.campusmarket.app.ui.components.InlineError
 import com.campusmarket.app.ui.state.UserMessages
 import com.campusmarket.app.ui.theme.Spacing
@@ -72,47 +65,36 @@ fun BlockUserDialog(user: UserPublic, onDismiss: () -> Unit, onDone: (blocked: B
     val state by controller.state.collectAsStateWithLifecycle()
     val blocking = !user.blockedByMe
 
-    AlertDialog(
-        onDismissRequest = { if (!state.loading) onDismiss() },
-        title = { Text(if (blocking) "Block ${user.displayName}?" else "Unblock ${user.displayName}?") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                if (blocking) {
-                    Text("If you block ${user.displayName}:", style = MaterialTheme.typography.bodyMedium)
-                    Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
-                        Bullet("You can't message each other or buy from each other.")
-                        Bullet("You won't see their listings in Browse or search.")
-                        Bullet("They aren't told that you blocked them.")
-                    }
-                    Text(
-                        "You can unblock them any time from Profile › Blocked users. If they broke the rules, report them too.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                } else {
-                    Text("You'll be able to message and trade with ${user.displayName} again, and their listings will show up in Browse. They aren't told.")
-                }
-                InlineError(state.error)
+    ConfirmDialog(
+        title = if (blocking) "Block ${user.displayName}?" else "Unblock ${user.displayName}?",
+        confirmLabel = if (blocking) "Block" else "Unblock",
+        onConfirm = {
+            controller.submit(user.id, blocking) {
+                messages.show(if (blocking) "Blocked ${user.displayName}" else "Unblocked ${user.displayName}")
+                onDone(blocking)
             }
         },
-        confirmButton = {
-            TextButton(
-                enabled = !state.loading,
-                onClick = {
-                    controller.submit(user.id, blocking) {
-                        messages.show(if (blocking) "Blocked ${user.displayName}" else "Unblocked ${user.displayName}")
-                        onDone(blocking)
-                    }
-                },
-                colors = if (blocking) ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                else ButtonDefaults.textButtonColors(),
-            ) {
-                if (state.loading) CircularProgressIndicator(Modifier.padding(end = 8.dp).size(16.dp), strokeWidth = 2.dp)
-                Text(if (blocking) "Block" else "Unblock")
+        onDismiss = onDismiss,
+        destructive = blocking,
+        loading = state.loading,
+    ) {
+        if (blocking) {
+            Text("If you block ${user.displayName}:", style = MaterialTheme.typography.bodyMedium)
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+                Bullet("You can't message each other or buy from each other.")
+                Bullet("You won't see their listings in Browse or search.")
+                Bullet("They aren't told that you blocked them.")
             }
-        },
-        dismissButton = { TextButton(onClick = onDismiss, enabled = !state.loading) { Text("Cancel") } },
-    )
+            Text(
+                "You can unblock them any time from Profile › Blocked users. If they broke the rules, report them too.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            Text("You'll be able to message and trade with ${user.displayName} again, and their listings will show up in Browse. They aren't told.")
+        }
+        InlineError(state.error)
+    }
 }
 
 @Composable
