@@ -9,13 +9,14 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.window.ComposeUIViewController
 import com.campusmarket.app.platform.DeepLinks
+import com.campusmarket.app.platform.FollowDynamicType
 import com.campusmarket.app.platform.initCampusMarketIos
 import platform.UIKit.UIViewController
 
 /** Swift: `MainViewControllerKt.MainViewController()`. */
 fun MainViewController(): UIViewController {
     initCampusMarketIos()
-    return ComposeUIViewController { DismissKeyboardOnTapOutside { App() } }
+    return ComposeUIViewController { FollowDynamicType { DismissKeyboardOnTapOutside { App() } } }
 }
 
 /** Swift: `MainViewControllerKt.handleDeepLink(url: url.absoluteString)` from `.onOpenURL`. */
