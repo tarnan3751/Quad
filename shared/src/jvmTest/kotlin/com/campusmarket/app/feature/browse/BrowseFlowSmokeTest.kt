@@ -2,36 +2,31 @@ package com.campusmarket.app.feature.browse
 
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
-import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
-import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.v2.runComposeUiTest
 import com.campusmarket.app.App
-import com.campusmarket.app.data.HOUR
-import com.campusmarket.app.data.InMemoryTokenStore
-import com.campusmarket.app.data.StoredSession
-import com.campusmarket.app.data.TokenStore
-import com.campusmarket.app.data.installCampusMarketDefaults
+import com.campusmarket.app.FakeServer
+import com.campusmarket.app.UI_TIMEOUT
+import com.campusmarket.app.awaitText
+import com.campusmarket.app.click
+import com.campusmarket.app.clickDescription
 import com.campusmarket.app.data.respondError
 import com.campusmarket.app.data.respondJson
 import com.campusmarket.app.data.testUser
-import com.campusmarket.app.di.coreModule
-import com.campusmarket.app.di.featureModules
 import com.campusmarket.app.feature.listing.LISTING_GRID_TAG
 import com.campusmarket.app.feature.listing.detail
 import com.campusmarket.app.feature.listing.summary
-import com.campusmarket.app.platform.AppEnvironment
-import com.campusmarket.app.platform.PlatformKind
-import com.campusmarket.app.platform.PlatformUrlLauncher
+import com.campusmarket.app.signedIn
+import com.campusmarket.app.startTestApp
 import com.campusmarket.core.ApiRoutes
 import com.campusmarket.core.CategoryInfo
 import com.campusmarket.core.ErrorCodes
@@ -41,18 +36,11 @@ import com.campusmarket.core.ListingSummary
 import com.campusmarket.core.OkResponse
 import com.campusmarket.core.Page
 import com.campusmarket.core.UserPrivate
-import com.russhwolf.settings.PreferencesSettings
-import com.russhwolf.settings.Settings
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.request.HttpRequestData
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import kotlinx.serialization.builtins.ListSerializer
-import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
-import org.koin.dsl.module
-import java.util.Collections
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -65,19 +53,16 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalTestApi::class)
 class BrowseFlowSmokeTest {
 
-    private val farFuture = System.currentTimeMillis() + HOUR
-    private val requests: MutableList<HttpRequestData> = Collections.synchronizedList(mutableListOf())
-
     private val biology = summary("l1", "Campbell Biology", priceCents = 6500)
     private val lamp = summary("l2", "Desk lamp with USB port", priceCents = 1200)
     private val calculus = summary("l3", "Calculus textbook", priceCents = 4000)
     private val mine = summary("m1", "My old bike", priceCents = 9000).copy(sellerId = testUser.id, sellerName = testUser.displayName)
 
+    private lateinit var server: FakeServer
+
     private fun startApp(manyListings: Boolean = false) {
-        val env = AppEnvironment(isDebug = true, defaultBaseUrl = "http://test.local", platform = PlatformKind.DESKTOP)
         val pages = Page.serializer(ListingSummary.serializer())
-        val engine = MockEngine { req ->
-            requests += req
+        server = FakeServer { req ->
             val path = req.url.encodedPath
             when {
                 path == ApiRoutes.ME -> respondJson(UserPrivate.serializer(), testUser)
@@ -104,19 +89,7 @@ class BrowseFlowSmokeTest {
                 else -> respondError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
             }
         }
-        startKoin {
-            modules(
-                listOf(
-                    module { single<PlatformUrlLauncher> { PlatformUrlLauncher { true } } },
-                    coreModule(env),
-                    module {
-                        single<Settings> { PreferencesSettings(java.util.prefs.Preferences.userRoot().node("campusmarket-browse-test").also { it.clear() }) }
-                        single<TokenStore> { InMemoryTokenStore(StoredSession("a1", "r1", farFuture, testUser)) }
-                        single<HttpClient> { HttpClient(engine) { installCampusMarketDefaults(debugLogging = false) } }
-                    },
-                ) + featureModules,
-            )
-        }
+        startTestApp(server, signedIn())
     }
 
     @AfterTest
@@ -124,30 +97,8 @@ class BrowseFlowSmokeTest {
         stopKoin()
     }
 
-    private fun ComposeUiTest.awaitText(text: String, timeoutMillis: Long = 5_000) {
-        waitUntil(timeoutMillis = timeoutMillis) { onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
-    }
-
-    private fun ComposeUiTest.awaitRequest(timeoutMillis: Long = 5_000, predicate: (HttpRequestData) -> Boolean) {
-        waitUntil(timeoutMillis = timeoutMillis) { synchronized(requests) { requests.any(predicate) } }
-    }
-
-    private fun ComposeUiTest.click(text: String) = clickNode(hasText(text) and hasClickAction())
-
-    private fun ComposeUiTest.clickDescription(description: String) = clickNode(hasContentDescription(description) and hasClickAction())
-
-    private fun ComposeUiTest.clickNode(matcher: androidx.compose.ui.test.SemanticsMatcher) {
-        waitUntil(timeoutMillis = 5_000) { onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty() }
-        val node = onAllNodes(matcher).onFirst()
-        try {
-            node.performScrollTo()
-        } catch (e: AssertionError) {
-            // not in a scrollable container
-        }
-        // Navigation must run on the UI thread.
-        runOnUiThread { node.performClick() }
-        waitForIdle()
-    }
+    private fun ComposeUiTest.awaitRequest(predicate: (HttpRequestData) -> Boolean) =
+        waitUntil(timeoutMillis = UI_TIMEOUT) { synchronized(server.requests) { server.requests.any(predicate) } }
 
     @Test
     fun browseSearchFilterThenOpenDetailAndFavorite() = runComposeUiTest {
@@ -248,6 +199,6 @@ class BrowseFlowSmokeTest {
         awaitText("Add at least one photo")
         awaitText("Choose a category")
         awaitText("Check the highlighted fields.")
-        assertEquals(0, synchronized(requests) { requests.count { it.method == HttpMethod.Post } })
+        assertEquals(0, synchronized(server.requests) { server.requests.count { it.method == HttpMethod.Post } })
     }
 }

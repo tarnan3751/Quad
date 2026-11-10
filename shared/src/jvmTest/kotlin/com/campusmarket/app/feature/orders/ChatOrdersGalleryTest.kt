@@ -1,43 +1,33 @@
 package com.campusmarket.app.feature.orders
 
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.ui.InternalComposeUiApi
-import androidx.compose.ui.LocalSystemTheme
-import androidx.compose.ui.SystemTheme
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.toAwtImage
 import androidx.compose.ui.test.ExperimentalTestApi
-import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SkikoComposeUiTest
 import androidx.compose.ui.test.hasClickAction
-import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasSetTextAction
-import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
-import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performTextInput
-import androidx.compose.ui.test.v2.runSkikoComposeUiTest
-import androidx.compose.ui.unit.Density
-import com.campusmarket.app.App
-import com.campusmarket.app.data.InMemoryTokenStore
-import com.campusmarket.app.data.StoredSession
-import com.campusmarket.app.data.TokenStore
-import com.campusmarket.app.data.installCampusMarketDefaults
+import com.campusmarket.app.FakeServer
+import com.campusmarket.app.ScreenshotGallery
+import com.campusmarket.app.awaitNode
+import com.campusmarket.app.awaitText
+import com.campusmarket.app.back
+import com.campusmarket.app.click
+import com.campusmarket.app.clickDescription
+import com.campusmarket.app.data.ChatSocket
+import com.campusmarket.app.data.bodyText
 import com.campusmarket.app.data.respondError
 import com.campusmarket.app.data.respondJson
-import com.campusmarket.app.di.coreModule
-import com.campusmarket.app.di.featureModules
+import com.campusmarket.app.env
 import com.campusmarket.app.feature.chat.FakeLiveChat
 import com.campusmarket.app.feature.chat.LiveChat
-import com.campusmarket.app.hasContentDescriptionStartingWith
-import com.campusmarket.app.platform.AppEnvironment
 import com.campusmarket.app.platform.DeepLinks
-import com.campusmarket.app.platform.PlatformKind
-import com.campusmarket.app.platform.PlatformUrlLauncher
+import com.campusmarket.app.signedIn
+import com.campusmarket.app.startTestApp
 import com.campusmarket.core.ApiJson
 import com.campusmarket.core.ApiRoutes
 import com.campusmarket.core.ChatEvent
@@ -63,20 +53,10 @@ import com.campusmarket.core.Photo
 import com.campusmarket.core.SendMessageRequest
 import com.campusmarket.core.UserPrivate
 import com.campusmarket.core.UserPublic
-import com.campusmarket.app.data.ChatSocket
-import com.russhwolf.settings.PreferencesSettings
-import com.russhwolf.settings.Settings
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.mock.MockEngine
-import io.ktor.client.engine.mock.toByteArray
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.delay
-import org.koin.core.context.startKoin
-import org.koin.core.context.stopKoin
 import org.koin.dsl.module
-import java.io.File
-import javax.imageio.ImageIO
 import kotlin.test.Test
 
 private const val MIN = 60_000L
@@ -87,17 +67,15 @@ private const val DAY = 24 * HR
  * Visual gallery of every chat / orders / payouts screen and state (light, dark, 1.3x font), rendered against a
  * stateful fake server so all order statuses and both roles can be shown. Opt-in:
  * ```
- * CAMPUS_MARKET_SCREENSHOTS=/some/dir [CHAT_ORDERS_PHOTOS=/dir/with/jpgs] ./gradlew :shared:jvmTest --tests '*ChatOrdersGalleryTest*'
+ * CAMPUS_MARKET_SCREENSHOTS=/some/dir [CAMPUS_MARKET_SHOT_PHOTOS=/dir/with/jpgs] [CAMPUS_MARKET_SHOT_ONLY=chat,orders] \
+ *   ./gradlew :shared:jvmTest --tests '*ChatOrdersGalleryTest*'
  * ```
  * Photos (optional) are `<name>.jpg` files: biology, keyboard, headphones, bike, kettle, jacket, camera, desk, bookshelf.
+ * `CAMPUS_MARKET_SHOT_ONLY` picks groups: chat, states, orders, checkout, payouts, font.
  */
-@OptIn(ExperimentalTestApi::class, InternalComposeUiApi::class)
-class ChatOrdersGalleryTest {
-    private val dir: File? = System.getenv("CAMPUS_MARKET_SCREENSHOTS")?.takeIf { it.isNotBlank() }?.let(::File)
-    private val photoDir: File? = System.getenv("CHAT_ORDERS_PHOTOS")?.takeIf { it.isNotBlank() }?.let(::File)
-    private val only: String? = System.getenv("CHAT_ORDERS_ONLY")?.takeIf { it.isNotBlank() }
-
-    private fun photo(name: String): String? = photoDir?.let { File(it, "$name.jpg") }?.takeIf { it.exists() }?.toURI()?.toString()
+@OptIn(ExperimentalTestApi::class)
+class ChatOrdersGalleryTest : ScreenshotGallery(settleMillis = 500) {
+    private val only: String? = env("CAMPUS_MARKET_SHOT_ONLY")
 
     // ------------------------------------------------------------------------------------------------ fake world
 
@@ -120,7 +98,7 @@ class ChatOrdersGalleryTest {
     private val meAsPublic = UserPublic(me.id, me.displayName, campusDomain = me.campusDomain, joinedAt = me.joinedAt, ratingAverage = 4.8, ratingCount = 6)
 
     private fun listing(id: String, title: String, cents: Int, seller: UserPublic, photo: String, status: ListingStatus = ListingStatus.ACTIVE, category: ListingCategory = ListingCategory.ELECTRONICS) =
-        ListingSummary(id, title, cents, category = category, condition = ListingCondition.LIKE_NEW, status = status, thumbnailUrl = photo(photo), sellerId = seller.id, sellerName = seller.displayName, createdAt = now - 6 * DAY)
+        ListingSummary(id, title, cents, category = category, condition = ListingCondition.LIKE_NEW, status = status, thumbnailUrl = photoUrl("$photo.jpg"), sellerId = seller.id, sellerName = seller.displayName, createdAt = now - 6 * DAY)
 
     private val headphones = listing("l-headphones", "Noise-cancelling headphones", 7500, maya, "headphones")
     private val keyboard = listing("l-keyboard", "Mechanical keyboard, brown switches", 4200, jordan, "keyboard")
@@ -238,8 +216,7 @@ class ChatOrdersGalleryTest {
     )
 
     private fun startApp() {
-        val env = AppEnvironment(isDebug = true, defaultBaseUrl = "http://test.local", platform = PlatformKind.DESKTOP)
-        val engine = MockEngine { req ->
+        val server = FakeServer { req ->
             val path = req.url.encodedPath
             val get = req.method == HttpMethod.Get
             when {
@@ -260,7 +237,7 @@ class ChatOrdersGalleryTest {
                 }
                 path.startsWith(ApiRoutes.CONVERSATIONS + "/") && path.endsWith("/messages") -> {
                     val id = path.removePrefix(ApiRoutes.CONVERSATIONS + "/").removeSuffix("/messages")
-                    val body = ApiJson.decodeFromString(SendMessageRequest.serializer(), req.body.toByteArray().decodeToString()).body
+                    val body = ApiJson.decodeFromString(SendMessageRequest.serializer(), req.bodyText).body
                     if (sendSlow) delay(600_000)
                     if (sendFails) {
                         respondError(HttpStatusCode.ServiceUnavailable, ErrorCodes.INTERNAL, "Couldn't send")
@@ -307,70 +284,22 @@ class ChatOrdersGalleryTest {
                 else -> respondError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
             }
         }
-        val session = StoredSession("a1", "r1", System.currentTimeMillis() + 10 * HR, me)
-        startKoin {
-            modules(
-                listOf(
-                    module { single<PlatformUrlLauncher> { PlatformUrlLauncher { true } } },
-                    coreModule(env),
-                    module {
-                        single<Settings> { PreferencesSettings(java.util.prefs.Preferences.userRoot().node("campusmarket-chat-orders-gallery").also { it.clear() }) }
-                        single<TokenStore> { InMemoryTokenStore(session) }
-                        single<HttpClient> { HttpClient(engine) { installCampusMarketDefaults(debugLogging = false) } }
-                    },
-                ) + featureModules + module { single<LiveChat> { live } },
-            )
-        }
+        startTestApp(server, signedIn(me), overrides = module { single<LiveChat> { live } })
     }
 
     // ------------------------------------------------------------------------------------------------ driving
 
-    /** Rows and chat bubbles are read as one summary, so their texts are found in the content description. */
-    private fun SkikoComposeUiTest.await(text: String, timeout: Long = 8_000) = waitUntil(timeoutMillis = timeout) {
-        onAllNodes(hasText(text, substring = true) or hasContentDescription(text, substring = true)).fetchSemanticsNodes().isNotEmpty()
-    }
+    private fun SkikoComposeUiTest.await(text: String, timeout: Long = 8_000) = awaitText(text, timeout)
+    private fun SkikoComposeUiTest.clickDesc(desc: String) = clickDescription(desc, substring = true)
 
-    private fun SkikoComposeUiTest.clickNode(matcher: SemanticsMatcher) {
-        waitUntil(timeoutMillis = 8_000) { onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty() }
-        val node = onAllNodes(matcher).onFirst()
-        runCatching { node.performScrollTo() }
-        runOnUiThread { node.performClick() }
-        waitForIdle()
-    }
-
-    private fun SkikoComposeUiTest.click(text: String, substring: Boolean = false) =
-        clickNode((hasText(text, substring = substring) or hasContentDescriptionStartingWith(text)) and hasClickAction())
-    private fun SkikoComposeUiTest.clickDesc(desc: String) = clickNode(hasContentDescription(desc, substring = true) and hasClickAction())
-    private fun SkikoComposeUiTest.back() = clickDesc("Back")
-
-    private var prefix = ""
-
-    private fun SkikoComposeUiTest.shot(name: String) {
-        repeat(8) {
-            Thread.sleep(60)
-            runCatching { waitForIdle() }
-        }
-        dir!!.mkdirs()
-        ImageIO.write(captureToImage().toAwtImage(), "png", File(dir, "$prefix$name.png"))
-    }
-
-    private fun session(dark: Boolean, fontScale: Float = 1f, height: Float = 892f, block: SkikoComposeUiTest.() -> Unit) {
+    private fun session(dark: Boolean, fontScale: Float = 1f, block: SkikoComposeUiTest.() -> Unit) {
         startApp()
         try {
-            runSkikoComposeUiTest(size = Size(412f * 2, height * 2), density = Density(2f, fontScale)) {
-                setContent {
-                    CompositionLocalProvider(LocalSystemTheme provides if (dark) SystemTheme.Dark else SystemTheme.Light) { App() }
-                }
-                waitUntil(timeoutMillis = 10_000) { onAllNodes(hasText("Inbox") and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
-                try {
-                    block()
-                } catch (e: Throwable) {
-                    runCatching { shot("zz-failure") }
-                    throw e
-                }
+            screens(dark, fontScale) {
+                awaitNode(hasText("Inbox") and hasClickAction())
+                block()
             }
         } finally {
-            stopKoin()
             inboxMode = Mode.Normal; ordersMode = Mode.Normal; messagesMode = Mode.Normal
             sendFails = false; sendSlow = false; payoutsNotEnabledFor = null
             live.status.value = ChatSocket.Status.Connected
@@ -381,10 +310,7 @@ class ChatOrdersGalleryTest {
 
     @Test
     fun gallery() {
-        if (dir == null) {
-            println("ChatOrdersGalleryTest skipped: set CAMPUS_MARKET_SCREENSHOTS")
-            return
-        }
+        if (!enabled()) return
         for (dark in listOf(false, true)) {
             val t = if (dark) "dark" else "light"
             prefix = "$t-"

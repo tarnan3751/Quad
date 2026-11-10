@@ -1,11 +1,11 @@
 package com.campusmarket.app.feature.moderation
 
 import com.campusmarket.app.data.Harness
+import com.campusmarket.app.data.awaitValue
+import com.campusmarket.app.data.jsonBody
 import com.campusmarket.app.data.respondError
 import com.campusmarket.app.data.respondJson
-import com.campusmarket.app.feature.awaitMatch
-import com.campusmarket.app.feature.jsonBody
-import com.campusmarket.app.feature.withMainDispatcher
+import com.campusmarket.app.data.withMainDispatcher
 import com.campusmarket.app.ui.label
 import com.campusmarket.app.ui.state.UiState
 import com.campusmarket.app.ui.state.UserMessages
@@ -98,7 +98,7 @@ class DisputeViewModelsTest {
             val messages = UserMessages()
             val h = harness { sent = it }
             val vm = DisputeDetailViewModel(DisputeDetailRoute("o1"), h.api, messages)
-            vm.case.awaitMatch { it is UiState.Content }
+            vm.case.awaitValue { it is UiState.Content }
 
             vm.resolve(DisputeResolution.REFUND_BUYER, "  seller admitted the no-show  ", viewerId = "mod")
             vm.actionDone.flow.first()
@@ -119,7 +119,7 @@ class DisputeViewModelsTest {
             var sent: HttpRequestData? = null
             val h = harness { sent = it }
             val vm = DisputeDetailViewModel(DisputeDetailRoute("o1"), h.api, UserMessages())
-            vm.case.awaitMatch { it is UiState.Content }
+            vm.case.awaitValue { it is UiState.Content }
             vm.resolve(DisputeResolution.RELEASE_TO_SELLER, "handoff confirmed in chat", viewerId = "mod")
             vm.actionDone.flow.first()
             assertEquals(JsonPrimitive("RELEASE_TO_SELLER"), sent!!.jsonBody()["resolution"])
@@ -133,13 +133,13 @@ class DisputeViewModelsTest {
         runTest {
             val h = harness()
             val vm = DisputeDetailViewModel(DisputeDetailRoute("o1"), h.api, UserMessages())
-            vm.case.awaitMatch { it is UiState.Content }
+            vm.case.awaitValue { it is UiState.Content }
 
             vm.resolve(DisputeResolution.REFUND_BUYER, "   ", viewerId = "mod")
-            assertEquals("Add a note explaining the decision.", vm.runner.state.awaitMatch { it.error != null }.error)
+            assertEquals("Add a note explaining the decision.", vm.runner.state.awaitValue { it.error != null }.error)
             vm.runner.clearError()
             vm.resolve(DisputeResolution.REFUND_BUYER, "x", viewerId = "s1")
-            vm.runner.state.awaitMatch { it.error != null }
+            vm.runner.state.awaitValue { it.error != null }
             assertTrue(h.requestsTo(ApiRoutes.modDisputeResolve("o1")).isEmpty())
         }
     }
@@ -161,10 +161,10 @@ class DisputeViewModelsTest {
                 }
             }
             val vm = DisputeDetailViewModel(DisputeDetailRoute("o1"), h.api, UserMessages())
-            vm.case.awaitMatch { it is UiState.Content }
+            vm.case.awaitValue { it is UiState.Content }
             vm.resolve(DisputeResolution.REFUND_BUYER, "refund", viewerId = "mod")
-            assertEquals("This dispute is no longer open", vm.runner.state.awaitMatch { it.error != null }.error)
-            vm.case.awaitMatch { it is UiState.Content && it.value.dispute.outcome == DisputeOutcome.BUYER_CONFIRMED }
+            assertEquals("This dispute is no longer open", vm.runner.state.awaitValue { it.error != null }.error)
+            vm.case.awaitValue { it is UiState.Content && it.value.dispute.outcome == DisputeOutcome.BUYER_CONFIRMED }
             assertEquals(2, h.requests.count { it.method == HttpMethod.Get })
         }
     }
@@ -181,12 +181,12 @@ class DisputeViewModelsTest {
             }
             val vm = DisputesViewModel(h.api, UserMessages())
             vm.disputes.refresh()
-            vm.disputes.state.awaitMatch { it.loaded }
+            vm.disputes.state.awaitValue { it.loaded }
             assertEquals("OPEN", h.requests.first().url.parameters["status"])
             assertEquals(ApiRoutes.MOD_DISPUTES, h.requests.first().url.encodedPath)
 
             vm.select(DisputeStatus.CLOSED)
-            vm.disputes.state.awaitMatch { it.loaded && it.items.singleOrNull()?.dispute?.status == DisputeStatus.CLOSED }
+            vm.disputes.state.awaitValue { it.loaded && it.items.singleOrNull()?.dispute?.status == DisputeStatus.CLOSED }
             assertEquals("CLOSED", h.requests.last().url.parameters["status"])
         }
     }

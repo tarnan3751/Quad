@@ -1,11 +1,11 @@
 package com.campusmarket.app.feature.browse
 
 import com.campusmarket.app.data.Harness
+import com.campusmarket.app.data.awaitCondition
+import com.campusmarket.app.data.awaitValue
 import com.campusmarket.app.data.respondError
 import com.campusmarket.app.data.respondJson
 import com.campusmarket.app.feature.listing.ListingSync
-import com.campusmarket.app.feature.listing.awaitCondition
-import com.campusmarket.app.feature.listing.awaitValue
 import com.campusmarket.app.feature.listing.summary
 import com.campusmarket.app.ui.state.UiState
 import com.campusmarket.app.ui.state.UserMessages

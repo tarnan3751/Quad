@@ -2,10 +2,10 @@ package com.campusmarket.app.feature.profile
 
 import com.campusmarket.app.data.Harness
 import com.campusmarket.app.data.SessionManager
+import com.campusmarket.app.data.awaitValue
 import com.campusmarket.app.data.respondJson
 import com.campusmarket.app.data.testUser
-import com.campusmarket.app.feature.awaitMatch
-import com.campusmarket.app.feature.withMainDispatcher
+import com.campusmarket.app.data.withMainDispatcher
 import com.campusmarket.app.ui.Format
 import com.campusmarket.app.ui.state.UiState
 import com.campusmarket.app.ui.state.UserMessages
@@ -89,7 +89,7 @@ class ProfileStatsTest {
             val vm = ProfileViewModel(SessionManager(h.api, h.tokens, backgroundScope), h.api)
             assertNull(vm.state.value.stats)
             vm.refresh(pulled = true)
-            val s = vm.state.awaitMatch { it.stats != null && !it.refreshing }
+            val s = vm.state.awaitValue { it.stats != null && !it.refreshing }
             assertEquals(MyListingStats(active = 1, sold = 1, capped = false), s.stats)
             assertEquals("${Limits.PAGE_MAX}", h.requestsTo(ApiRoutes.MY_LISTINGS).single().url.parameters["limit"])
         }
@@ -106,8 +106,8 @@ class ProfileStatsTest {
                 }
             }
             val vm = UserProfileViewModel(UserProfileRoute("u2", showRatings = true), h.api, SessionManager(h.api, h.tokens, backgroundScope), UserMessages())
-            vm.user.awaitMatch { it is UiState.Content }
-            val listings = vm.listings.state.awaitMatch { it.loaded }
+            vm.user.awaitValue { it is UiState.Content }
+            val listings = vm.listings.state.awaitValue { it.loaded }
             assertEquals(1, listings.items.size)
             assertTrue(h.requestsTo(ApiRoutes.userRatings("u2")).isEmpty()) // ratings wait for their tab
         }
@@ -143,14 +143,14 @@ class UnblockUndoTest {
             }
             val messages = UserMessages()
             val vm = BlockedUsersViewModel(h.api, messages)
-            vm.state.awaitMatch { it is UiState.Content }
+            vm.state.awaitValue { it is UiState.Content }
             vm.unblock(someone)
-            vm.state.awaitMatch { it is UiState.Content && it.value.isEmpty() }
+            vm.state.awaitValue { it is UiState.Content && it.value.isEmpty() }
 
             val snack = messages.messages.first()
             assertEquals("Undo", snack.actionLabel)
             snack.onAction!!.invoke()
-            vm.state.awaitMatch { it is UiState.Content && it.value.map(UserPublic::id) == listOf("u2") }
+            vm.state.awaitValue { it is UiState.Content && it.value.map(UserPublic::id) == listOf("u2") }
             assertEquals(listOf(HttpMethod.Delete, HttpMethod.Post), h.requestsTo(ApiRoutes.userBlock("u2")).map { it.method })
         }
     }

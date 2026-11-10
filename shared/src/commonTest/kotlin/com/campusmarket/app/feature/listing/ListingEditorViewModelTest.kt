@@ -1,6 +1,8 @@
 package com.campusmarket.app.feature.listing
 
 import com.campusmarket.app.data.Harness
+import com.campusmarket.app.data.awaitValue
+import com.campusmarket.app.data.decode
 import com.campusmarket.app.data.respondError
 import com.campusmarket.app.data.respondJson
 import com.campusmarket.app.platform.PickedImage
@@ -138,7 +140,7 @@ class ListingEditorViewModelTest {
             when (req.url.encodedPath) {
                 ApiRoutes.PHOTOS -> photos(req, server)
                 ApiRoutes.LISTINGS -> {
-                    created = req.jsonBody(CreateListingRequest.serializer())
+                    created = req.decode(CreateListingRequest.serializer())
                     respondJson(ListingDetail.serializer(), detail(id = "new-1", isMine = true), HttpStatusCode.Created)
                 }
                 else -> respondError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
@@ -323,7 +325,7 @@ class ListingEditorViewModelTest {
             when {
                 req.url.encodedPath == ApiRoutes.listing("l1") && req.method == HttpMethod.Get -> respondJson(ListingDetail.serializer(), original)
                 req.url.encodedPath == ApiRoutes.listing("l1") && req.method == HttpMethod.Patch -> {
-                    patch = req.jsonBody(UpdateListingRequest.serializer())
+                    patch = req.decode(UpdateListingRequest.serializer())
                     respondJson(ListingDetail.serializer(), original.copy(priceCents = 5000, photos = original.photos.reversed()))
                 }
                 else -> respondError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)

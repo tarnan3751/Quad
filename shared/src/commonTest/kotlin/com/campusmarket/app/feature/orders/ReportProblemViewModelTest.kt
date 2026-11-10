@@ -1,9 +1,9 @@
 package com.campusmarket.app.feature.orders
 
+import com.campusmarket.app.data.Harness
+import com.campusmarket.app.data.bodyText
 import com.campusmarket.app.data.respondError
 import com.campusmarket.app.data.respondJson
-import com.campusmarket.app.feature.chat.VmHarness
-import com.campusmarket.app.feature.chat.bodyText
 import com.campusmarket.app.feature.chat.close
 import com.campusmarket.core.ApiJson
 import com.campusmarket.core.ApiRoutes
@@ -38,9 +38,9 @@ class ReportProblemViewModelTest {
     private var current: Order = order(OrderStatus.PAID)
     private var disputeError: Triple<HttpStatusCode, String, Map<String, String>>? = null
 
-    private fun TestScope.setUp(): Triple<ReportProblemViewModel, VmHarness, OrderUpdates> {
+    private fun TestScope.setUp(): Triple<ReportProblemViewModel, Harness, OrderUpdates> {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
-        val h = VmHarness(this) { req ->
+        val h = Harness(scope = this) { req ->
             when (req.url.encodedPath) {
                 ApiRoutes.order("o1") -> respondJson(Order.serializer(), current)
                 ApiRoutes.orderDispute("o1") -> {
@@ -48,7 +48,7 @@ class ReportProblemViewModelTest {
                     if (err != null) {
                         respondError(err.first, err.second, "Server says no", err.third)
                     } else {
-                        val body = ApiJson.decodeFromString(OpenDisputeRequest.serializer(), req.bodyText())
+                        val body = ApiJson.decodeFromString(OpenDisputeRequest.serializer(), req.bodyText)
                         current = order(OrderStatus.DISPUTED, dispute = dispute(reason = body.reason, details = body.details))
                         respondJson(Order.serializer(), current)
                     }
@@ -57,7 +57,7 @@ class ReportProblemViewModelTest {
             }
         }
         val updates = OrderUpdates()
-        return Triple(ReportProblemViewModel(ReportProblemRoute("o1"), h.api, updates, h.userMessages), h, updates)
+        return Triple(ReportProblemViewModel(ReportProblemRoute("o1"), h.api, updates, h.messages), h, updates)
     }
 
     @AfterTest
@@ -102,7 +102,7 @@ class ReportProblemViewModelTest {
         assertTrue(vm.state.value.submitting)
         advanceUntilIdle()
 
-        val sent = ApiJson.decodeFromString(OpenDisputeRequest.serializer(), h.requests(HttpMethod.Post, ApiRoutes.orderDispute("o1")).single().bodyText())
+        val sent = ApiJson.decodeFromString(OpenDisputeRequest.serializer(), h.requests(HttpMethod.Post, ApiRoutes.orderDispute("o1")).single().bodyText)
         assertEquals(OpenDisputeRequest(DisputeReason.ITEM_NOT_AS_DESCRIBED, "The screen is cracked"), sent)
         assertEquals(OrderStatus.DISPUTED, published.single().status)
         assertEquals(Unit, vm.done.flow.first())

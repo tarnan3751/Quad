@@ -1,11 +1,11 @@
 package com.campusmarket.app.feature.moderation
 
 import com.campusmarket.app.data.Harness
+import com.campusmarket.app.data.awaitValue
+import com.campusmarket.app.data.jsonBody
 import com.campusmarket.app.data.respondError
 import com.campusmarket.app.data.respondJson
-import com.campusmarket.app.feature.awaitMatch
-import com.campusmarket.app.feature.jsonBody
-import com.campusmarket.app.feature.withMainDispatcher
+import com.campusmarket.app.data.withMainDispatcher
 import com.campusmarket.app.ui.label
 import com.campusmarket.app.ui.state.UiState
 import com.campusmarket.app.ui.state.UserMessages
@@ -85,7 +85,7 @@ class StaffViewModelTest {
         runTest {
             val h = harness()
             val vm = StaffViewModel(h.api, UserMessages())
-            val s = vm.staff.awaitMatch { it is UiState.Content } as UiState.Content
+            val s = vm.staff.awaitValue { it is UiState.Content } as UiState.Content
             assertEquals(listOf("a1", "m1"), s.value.map { it.user.id })
             assertEquals(HttpMethod.Get, h.requestsTo(ApiRoutes.MOD_STAFF).single().method)
         }
@@ -96,7 +96,7 @@ class StaffViewModelTest {
         runTest {
             val h = harness()
             val vm = StaffViewModel(h.api, UserMessages())
-            vm.staff.awaitMatch { it is UiState.Content }
+            vm.staff.awaitValue { it is UiState.Content }
             vm.onQuery("u")
             vm.runSearch()
             assertEquals(StaffSearch.Idle, vm.search.value)
@@ -111,7 +111,7 @@ class StaffViewModelTest {
             val vm = StaffViewModel(h.api, UserMessages())
             vm.onQuery("  uma ")
             vm.runSearch()
-            val r = vm.search.awaitMatch { it is StaffSearch.Results } as StaffSearch.Results
+            val r = vm.search.awaitValue { it is StaffSearch.Results } as StaffSearch.Results
             assertEquals("uma", r.query)
             assertEquals(listOf("u1"), r.members.map { it.user.id })
             assertEquals("uma", h.requestsTo(ApiRoutes.MOD_USER_SEARCH).single().url.parameters["q"])
@@ -129,7 +129,7 @@ class StaffViewModelTest {
             val h = harness(staff = { if (promoted) listOf(admin, mod, student.copy(role = UserRole.MODERATOR)) else listOf(admin, mod) },
                 onRole = { promoted = true })
             val vm = StaffViewModel(h.api, UserMessages())
-            vm.staff.awaitMatch { it is UiState.Content }
+            vm.staff.awaitValue { it is UiState.Content }
 
             vm.setRole(student, UserRole.MODERATOR)
             vm.actionDone.flow.first()
@@ -137,7 +137,7 @@ class StaffViewModelTest {
             val req = h.requestsTo(ApiRoutes.modUserRole("u1")).single()
             assertEquals(HttpMethod.Put, req.method)
             assertEquals(JsonPrimitive("MODERATOR"), req.jsonBody()["role"])
-            val s = vm.staff.awaitMatch { it is UiState.Content && it.value.size == 3 } as UiState.Content
+            val s = vm.staff.awaitValue { it is UiState.Content && it.value.size == 3 } as UiState.Content
             assertEquals(UserRole.MODERATOR, s.value.last().role)
         }
     }
@@ -149,13 +149,13 @@ class StaffViewModelTest {
             val vm = StaffViewModel(h.api, UserMessages())
             vm.onQuery("max")
             vm.runSearch()
-            vm.search.awaitMatch { it is StaffSearch.Results }
+            vm.search.awaitValue { it is StaffSearch.Results }
 
             vm.setRole(mod, UserRole.USER)
             vm.actionDone.flow.first()
             assertEquals(JsonPrimitive("USER"), h.requestsTo(ApiRoutes.modUserRole("m1")).single().jsonBody()["role"])
             // the visible search is re-run so the row reflects the new role
-            vm.search.awaitMatch { it is StaffSearch.Results }
+            vm.search.awaitValue { it is StaffSearch.Results }
             assertTrue(h.requestsTo(ApiRoutes.MOD_USER_SEARCH).size >= 2)
         }
     }
@@ -165,9 +165,9 @@ class StaffViewModelTest {
         runTest {
             val h = harness(roleFails = true)
             val vm = StaffViewModel(h.api, UserMessages())
-            vm.staff.awaitMatch { it is UiState.Content }
+            vm.staff.awaitValue { it is UiState.Content }
             vm.setRole(mod, UserRole.USER)
-            val s = vm.runner.state.awaitMatch { it.error != null }
+            val s = vm.runner.state.awaitValue { it.error != null }
             assertEquals("An admin's role can't be changed", s.error)
             assertEquals(1, h.requestsTo(ApiRoutes.MOD_STAFF).size)
         }
@@ -183,7 +183,7 @@ class StaffViewModelTest {
             val vm = StaffViewModel(h.api, UserMessages())
             vm.onQuery("uma")
             vm.runSearch()
-            val f = vm.search.awaitMatch { it is StaffSearch.Failed } as StaffSearch.Failed
+            val f = vm.search.awaitValue { it is StaffSearch.Failed } as StaffSearch.Failed
             assertEquals("Admin access required", f.message)
         }
     }

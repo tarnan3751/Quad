@@ -1,39 +1,25 @@
 package com.campusmarket.app
 
-import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
-import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
-import androidx.compose.ui.test.onLast
-import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.v2.runComposeUiTest
 import com.campusmarket.app.data.HOUR
-import com.campusmarket.app.data.InMemoryTokenStore
 import com.campusmarket.app.data.SessionManager
 import com.campusmarket.app.data.SessionState
-import com.campusmarket.app.data.StoredSession
-import com.campusmarket.app.data.TokenStore
-import com.campusmarket.app.data.installCampusMarketDefaults
 import com.campusmarket.app.data.respondError
 import com.campusmarket.app.data.respondJson
 import com.campusmarket.app.data.testUser
-import com.campusmarket.app.di.coreModule
-import com.campusmarket.app.di.featureModules
-import com.campusmarket.app.platform.AppEnvironment
-import com.campusmarket.app.platform.PlatformKind
-import com.campusmarket.app.platform.PlatformUrlLauncher
 import com.campusmarket.core.ApiRoutes
 import com.campusmarket.core.ErrorCodes
 import com.campusmarket.core.ListingCategory
 import com.campusmarket.core.ListingCondition
 import com.campusmarket.core.ListingStatus
 import com.campusmarket.core.ListingSummary
+import com.campusmarket.core.OkResponse
 import com.campusmarket.core.Page
 import com.campusmarket.core.Report
 import com.campusmarket.core.ReportReason
@@ -42,16 +28,11 @@ import com.campusmarket.core.ReportTargetType
 import com.campusmarket.core.UserPrivate
 import com.campusmarket.core.UserPublic
 import com.campusmarket.core.UserRole
-import com.russhwolf.settings.PreferencesSettings
 import com.russhwolf.settings.Settings
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.mock.MockEngine
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import org.koin.core.context.GlobalContext
-import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
-import org.koin.dsl.module
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -60,9 +41,6 @@ import kotlin.test.assertTrue
 /** Profile → Settings (sign out / account deletion) and the moderation queue as a moderator, against a fake server. */
 @OptIn(ExperimentalTestApi::class)
 class ProfileModerationSmokeTest {
-
-    private val farFuture = System.currentTimeMillis() + HOUR
-    private val deleteCalls = mutableListOf<String>()
 
     private val reporter = UserPublic("r1", "Rita Reporter", campusDomain = "uni.edu", joinedAt = 1L)
     private val seller = UserPublic("s1", "Sam Seller", campusDomain = "uni.edu", joinedAt = 1L)
@@ -77,69 +55,29 @@ class ProfileModerationSmokeTest {
         openReportsAgainstTargetUser = 3, createdAt = System.currentTimeMillis() - 3 * HOUR,
     )
 
+    private lateinit var server: FakeServer
+    private val deleteCalls get() = server.requestsTo(ApiRoutes.ME, HttpMethod.Delete)
+
     private fun startApp(user: UserPrivate, deleteConflict: Boolean = false) {
-        val env = AppEnvironment(isDebug = true, defaultBaseUrl = "http://test.local", platform = PlatformKind.DESKTOP)
-        val engine = MockEngine { req ->
+        server = FakeServer { req ->
             val path = req.url.encodedPath
             when {
-                path == ApiRoutes.ME && req.method == HttpMethod.Delete -> {
-                    deleteCalls += path
+                path == ApiRoutes.ME && req.method == HttpMethod.Delete ->
                     if (deleteConflict) respondError(HttpStatusCode.Conflict, ErrorCodes.CONFLICT, "Open orders")
-                    else respondJson(com.campusmarket.core.OkResponse.serializer(), com.campusmarket.core.OkResponse())
-                }
+                    else respondJson(OkResponse.serializer(), OkResponse())
                 path == ApiRoutes.ME -> respondJson(UserPrivate.serializer(), user)
-                path == ApiRoutes.LOGOUT -> respondJson(com.campusmarket.core.OkResponse.serializer(), com.campusmarket.core.OkResponse())
+                path == ApiRoutes.LOGOUT -> respondJson(OkResponse.serializer(), OkResponse())
                 path == ApiRoutes.MOD_REPORTS -> respondJson(Page.serializer(Report.serializer()), Page(listOf(report)))
                 path == ApiRoutes.modReport("rep1") -> respondJson(Report.serializer(), report)
                 else -> respondError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
             }
         }
-        val tokens: TokenStore = InMemoryTokenStore(StoredSession("a1", "r1", farFuture, user))
-        startKoin {
-            modules(
-                listOf(
-                    module { single<PlatformUrlLauncher> { PlatformUrlLauncher { true } } },
-                    coreModule(env),
-                    module {
-                        single<Settings> { PreferencesSettings(java.util.prefs.Preferences.userRoot().node("campusmarket-smoke-test-c").also { it.clear() }) }
-                        single<TokenStore> { tokens }
-                        single<HttpClient> { HttpClient(engine) { installCampusMarketDefaults(debugLogging = false) } }
-                    },
-                ) + featureModules,
-            )
-        }
+        startTestApp(server, signedIn(user))
     }
 
     @AfterTest
     fun tearDown() {
         stopKoin()
-    }
-
-    private fun ComposeUiTest.awaitText(text: String) {
-        waitUntil(timeoutMillis = 5_000) { onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
-    }
-
-    private fun ComposeUiTest.awaitGone(text: String) {
-        waitUntil(timeoutMillis = 5_000) { onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isEmpty() }
-    }
-
-    private fun ComposeUiTest.click(text: String, last: Boolean = false) {
-        val nodes = onAllNodes(hasText(text) and hasClickAction())
-        val node = if (last) nodes.onLast() else nodes.onFirst()
-        try {
-            node.performScrollTo()
-        } catch (e: AssertionError) {
-            // not inside a scrollable parent
-        }
-        runOnUiThread { node.performClick() }
-        waitForIdle()
-    }
-
-    private fun ComposeUiTest.back() {
-        waitForIdle()
-        val node = onAllNodesWithContentDescription("Back").onFirst()
-        runOnUiThread { node.performClick() }
-        waitForIdle()
     }
 
     @Test

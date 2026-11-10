@@ -1,16 +1,10 @@
 package com.campusmarket.app.feature.listing
 
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.ui.InternalComposeUiApi
-import androidx.compose.ui.LocalSystemTheme
-import androidx.compose.ui.SystemTheme
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.toAwtImage
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
-import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SkikoComposeUiTest
-import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.doubleClick
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasSetTextAction
@@ -18,7 +12,6 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
-import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToIndex
@@ -26,24 +19,21 @@ import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeDown
-import androidx.compose.ui.test.doubleClick
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.test.v2.runSkikoComposeUiTest
-import androidx.compose.ui.unit.Density
-import com.campusmarket.app.App
+import com.campusmarket.app.FakeServer
+import com.campusmarket.app.ScreenshotGallery
+import com.campusmarket.app.awaitNode
+import com.campusmarket.app.awaitText
+import com.campusmarket.app.back
+import com.campusmarket.app.click
+import com.campusmarket.app.clickDescription
+import com.campusmarket.app.clickNode
 import com.campusmarket.app.data.InMemoryTokenStore
 import com.campusmarket.app.data.StoredSession
-import com.campusmarket.app.data.TokenStore
-import com.campusmarket.app.data.installCampusMarketDefaults
 import com.campusmarket.app.data.respondError
 import com.campusmarket.app.data.respondJson
 import com.campusmarket.app.data.testUser
-import com.campusmarket.app.di.coreModule
-import com.campusmarket.app.di.featureModules
-import com.campusmarket.app.platform.AppEnvironment
-import com.campusmarket.app.platform.PlatformKind
 import com.campusmarket.app.platform.PickedImage
-import com.campusmarket.app.platform.PlatformUrlLauncher
+import com.campusmarket.app.startTestApp
 import com.campusmarket.core.ApiRoutes
 import com.campusmarket.core.CategoryInfo
 import com.campusmarket.core.ErrorCodes
@@ -57,17 +47,11 @@ import com.campusmarket.core.Page
 import com.campusmarket.core.Photo
 import com.campusmarket.core.UserPrivate
 import com.campusmarket.core.UserPublic
-import com.russhwolf.settings.PreferencesSettings
-import com.russhwolf.settings.Settings
 import com.sun.net.httpserver.HttpServer
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.mock.MockEngine
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.serialization.builtins.ListSerializer
-import org.koin.core.context.startKoin
-import org.koin.core.context.stopKoin
 import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
 import java.awt.BasicStroke
@@ -76,7 +60,6 @@ import java.awt.GradientPaint
 import java.awt.RenderingHints
 import java.awt.image.BufferedImage
 import java.io.ByteArrayOutputStream
-import java.io.File
 import java.net.InetSocketAddress
 import javax.imageio.ImageIO
 import kotlin.test.Test
@@ -91,9 +74,8 @@ import java.awt.Color as AwtColor
  * ```
  * Photos come from a local HTTP server on 127.0.0.1 (the app's base URL), so Coil loads them like real ones.
  */
-@OptIn(ExperimentalTestApi::class, InternalComposeUiApi::class)
-class ListingScreenshotTest {
-    private val dir: File? = System.getenv("CAMPUS_MARKET_SCREENSHOTS")?.takeIf { it.isNotBlank() }?.let(::File)
+@OptIn(ExperimentalTestApi::class)
+class ListingScreenshotTest : ScreenshotGallery(settleMillis = 1_600) {
     private val now = System.currentTimeMillis()
     private val minute = 60_000L
     private val hour = 60 * minute
@@ -215,9 +197,8 @@ class ListingScreenshotTest {
     }
 
     private fun startApp(knobs: Knobs) {
-        val env = AppEnvironment(isDebug = true, defaultBaseUrl = base, platform = PlatformKind.DESKTOP)
         val pages = Page.serializer(ListingSummary.serializer())
-        val engine = MockEngine { req ->
+        val server = FakeServer { req ->
             val path = req.url.encodedPath
             val p = req.url.parameters
             when {
@@ -228,7 +209,7 @@ class ListingScreenshotTest {
                 )
                 path == ApiRoutes.LISTINGS && req.method == HttpMethod.Get -> {
                     knobs.browseGate?.await()
-                    if (knobs.browseFails) return@MockEngine respondError(HttpStatusCode.ServiceUnavailable, ErrorCodes.INTERNAL, "Quad is having trouble right now. Try again in a moment.")
+                    if (knobs.browseFails) return@FakeServer respondError(HttpStatusCode.ServiceUnavailable, ErrorCodes.INTERNAL, "Quad is having trouble right now. Try again in a moment.")
                     val q = p["q"]?.lowercase()
                     val category = p["category"]
                     val conditions = p["condition"]?.split(",")
@@ -243,7 +224,7 @@ class ListingScreenshotTest {
                     // Two pages: 8 then the rest.
                     if (p["cursor"] == "p2") {
                         knobs.morePagesGate?.await()
-                        if (knobs.morePagesFail) return@MockEngine respondError(HttpStatusCode.ServiceUnavailable, ErrorCodes.INTERNAL, "Try again")
+                        if (knobs.morePagesFail) return@FakeServer respondError(HttpStatusCode.ServiceUnavailable, ErrorCodes.INTERNAL, "Try again")
                         respondJson(pages, Page(items.drop(8), null))
                     } else {
                         respondJson(pages, Page(items.take(8), if (items.size > 8) "p2" else null))
@@ -251,7 +232,7 @@ class ListingScreenshotTest {
                 }
                 path == ApiRoutes.MY_FAVORITES -> respondJson(pages, Page(favoriteIds.map { byId(it).summary.copy(favorited = true) }, null))
                 path == ApiRoutes.MY_LISTINGS -> {
-                    if (knobs.myListingsFails) return@MockEngine respondError(HttpStatusCode.ServiceUnavailable, ErrorCodes.INTERNAL, "Can't reach Quad. Check your connection and try again.")
+                    if (knobs.myListingsFails) return@FakeServer respondError(HttpStatusCode.ServiceUnavailable, ErrorCodes.INTERNAL, "Can't reach Quad. Check your connection and try again.")
                     val status = p["status"]
                     respondJson(pages, Page(myIds.map { byId(it).summary }.filter { status == null || it.status.name == status }, null))
                 }
@@ -268,25 +249,18 @@ class ListingScreenshotTest {
                 path.startsWith("/api/v1/listings/") -> {
                     knobs.detailGate?.await()
                     val id = path.removePrefix("/api/v1/listings/")
-                    val fake = all.firstOrNull { it.detail.id == id } ?: return@MockEngine respondError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND, "Listing not found")
+                    val fake = all.firstOrNull { it.detail.id == id } ?: return@FakeServer respondError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND, "Listing not found")
                     respondJson(ListingDetail.serializer(), fake.detail)
                 }
                 else -> respondError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND, "Not found")
             }
         }
-        startKoin {
-            modules(
-                listOf(
-                    module { single<PlatformUrlLauncher> { PlatformUrlLauncher { true } } },
-                    coreModule(env),
-                    module {
-                        single<Settings> { PreferencesSettings(java.util.prefs.Preferences.userRoot().node("campusmarket-listing-shots").also { it.clear() }) }
-                        single<TokenStore> { InMemoryTokenStore(StoredSession("a1", "r1", now + 10 * hour, me)) }
-                        single<HttpClient> { HttpClient(engine) { installCampusMarketDefaults(debugLogging = false) } }
-                    },
-                ) + featureModules + module { viewModel { SellViewModel(get(), get(), get()).also { knobs.sellVm = it } } },
-            )
-        }
+        startTestApp(
+            server,
+            InMemoryTokenStore(StoredSession("a1", "r1", now + 10 * hour, me)),
+            baseUrl = base,
+            overrides = module { viewModel { SellViewModel(get(), get(), get()).also { knobs.sellVm = it } } },
+        )
     }
 
     // ------------------------------------------------------------------------------------------------ photos
@@ -346,24 +320,7 @@ class ListingScreenshotTest {
 
     // ------------------------------------------------------------------------------------------------ driving
 
-    private fun ComposeUiTest.awaitText(text: String) =
-        waitUntil(timeoutMillis = 10_000) { onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
-
-    private fun ComposeUiTest.awaitNode(matcher: SemanticsMatcher) =
-        waitUntil(timeoutMillis = 10_000) { onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty() }
-
-    private fun ComposeUiTest.clickNode(matcher: SemanticsMatcher) {
-        awaitNode(matcher)
-        val node = onAllNodes(matcher).onFirst()
-        runCatching { node.performScrollTo() }
-        runOnUiThread { node.performClick() }
-        waitForIdle()
-    }
-
-    private fun ComposeUiTest.click(text: String, substring: Boolean = false) = clickNode(hasText(text, substring = substring) and hasClickAction())
-    private fun ComposeUiTest.clickDescription(description: String) = clickNode(hasContentDescription(description, substring = true) and hasClickAction())
-
-    private fun ComposeUiTest.back() = clickDescription("Back")
+    private fun ComposeUiTest.clickDescription(description: String) = clickDescription(description, substring = true)
 
     /** Scrolls the listing grid (the last lazy container on screen) to the tile with [title] and opens it. */
     private fun ComposeUiTest.open(title: String) {
@@ -379,17 +336,6 @@ class ListingScreenshotTest {
         return containers[containers.fetchSemanticsNodes().size - 1]
     }
 
-    private var prefix = ""
-
-    private fun SkikoComposeUiTest.shot(name: String) {
-        repeat(20) {
-            Thread.sleep(80)
-            waitForIdle()
-        }
-        dir!!.mkdirs()
-        ImageIO.write(captureToImage().toAwtImage(), "png", File(dir, "$prefix$name.png"))
-    }
-
     private fun app(
         dark: Boolean,
         tag: String,
@@ -400,30 +346,12 @@ class ListingScreenshotTest {
     ) {
         startApp(knobs)
         prefix = "${if (dark) "dark" else "light"}-$tag-"
-        val size = if (landscape) Size(892f * 2, 412f * 2) else Size(412f * 2, 892f * 2)
-        try {
-            runSkikoComposeUiTest(size = size, density = Density(2f, fontScale)) {
-                setContent {
-                    CompositionLocalProvider(LocalSystemTheme provides if (dark) SystemTheme.Dark else SystemTheme.Light) { App() }
-                }
-                try {
-                    block(knobs)
-                } catch (e: Throwable) {
-                    runCatching { shot("FAILURE") }
-                    throw e
-                }
-            }
-        } finally {
-            stopKoin()
-        }
+        screens(dark, fontScale, landscape) { block(knobs) }
     }
 
     @Test
     fun listingScreenshots() {
-        if (dir == null) {
-            println("ListingScreenshotTest skipped: set CAMPUS_MARKET_SCREENSHOTS")
-            return
-        }
+        if (!enabled()) return
         startPhotoServer()
         try {
             for (dark in listOf(false, true)) scenarios(dark)
@@ -570,7 +498,7 @@ class ListingScreenshotTest {
     }
 
     private fun ComposeUiTest.awaitText(text: String, substring: Boolean) =
-        waitUntil(timeoutMillis = 10_000) { onAllNodesWithText(text, substring = substring, ignoreCase = true).fetchSemanticsNodes().isNotEmpty() }
+        awaitNode(hasText(text, substring = substring, ignoreCase = true))
 
     private fun extraScenarios() {
         app(dark = false, tag = "browse-more-error", knobs = Knobs().apply { morePagesFail = true }) {
