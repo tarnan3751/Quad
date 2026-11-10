@@ -20,6 +20,8 @@ scripts/dev.sh                        # Postgres, demo data and the server on :8
 
 Sign in as `liam@state.edu` (buyer), `maya@state.edu` (seller) or `admin@state.edu`, password `password123`. Without a Stripe key, checkout uses a local fake gateway.
 
+The demo data is two campuses of students with 44 listings, chats, orders, ratings and reports; every login is listed in [`docs/SERVER_NOTES.md`](docs/SERVER_NOTES.md#demo-data-after-gradlew-serverseed). Listing photos are real, freely licensed photographs bundled with the server (credits in [`server/src/main/resources/seed/photos/CREDITS.md`](server/src/main/resources/seed/photos/CREDITS.md)). Re-seed from scratch with `scripts/dev.sh --reset`.
+
 ## Test
 
 ```sh
