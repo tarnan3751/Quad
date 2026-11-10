@@ -115,6 +115,7 @@ class ConversationViewModel(
     private val live: LiveChat,
     private val session: SessionManager,
     private val userMessages: UserMessages,
+    private val unread: UnreadConversations? = null,
     private val nowMillis: () -> Long = { Clock.System.now().toEpochMilliseconds() },
 ) : ViewModel() {
 
@@ -174,6 +175,7 @@ class ConversationViewModel(
     /** The screen is resumed (true) or paused (false). Resuming marks read and catches up. */
     fun setVisible(isVisible: Boolean) {
         visible = isVisible
+        unread?.onConversationVisible(conversationId, isVisible)
         if (!isVisible) return
         if (resumedOnce) {
             live.reconnectNow()
@@ -192,6 +194,7 @@ class ConversationViewModel(
             delay(MARK_READ_DEBOUNCE_MS)
             try {
                 api.markConversationRead(conversationId)
+                unread?.onRead(conversationId)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: ApiError) {

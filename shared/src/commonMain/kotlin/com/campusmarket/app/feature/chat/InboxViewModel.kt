@@ -16,6 +16,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /**
@@ -24,12 +26,14 @@ import kotlinx.coroutines.launch
  * Live updates from [LiveChat]: a new message updates (or fetches) its conversation and moves it to the top, bumping
  * the unread badge when it's from the other person; a read event from me (any device) clears the badge. While the
  * socket is down the first page is re-synced over REST every [CHAT_POLL_INTERVAL_MS], and once more when it reconnects.
+ * Everything it learns is reported to [UnreadConversations] so the tab badge agrees with the list.
  */
 class InboxViewModel(
     private val api: ApiClient,
     private val live: LiveChat,
     private val session: SessionManager,
     private val userMessages: UserMessages,
+    private val unread: UnreadConversations? = null,
 ) : ViewModel() {
 
     val conversations = Paginator(viewModelScope, key = { it.id }) { cursor, limit -> api.conversations(cursor, limit) }
@@ -46,7 +50,11 @@ class InboxViewModel(
         conversations.refresh()
         viewModelScope.launch { live.events.collect(::onEvent) }
         viewModelScope.launch { fallbackSync() }
+        if (unread != null) viewModelScope.launch { conversations.state.map { it.items }.distinctUntilChanged().collect(unread::report) }
     }
+
+    /** A row was tapped: its badge clears right away (the conversation marks itself read once it's on screen). */
+    fun onOpen(conversationId: String) = clearUnread(conversationId)
 
     /** Called by the screen on every resume after the first: catch up on anything missed in the background. */
     fun onResume() {
