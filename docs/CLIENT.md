@@ -128,8 +128,8 @@ Type-safe navigation-compose (2.9). Routes are `@Serializable` objects/classes i
 | `LoginRoute` | `email?` | Foundation | 〃 | `EMAIL_NOT_VERIFIED` → resend + verify. |
 | `BrowseRoute` | | A | `feature/browse/BrowseScreen.kt` | **Tab**, signed-in start destination |
 | `SellRoute` | | A | `feature/listing/ListingEditorScreens.kt` | **Tab**: create listing |
-| `EditListingRoute` | `listingId` | A | 〃 | |
-| `ListingDetailRoute` | `listingId` | A | `feature/listing/ListingDetailScreen.kt` | Links to `MessageSellerRoute`, `CheckoutRoute`, `UserProfileRoute`, `ReportSheet` |
+| `EditListingRoute` | `listingId` | A | 〃 | Asks before discarding unsaved changes (`BackHandler` from `ui-backhandler`) |
+| `ListingDetailRoute` | `listingId` | A | `feature/listing/ListingDetailScreen.kt` | Links to `MessageSellerRoute`, `CheckoutRoute`, `UserProfileRoute`, `ReportSheet`. No Buy / Message when a block stands between buyer and seller (`ListingDetail.blocked`, `seller.blockedByMe`) |
 | `FavoritesRoute` | | A | `feature/listing/MyListingsScreens.kt` | |
 | `MyListingsRoute` | | A | 〃 | |
 | `InboxRoute` | | B | `feature/chat/InboxScreen.kt` | **Tab** |
@@ -188,6 +188,20 @@ Route args are primitives/strings. Use enum *names* as strings if you need an en
 
 Also: `Format.price / relativeTime / date / dateTime / memberSince / rating`, enum labels (`ListingStatus.label`, `OrderStatus.label`, `ReportStatus.label`, `ModerationAction.label`, …; `ListingCategory`, `ListingCondition`, `ReportReason` already have `.label` in core), and `Validate.*` for `Limits`-based checks.
 
+Storefront pieces that live in `feature/listing/` (feature-local for now, used by browse and the listing screens; promote
+them to `ui/components` if another feature needs them):
+
+| Piece | Use |
+|---|---|
+| `ListingTile`, `ListingTileSkeleton` | Grid tile: square cropped photo, price, title clamped to 2 lines with both lines reserved, "condition · 2h ago", status badge, heart. Every tile in a row has the same height |
+| `PagedListingGrid` | Paged grid for a `Paginator<ListingSummary>` whose header (categories, sort) stays on screen through skeleton loading, a failed first load and the empty state; footer shows loading more / retry / end of list |
+| `ListingImage` | Photo with a pulse while loading, a photo outline when missing and a crossed-out photo when it fails |
+| `FavoriteButton` | 48 dp heart toggle (pops and gives haptic feedback when it fills) |
+| `PriceInput` | Dollar field: decimal keypad, `$` prefix, thousands separators while typing, at most two decimals |
+| `PhotoViewer`, `PageDots` | Full-screen photos on black: swipe, pinch / double-tap zoom, pan |
+| `ListingIcons`, `ListingCategory.icon`, `ListingCondition.hint`, `timeAgo` | Line icons for categories and facts, condition explanations, "2h ago" |
+
+
 ## Theme and conventions
 
 The product is **Quad** and its look is **Golden Hour**: the quad at sunset, when everyone is outside. Social and
@@ -233,6 +247,9 @@ are code identifiers, like the `com.campusmarket` packages.)
   `platform/`); leaving the screen restores the system default. Only the Welcome hero does this today.
 - Brand screenshots: `CAMPUS_MARKET_LIVE=http://localhost:8080 CAMPUS_MARKET_SCREENSHOTS=/some/dir ./gradlew :shared:jvmTest --tests '*BrandScreenshotTest*'`
   renders the main screens in light and dark against a running dev server (read-only).
+  `CAMPUS_MARKET_SCREENSHOTS=/some/dir ./gradlew :shared:jvmTest --tests '*ListingScreenshotTest*'` renders every browse /
+  listing state (loading, empty, error, sold / reserved / removed / blocked, long titles, 1.3x font, landscape) against a
+  fake server and a local photo server, no dev server needed.
 - Copy: plain English strings inline. No string resources yet (single locale). Sentence case. Money always via `Format.price` / `PriceText`.
 - Text inputs: enforce `Limits` with `maxLength` and `Validate.*`. The server stays authoritative, so always surface `ApiError.fields`.
 - Never call `HttpClient` directly from features, never store tokens, never load server URLs without `RemoteImage` / `ExternalLinks`.
