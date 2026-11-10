@@ -257,7 +257,7 @@ internal fun MessageBubble(
             Delivery.Sending -> BubbleCaption("Sending…")
             Delivery.Failed -> Row(
                 Modifier
-                    .heightIn(min = 40.dp)
+                    .heightIn(min = 48.dp)
                     .clip(RoundedCornerShape(50))
                     .clickable(role = Role.Button, onClickLabel = "Retry sending", onClick = onRetry)
                     .padding(horizontal = Spacing.sm),

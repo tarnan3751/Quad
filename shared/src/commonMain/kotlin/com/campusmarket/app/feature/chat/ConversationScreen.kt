@@ -229,19 +229,25 @@ private fun MessageList(vm: ConversationViewModel, conversation: Conversation, o
         }.distinctUntilChanged().collect { nearTop -> if (nearTop) vm.loadOlder() }
     }
     val atBottom by remember { derivedStateOf { listState.firstVisibleItemIndex <= 1 } }
-    // New newest row: follow it if we were at the bottom (or it's mine).
+    // Unsent bubbles of mine stay at the very bottom, so "newest" is tracked separately for my rows and theirs.
     val newest = rows.firstOrNull()
+    val newestTheirs = rows.firstOrNull { it is ChatRow.Bubble && !it.mine }?.key
     LaunchedEffect(newest?.key) {
-        if (newest == null) return@LaunchedEffect
-        val mine = (newest as? ChatRow.Bubble)?.mine == true
-        if (mine || listState.firstVisibleItemIndex <= 1) listState.animateScrollToItem(0)
+        // I just sent something: show it.
+        if ((newest as? ChatRow.Bubble)?.mine == true) listState.animateScrollToItem(0)
     }
-    // While scrolled up, count what arrived from them since: "2 new messages".
-    var seenNewestKey by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(atBottom, newest?.key) { if (atBottom) seenNewestKey = newest?.key }
-    val unseen = seenNewestKey?.let { key ->
-        rows.asSequence().takeWhile { it.key != key }.count { it is ChatRow.Bubble && !it.mine }
-    } ?: 0
+    LaunchedEffect(newestTheirs) {
+        // They wrote: follow along if I'm at the bottom, otherwise the jump chip counts it.
+        if (newestTheirs != null && listState.firstVisibleItemIndex <= 1) listState.animateScrollToItem(0)
+    }
+    var seenTheirsKey by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(atBottom, newestTheirs) { if (atBottom) seenTheirsKey = newestTheirs }
+    val unseen = if (atBottom) {
+        0
+    } else {
+        rows.asSequence().filter { it is ChatRow.Bubble && !it.mine }.takeWhile { it.key != seenTheirsKey }.count()
+            .takeIf { seenTheirsKey != null } ?: 0
+    }
 
     when {
         !paged.loaded && paged.error != null && rows.isEmpty() ->

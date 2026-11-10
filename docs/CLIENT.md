@@ -115,6 +115,8 @@ Auth calls (`register / verifyEmail / resendCode / login / logout`) are used thr
 - `chatSocket.events: SharedFlow<ChatEvent>` (and `chatSocket.messages: Flow<Message>`) is hot and connects on demand: the websocket opens when the first collector subscribes and closes 5 s after the last one leaves. Collect it in the inbox / conversation view model's `viewModelScope`.
 - It reconnects with backoff (1 s → 30 s). On a policy-violation close it refreshes the token first. `chatSocket.status` exposes `Idle / Connecting / Connected / Reconnecting` for a "Reconnecting…" hint.
 - **Send with REST** (`api.sendMessage`) to get the created `Message` and typed errors (`BLOCKED`). The server echoes it as `MessageCreated` on the socket too, so **de-duplicate by `message.id`**. `chatSocket.markRead(id)` / `api.markConversationRead(id)` mark a conversation read. `chatSocket.reconnectNow()` skips the backoff wait.
+- **Unread total (Inbox tab badge):** `UnreadConversations` (`feature/chat/`, Koin single) exposes `count: StateFlow<Int>`, the number of conversations with unread messages (0 when signed out). Collect it where the badge is drawn: `koinInject<UnreadConversations>().count.collectAsStateWithLifecycle()`. While collected it syncs the first page of `GET /conversations`, follows socket events (polling while the socket is down; collecting keeps the socket open, stopping 5 s after the last collector) and takes what the inbox / conversation screens report, so badge and list agree. `refresh()` re-syncs on demand.
+- **Clock times:** chat and order screens format times with `rememberTimeFormat()` (`feature/chat/TimeFormat.kt`), which follows the device's 12/24-hour setting (Android `DateFormat.is24HourFormat`, iOS `j` skeleton, desktop locale) and words dates the way people say them ("Yesterday", "Thu, Nov 12 at 9:24 AM", "in 2 days, 4 hours"). Tests pin it with `LocalUse24HourClock` or construct `TimeFormat(use24h, tz, now)` directly.
 
 ## Navigation
 
@@ -137,8 +139,8 @@ Type-safe navigation-compose (2.9). Routes are `@Serializable` objects/classes i
 | `MessageSellerRoute` | `listingId` | B | 〃 | `startConversation` then replace itself with `ConversationRoute` |
 | `CheckoutRoute` | `listingId` | B | `feature/orders/OrderScreens.kt` | Buy flow |
 | `OrdersRoute` | `role?` (`"buyer"`/`"seller"`) | B | 〃 | |
-| `OrderDetailRoute` | `orderId` | B | 〃 | Deep link `campusmarket://orders/{id}` |
-| `RateOrderRoute` | `orderId` | B | 〃 | |
+| `OrderDetailRoute` | `orderId`, `fromCheckout` (default false) | B | 〃 | Deep link `campusmarket://orders/{id}`. `fromCheckout`: back from Stripe Checkout with the order unpaid, it re-checks a few times ("Confirming your payment…") before saying the payment didn't come through |
+| `RateOrderRoute` | `orderId`, `stars` (default 0) | B | 〃 | `stars` pre-selects the rating tapped on the order screen |
 | `ReportProblemRoute` | `orderId` | B | `feature/orders/DisputeScreens.kt` | Buyer of a PAID order opens a dispute (`openDispute`); payment goes on hold. Opened from `OrderDetailRoute`, which also offers `withdrawDispute` |
 | `PayoutsRoute` | | B | 〃 | Deep link `campusmarket://payouts` |
 | `ProfileRoute` | | C | `feature/profile/ProfileScreen.kt` | **Tab**: links to my listings, favorites, orders, payouts, settings, moderation |
@@ -233,6 +235,9 @@ are code identifiers, like the `com.campusmarket` packages.)
   `platform/`); leaving the screen restores the system default. Only the Welcome hero does this today.
 - Brand screenshots: `CAMPUS_MARKET_LIVE=http://localhost:8080 CAMPUS_MARKET_SCREENSHOTS=/some/dir ./gradlew :shared:jvmTest --tests '*BrandScreenshotTest*'`
   renders the main screens in light and dark against a running dev server (read-only).
+- Chat / orders gallery: `CAMPUS_MARKET_SCREENSHOTS=/some/dir ./gradlew :shared:jvmTest --tests '*ChatOrdersGalleryTest*'` renders
+  every chat, order (each status, buyer and seller), checkout and payouts state, light, dark and at 1.3x font scale,
+  against a fake server (`CHAT_ORDERS_ONLY=chat,orders,…` narrows it; `CHAT_ORDERS_PHOTOS=<dir of jpgs>` adds photos).
 - Copy: plain English strings inline. No string resources yet (single locale). Sentence case. Money always via `Format.price` / `PriceText`.
 - Text inputs: enforce `Limits` with `maxLength` and `Validate.*`. The server stays authoritative, so always surface `ApiError.fields`.
 - Never call `HttpClient` directly from features, never store tokens, never load server URLs without `RemoteImage` / `ExternalLinks`.
