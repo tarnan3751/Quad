@@ -144,6 +144,33 @@ class ListingSearchTest {
     }
 
     @Test
+    fun relevanceIsEveryTermInTheTitleThenSomeThenDescriptionOnlyEachNewestFirst() = apiTest { env ->
+        val seller = env.user()
+        val viewer = env.user()
+        val t = Instant.parse("2026-10-01T12:00:00Z")
+        fun listing(title: String, description: String, age: Long) =
+            env.listing(seller, title = title, description = description, withPhoto = false).also { env.setCreatedAt(it, t.minusSeconds(age)) }
+        val bodyNew = listing("Table", "An ikea desk would be nicer", 1)
+        val someNew = listing("Desk", "From ikea, keeps mentioning ikea desk ikea desk", 2)
+        val allNew = listing("IKEA desk", "White", 3)
+        val bodyOld = listing("Chair", "Goes with my ikea desks", 4)
+        val someOld = listing("IKEA shelf", "Sits on a desk", 5)
+        val allOld = listing("Standing desk by IKEA", "Oak, ikea desk", 6)
+        listing("IKEA lamp", "Bright", 7) // one term only: no match
+
+        assertEquals(listOf(allNew, allOld, someNew, someOld, bodyNew, bodyOld), search(viewer, "q" to "ikea desk").ids())
+        assertEquals(listOf(allNew, allOld, someNew, someOld, bodyNew, bodyOld), allPages(viewer, ApiRoutes.LISTINGS, 1, mapOf("q" to "ikea desk")).ids())
+        assertEquals(listOf(someNew, allNew, allOld, bodyNew, bodyOld, someOld), search(viewer, "q" to "desk").ids())
+        // short queries: title starts with it, title contains it, description only
+        val startsOld = listing("TV stand", "Black", 8)
+        val inTitle = listing("Smart TV", "55 inch", 9)
+        val inBody = listing("Mount", "Fits any tv", 10)
+        val startsNew = listing("Tv antenna", "Indoor", 0)
+        assertEquals(listOf(startsNew, startsOld, inTitle, inBody), search(viewer, "q" to "tv").ids())
+        assertEquals(listOf(startsNew, startsOld, inTitle, inBody), allPages(viewer, ApiRoutes.LISTINGS, 1, mapOf("q" to "tv")).ids())
+    }
+
+    @Test
     fun shortAndStopWordQueriesFallBackToSubstringMatching() = apiTest { env ->
         val seller = env.user()
         val viewer = env.user()
