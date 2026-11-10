@@ -44,6 +44,9 @@ internal class ChatService(private val deps: AppDeps, private val hub: ChatHub) 
     private class Participation(val id: UUID, val listingId: UUID, val buyerId: UUID, val sellerId: UUID, val campus: String) {
         fun other(me: UUID) = if (me == buyerId) sellerId else buyerId
         val both get() = listOf(buyerId, sellerId)
+
+        /** [user]'s read-mark column. */
+        fun readColumn(user: UUID) = if (user == buyerId) "buyer_last_read_at" else "seller_last_read_at"
     }
 
     private fun now(): Instant = Instant.now().truncatedTo(ChronoUnit.MICROS)
@@ -74,19 +77,24 @@ internal class ChatService(private val deps: AppDeps, private val hub: ChatHub) 
     /** Inserts a message, enforcing block and availability rules, and updates the conversation summary + sender read mark. */
     private fun Connection.insertMessage(p: Participation, senderId: UUID, body: String): Message {
         val other = p.other(senderId)
-        if (isBlockedEitherWay(senderId, other)) forbidden("You can't message this user", ErrorCodes.BLOCKED)
-        val otherGone = queryOne("SELECT 1 FROM users WHERE id = ? AND deleted_at IS NOT NULL", other) { true } ?: false
+        val (blocked, otherGone) = queryOne(
+            """SELECT EXISTS (SELECT 1 FROM blocks WHERE (blocker_id = ? AND blocked_id = ?) OR (blocker_id = ? AND blocked_id = ?)),
+                      EXISTS (SELECT 1 FROM users WHERE id = ? AND deleted_at IS NOT NULL)""",
+            senderId, other, other, senderId, other,
+        ) { it.getBoolean(1) to it.getBoolean(2) }!!
+        if (blocked) forbidden("You can't message this user", ErrorCodes.BLOCKED)
         if (otherGone) conflict("This user is no longer available")
         val id = UUID.randomUUID()
         val at = now()
         update("INSERT INTO messages (id, conversation_id, sender_id, body, created_at) VALUES (?, ?, ?, ?, ?)", id, p.id, senderId, body, at)
+        // The preview follows the newest message (a concurrent send may have committed a later one); the sender has read it.
+        val readCol = p.readColumn(senderId)
         update(
-            """UPDATE conversations SET last_message_at = ?, last_message_preview = ?
-               WHERE id = ? AND (last_message_at IS NULL OR last_message_at <= ?)""",
-            at, preview(body), p.id, at,
+            """UPDATE conversations SET last_message_preview = CASE WHEN last_message_at IS NULL OR last_message_at <= ? THEN ? ELSE last_message_preview END,
+                      last_message_at = GREATEST(last_message_at, ?), $readCol = GREATEST($readCol, ?)
+               WHERE id = ?""",
+            at, preview(body), at, at, p.id,
         )
-        val readCol = if (senderId == p.buyerId) "buyer_last_read_at" else "seller_last_read_at"
-        update("UPDATE conversations SET $readCol = ? WHERE id = ? AND ($readCol IS NULL OR $readCol < ?)", at, p.id, at)
         return Message(id.toString(), p.id.toString(), senderId.toString(), body, at.toEpochMilli())
     }
 
@@ -167,8 +175,8 @@ internal class ChatService(private val deps: AppDeps, private val hub: ChatHub) 
         val at = now()
         val participants = db.tx { c ->
             val p = c.requireParticipation(user, conversationId)
-            val col = if (user.id == p.buyerId) "buyer_last_read_at" else "seller_last_read_at"
-            c.update("UPDATE conversations SET $col = ? WHERE id = ? AND ($col IS NULL OR $col < ?)", at, conversationId, at)
+            val col = p.readColumn(user.id)
+            c.update("UPDATE conversations SET $col = GREATEST($col, ?) WHERE id = ?", at, conversationId)
             p.both
         }
         hub.publish(participants, ChatEvent.ConversationRead(conversationId.toString(), user.id.toString(), at.toEpochMilli()))

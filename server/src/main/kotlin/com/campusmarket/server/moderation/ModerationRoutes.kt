@@ -29,6 +29,8 @@ import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.put
+import java.sql.Connection
+import java.util.UUID
 
 /** Entry point for the moderation feature; called once from Application.module. See docs/CONTRACT.md. */
 fun Route.moderationRoutes(deps: AppDeps) {
@@ -71,29 +73,9 @@ fun Route.moderationRoutes(deps: AppDeps) {
             call.respond(OkResponse())
         }
 
-        post("${ApiRoutes.BASE}/mod/users/{id}/unsuspend") {
-            val mod = call.requireModerator()
-            val id = call.parameters["id"].asUuid("User")
-            val req = call.receiveNote()
-            deps.db.tx { c -> svc.unsuspendUser(c, mod, id, req) }
-            call.respond(OkResponse())
-        }
-
-        post("${ApiRoutes.BASE}/mod/listings/{id}/remove") {
-            val mod = call.requireModerator()
-            val id = call.parameters["id"].asUuid("Listing")
-            val req = call.receiveNote()
-            deps.db.tx { c -> svc.removeListingDirect(c, mod, id, req) }
-            call.respond(OkResponse())
-        }
-
-        post("${ApiRoutes.BASE}/mod/listings/{id}/restore") {
-            val mod = call.requireModerator()
-            val id = call.parameters["id"].asUuid("Listing")
-            val req = call.receiveNote()
-            deps.db.tx { c -> svc.restoreListing(c, mod, id, req) }
-            call.respond(OkResponse())
-        }
+        noteAction("${ApiRoutes.BASE}/mod/users/{id}/unsuspend", "User", deps, svc::unsuspendUser)
+        noteAction("${ApiRoutes.BASE}/mod/listings/{id}/remove", "Listing", deps, svc::removeListingDirect)
+        noteAction("${ApiRoutes.BASE}/mod/listings/{id}/restore", "Listing", deps, svc::restoreListing)
 
         // ---- staff management (admins only)
 
@@ -121,6 +103,20 @@ fun Route.moderationRoutes(deps: AppDeps) {
             call.respond(deps.db.tx { c -> svc.log(c, page) })
         }
     }
+}
+
+/** A moderator's direct action on [path]'s `{id}` (a [what]) with an optional note; answers `OkResponse`. */
+private fun Route.noteAction(
+    path: String,
+    what: String,
+    deps: AppDeps,
+    action: (Connection, UserPrincipal, UUID, ModerationNoteRequest) -> Unit,
+) = post(path) {
+    val mod = call.requireModerator()
+    val id = call.parameters["id"].asUuid(what)
+    val req = call.receiveNote()
+    deps.db.tx { c -> action(c, mod, id, req) }
+    call.respond(OkResponse())
 }
 
 /** The note body is optional: a request without a content type means an empty note. */
