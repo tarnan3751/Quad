@@ -27,8 +27,10 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -162,6 +164,10 @@ fun ReportSheet(
     val scope = rememberCoroutineScope()
     val controller = remember(targetType, targetId) { ReportFormController(api, targetType, targetId, scope, reported) }
     val state by controller.state.collectAsStateWithLifecycle()
+    // The field's text lives here, in synchronous state, and is pushed to the controller. Reading it back from the
+    // controller's flow (collected out here, outside the sheet's own composition) made the field lag behind fast
+    // typing on iOS: characters were dropped and reordered. See docs/CLIENT.md, "Text fields in sheets and dialogs".
+    var details by remember(controller) { mutableStateOf(controller.state.value.details) }
     val noun = targetType.noun
     val finish = { if (state.submitted) onReported() else onDismiss() }
 
@@ -216,8 +222,11 @@ fun ReportSheet(
                         }
                     }
                     AppTextField(
-                        value = state.details,
-                        onValueChange = controller::onDetails,
+                        value = details,
+                        onValueChange = {
+                            details = it
+                            controller.onDetails(it)
+                        },
                         label = if (state.reason == ReportReason.OTHER) "What happened? (optional)" else "Details (optional)",
                         placeholder = "Anything that helps a moderator understand, like what was said or asked",
                         error = state.detailsError,
