@@ -97,12 +97,12 @@ object SeedData {
                 "cubes fine. Defrosted and wiped down before you get it. It's about 40 lb, so bring a friend or a cart.",
             DORM, GOOD, 6000, posted = 19.days, photos = 2, pickup = "Hartwell Hall front desk"),
         L("desk-lamp", "maya", "Silver desk lamp, bulb included",
-            "Metal desk lamp with a bendy neck, warm LED bulb included. Good height for reading in bed or at a desk. " +
+            "Metal desk lamp with an adjustable head, warm LED bulb included. Good height for reading in bed or at a desk. " +
                 "Only selling because I'm moving out.",
             DORM, LIKE_NEW, 1000, posted = 2.days, pickup = "Hartwell Hall"),
         L("yoga-mat", "maya", "Pink yoga mat, 6 mm",
             "Thick, grippy mat, used for one semester of the rec center's Tuesday vinyasa class. Wiped down and stored " +
-                "rolled, no tears or flaking. Comes with a strap to carry it.",
+                "rolled, no tears or flaking.",
             SPORTS, GOOD, 1200, posted = 6.days, pickup = "Rec center entrance"),
         L("sweater", "maya", "Striped cable-knit sweater, size S",
             "Oatmeal, white and taupe stripes, chunky cable knit and really warm. Slightly oversized fit. Worn maybe five " +
