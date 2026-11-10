@@ -98,6 +98,8 @@ data class UserPublic(
     val ratingCount: Int = 0,
     val joinedAt: Long,
     val blockedByMe: Boolean = false,
+    /** Small upright JPEG of the avatar (see [Photo.thumbnailUrl]); null until it exists: fall back to [avatarUrl]. */
+    val avatarThumbnailUrl: String? = null,
 )
 
 @Serializable
@@ -113,6 +115,8 @@ data class UserPrivate(
     val ratingCount: Int = 0,
     val payoutsEnabled: Boolean = false,
     val joinedAt: Long,
+    /** Small upright JPEG of the avatar (see [Photo.thumbnailUrl]); null until it exists: fall back to [avatarUrl]. */
+    val avatarThumbnailUrl: String? = null,
 )
 
 @Serializable
@@ -125,8 +129,22 @@ data class UpdateProfileRequest(
 
 // ---------- Photos ----------
 
+/**
+ * An uploaded photo. [url] is the original (as uploaded, metadata stripped); [width] / [height] are its upright size.
+ * The variants are server-made JPEGs, upright and without metadata, served with the same immutable cache headers;
+ * each is null while it doesn't exist (not generated yet, or the original can't be decoded): fall back to [url].
+ */
 @Serializable
-data class Photo(val id: String, val url: String, val width: Int? = null, val height: Int? = null)
+data class Photo(
+    val id: String,
+    val url: String,
+    val width: Int? = null,
+    val height: Int? = null,
+    /** About 480 px on the short side (never more than 1280 px on the long side): grid tiles, list rows, avatars. */
+    val thumbnailUrl: String? = null,
+    /** At most 1280 px on the long side: the listing photo pager. Keep [url] for a zoomable full-screen view. */
+    val displayUrl: String? = null,
+)
 
 // ---------- Listings ----------
 
@@ -197,6 +215,11 @@ data class ListingSummary(
     val sellerName: String,
     val favorited: Boolean = false,
     val createdAt: Long,
+    /** The small variant of the first photo ([Photo.thumbnailUrl]); prefer it to [thumbnailUrl] (the original) everywhere. */
+    val thumbnailSmallUrl: String? = null,
+    /** Upright size of the first photo, for reserving space; the small variant has the same aspect ratio. */
+    val thumbnailWidth: Int? = null,
+    val thumbnailHeight: Int? = null,
 )
 
 @Serializable
