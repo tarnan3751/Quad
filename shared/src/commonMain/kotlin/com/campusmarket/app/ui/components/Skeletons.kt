@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -20,11 +19,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.State
@@ -35,7 +31,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -98,43 +93,6 @@ fun SkeletonLine(modifier: Modifier = Modifier, widthFraction: Float = 1f, heigh
     SkeletonBox(modifier.fillMaxWidth(widthFraction).height(height), shape = CircleShape)
 }
 
-/** Placeholder in the shape of a `ListingCard` (square photo, price, two title lines). */
-@Composable
-fun ListingCardSkeleton(modifier: Modifier = Modifier) {
-    Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shape = MaterialTheme.shapes.medium, modifier = modifier) {
-        Column {
-            SkeletonBox(Modifier.fillMaxWidth().aspectRatio(1f), shape = RectangleShape)
-            Column(Modifier.padding(Spacing.md), verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                SkeletonLine(widthFraction = 0.35f, height = 16.dp)
-                SkeletonLine(widthFraction = 0.9f)
-                SkeletonLine(widthFraction = 0.5f, height = 10.dp)
-            }
-        }
-    }
-}
-
-/** First-load placeholder for a listing grid: the same columns and spacing as `PagedLazyGrid`. */
-@Composable
-fun ListingGridSkeleton(
-    modifier: Modifier = Modifier,
-    columns: GridCells = GridCells.Adaptive(minSize = 160.dp),
-    contentPadding: PaddingValues = PaddingValues(Spacing.md),
-    count: Int = 8,
-) {
-    ShimmerGroup {
-        LazyVerticalGrid(
-            columns = columns,
-            contentPadding = contentPadding,
-            horizontalArrangement = Arrangement.spacedBy(Spacing.md),
-            verticalArrangement = Arrangement.spacedBy(Spacing.md),
-            userScrollEnabled = false,
-            modifier = modifier.fillMaxSize().loadingSemantics(),
-        ) {
-            items(count) { ListingCardSkeleton() }
-        }
-    }
-}
-
 /** Leading shape of a [ListRowSkeleton]. */
 enum class SkeletonLeading { None, Avatar, Thumbnail }
 
@@ -170,6 +128,14 @@ fun ListSkeleton(
         LazyColumn(modifier.fillMaxSize().loadingSemantics(), contentPadding = contentPadding, userScrollEnabled = false) {
             items(rows) { ListRowSkeleton(leading = leading) }
         }
+    }
+}
+
+/** [rows] of [ListRowSkeleton] in a plain column, for a list inside a sheet or a scrolling screen. */
+@Composable
+fun ListRowSkeletons(rows: Int, modifier: Modifier = Modifier, leading: SkeletonLeading = SkeletonLeading.Thumbnail) {
+    ShimmerGroup {
+        Column(modifier.fillMaxWidth().loadingSemantics()) { repeat(rows) { ListRowSkeleton(leading = leading) } }
     }
 }
 

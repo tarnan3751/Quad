@@ -7,15 +7,14 @@ import com.campusmarket.app.data.ApiError
 import com.campusmarket.app.data.ChatSocket
 import com.campusmarket.app.data.SessionManager
 import com.campusmarket.app.ui.state.Paginator
+import com.campusmarket.app.ui.state.ResumeGate
 import com.campusmarket.app.ui.state.UserMessages
 import com.campusmarket.core.ChatEvent
 import com.campusmarket.core.Conversation
 import com.campusmarket.core.Limits
 import com.campusmarket.core.Message
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -43,13 +42,13 @@ class InboxViewModel(
     private val myId: String? get() = session.currentUser?.id
     private val seenMessageIds = LinkedHashSet<String>()
     private val fetching = mutableSetOf<String>()
-    private var resumedOnce = false
+    private val resumes = ResumeGate()
 
     init {
         conversations.onRefreshError = userMessages::showError
         conversations.refresh()
         viewModelScope.launch { live.events.collect(::onEvent) }
-        viewModelScope.launch { fallbackSync() }
+        viewModelScope.launch { live.syncWhileDown(pollWhileConnecting = true, onReconnected = ::catchUp, poll = ::syncFirstPage) }
         if (unread != null) viewModelScope.launch { conversations.state.map { it.items }.distinctUntilChanged().collect(unread::report) }
     }
 
@@ -58,10 +57,7 @@ class InboxViewModel(
 
     /** Called by the screen on every resume after the first: catch up on anything missed in the background. */
     fun onResume() {
-        if (!resumedOnce) {
-            resumedOnce = true
-            return
-        }
+        if (!resumes.isReturn()) return
         live.reconnectNow()
         viewModelScope.launch { catchUp() }
     }
@@ -140,27 +136,6 @@ class InboxViewModel(
             throw e
         } catch (e: ApiError) {
             // Offline: keep what we have; the next attempt or a pull-to-refresh will catch up.
-        }
-    }
-
-    private suspend fun fallbackSync() {
-        var wasDown = false
-        live.status.collectLatest { status ->
-            when (status) {
-                ChatSocket.Status.Connected -> if (wasDown) {
-                    // Events sent while we were disconnected are gone: catch up once.
-                    wasDown = false
-                    catchUp()
-                }
-                ChatSocket.Status.Connecting, ChatSocket.Status.Reconnecting -> {
-                    if (status == ChatSocket.Status.Reconnecting) wasDown = true
-                    while (true) {
-                        delay(CHAT_POLL_INTERVAL_MS)
-                        syncFirstPage()
-                    }
-                }
-                ChatSocket.Status.Idle -> Unit
-            }
         }
     }
 

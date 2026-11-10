@@ -1,7 +1,9 @@
 package com.campusmarket.app.feature.chat
 
-import com.campusmarket.app.data.NOW
 import com.campusmarket.app.data.ChatSocket
+import com.campusmarket.app.data.Harness
+import com.campusmarket.app.data.NOW
+import com.campusmarket.app.data.bodyText
 import com.campusmarket.app.data.respondError
 import com.campusmarket.app.data.respondJson
 import com.campusmarket.app.data.testUser
@@ -57,7 +59,7 @@ class ConversationViewModelTest {
         var sendGate: CompletableDeferred<Unit>? = null
         var sentCount = 0
 
-        fun harness(scope: TestScope) = VmHarness(scope) { req ->
+        fun harness(scope: TestScope) = Harness(scope = scope) { req ->
             val path = req.url.encodedPath
             when {
                 path == ApiRoutes.conversation("c1") -> respondJson(Conversation.serializer(), conversation)
@@ -72,7 +74,7 @@ class ConversationViewModelTest {
                     if (status != null) {
                         respondError(status, sendCode, "You can't message this user")
                     } else {
-                        val body = ApiJson.decodeFromString(SendMessageRequest.serializer(), req.bodyText()).body
+                        val body = ApiJson.decodeFromString(SendMessageRequest.serializer(), req.bodyText).body
                         sentCount++
                         respondJson(Message.serializer(), msg("s$sentCount", me, body, NOW + sentCount))
                     }
@@ -83,14 +85,14 @@ class ConversationViewModelTest {
         }
     }
 
-    private fun TestScope.setUp(status: ChatSocket.Status = ChatSocket.Status.Connected): Triple<FakeChatServer, VmHarness, FakeLiveChat> {
+    private fun TestScope.setUp(status: ChatSocket.Status = ChatSocket.Status.Connected): Triple<FakeChatServer, Harness, FakeLiveChat> {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         val server = FakeChatServer()
         return Triple(server, server.harness(this), FakeLiveChat(status))
     }
 
-    private fun vm(h: VmHarness, live: FakeLiveChat) =
-        ConversationViewModel(ConversationRoute("c1"), h.api, live, h.session, h.userMessages, nowMillis = { NOW + 500 })
+    private fun vm(h: Harness, live: FakeLiveChat) =
+        ConversationViewModel(ConversationRoute("c1"), h.api, live, h.session, h.messages, nowMillis = { NOW + 500 })
 
     private fun ConversationViewModel.bubbles() = rows.value.filterIsInstance<ChatRow.Bubble>()
 
@@ -302,7 +304,7 @@ class ConversationViewModelTest {
         vm.onBlockChanged(false)
         assertNull(vm.state.value.restriction)
         // BlockUserDialog shows the "Blocked …" / "Unblocked …" snackbar itself: no second one from here.
-        assertNull(withTimeoutOrNull(1_000) { h.userMessages.messages.first() })
+        assertNull(withTimeoutOrNull(1_000) { h.messages.messages.first() })
         vm.close()
     }
 

@@ -1,4 +1,4 @@
-package com.campusmarket.app.feature.listing
+package com.campusmarket.app.ui.components
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.RepeatMode
@@ -52,11 +52,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -71,42 +70,18 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import coil3.compose.AsyncImagePainter
-import com.campusmarket.app.ui.Format
-import com.campusmarket.app.ui.components.ErrorState
-import com.campusmarket.app.ui.components.ListingStatusChip
-import com.campusmarket.app.ui.components.LocalUrlResolver
-import com.campusmarket.app.ui.components.PriceText
+import com.campusmarket.app.ui.rememberTimeFormat
 import com.campusmarket.app.ui.state.PagedState
 import com.campusmarket.app.ui.state.Paginator
 import com.campusmarket.app.ui.theme.Spacing
-import com.campusmarket.core.ListingCondition
 import com.campusmarket.core.ListingStatus
 import com.campusmarket.core.ListingSummary
-import kotlinx.coroutines.flow.distinctUntilChanged
 
 /*
- * Storefront building blocks shared by browse, favorites and the listing screens: the grid tile, its skeleton, the
- * photo with loading / missing / failed states, the favorite heart and a paged grid that keeps its header on screen
- * through loading, error and empty states.
+ * Storefront building blocks shared by browse, favorites, the listing screens and public profiles: the grid tile, its
+ * skeleton, the photo with loading / missing / failed states, the favorite heart and a paged grid that keeps its
+ * header on screen through loading, error and empty states.
  */
-
-// ---------------------------------------------------------------------------------------------------- text
-
-/** "just now", "5m ago", "2h ago", "3d ago", then "Mar 4". */
-internal fun timeAgo(epochMillis: Long, nowMillis: Long = kotlin.time.Clock.System.now().toEpochMilliseconds()): String {
-    val relative = Format.relativeTime(epochMillis, nowMillis)
-    return if (relative.first().isDigit()) "$relative ago" else relative
-}
-
-/** One-line explanation of a condition, shown when picking it and on the listing. */
-internal val ListingCondition.hint: String
-    get() = when (this) {
-        ListingCondition.NEW -> "Never used, may still be in its packaging."
-        ListingCondition.LIKE_NEW -> "Used once or twice. No visible wear."
-        ListingCondition.GOOD -> "Some signs of use. Works perfectly."
-        ListingCondition.FAIR -> "Clear wear or small flaws, but still works."
-        ListingCondition.POOR -> "Doesn't fully work. For parts or repair."
-    }
 
 // ---------------------------------------------------------------------------------------------------- photo
 
@@ -117,7 +92,7 @@ private enum class PhotoLoad { Missing, Loading, Loaded, Failed }
  * [errorText], if given) when it can't be loaded. Size it with [modifier]; [backdrop] shows around fitted photos.
  */
 @Composable
-internal fun ListingImage(
+fun ListingImage(
     url: String?,
     contentDescription: String?,
     modifier: Modifier = Modifier,
@@ -157,9 +132,9 @@ internal fun ListingImage(
     }
 }
 
-/** A gently breathing placeholder block (image loading, skeletons). */
+/** A gently breathing placeholder while a photo loads. */
 @Composable
-internal fun Pulse(modifier: Modifier, color: Color = MaterialTheme.colorScheme.surfaceContainerHighest) {
+fun Pulse(modifier: Modifier, color: Color = MaterialTheme.colorScheme.surfaceContainerHighest) {
     val transition = rememberInfiniteTransition()
     val alpha by transition.animateFloat(
         initialValue = 1f,
@@ -176,7 +151,7 @@ internal fun Pulse(modifier: Modifier, color: Color = MaterialTheme.colorScheme.
  * the heart pops when it fills.
  */
 @Composable
-internal fun FavoriteButton(
+fun FavoriteButton(
     favorited: Boolean,
     onToggle: () -> Unit,
     modifier: Modifier = Modifier,
@@ -232,7 +207,7 @@ internal fun FavoriteButton(
  * photo; [onToggleFavorite] adds the heart.
  */
 @Composable
-internal fun ListingTile(
+fun ListingTile(
     listing: ListingSummary,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -269,7 +244,7 @@ internal fun ListingTile(
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                "${listing.condition.label} · ${timeAgo(listing.createdAt)}",
+                "${listing.condition.label} · ${rememberTimeFormat().ago(listing.createdAt)}",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
@@ -281,40 +256,38 @@ internal fun ListingTile(
 
 /** Placeholder with the tile's exact shape while the first page loads. */
 @Composable
-internal fun ListingTileSkeleton(modifier: Modifier = Modifier) {
-    val block = MaterialTheme.colorScheme.surfaceContainerHighest
+fun ListingTileSkeleton(modifier: Modifier = Modifier) {
+    val line = RoundedCornerShape(4.dp)
     Card(
         modifier = modifier,
         shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
-        Pulse(Modifier.fillMaxWidth().aspectRatio(1f), block)
+        SkeletonBox(Modifier.fillMaxWidth().aspectRatio(1f), RectangleShape)
         Column(
             Modifier.padding(start = Spacing.md, end = Spacing.md, top = 12.dp, bottom = Spacing.md),
             verticalArrangement = Arrangement.spacedBy(Spacing.sm),
         ) {
-            Pulse(Modifier.width(56.dp).height(16.dp).clip(RoundedCornerShape(4.dp)), block)
-            Pulse(Modifier.fillMaxWidth().height(12.dp).clip(RoundedCornerShape(4.dp)), block)
-            Pulse(Modifier.fillMaxWidth(0.6f).height(12.dp).clip(RoundedCornerShape(4.dp)), block)
-            Pulse(Modifier.fillMaxWidth(0.4f).height(10.dp).clip(RoundedCornerShape(4.dp)), block)
+            SkeletonBox(Modifier.width(56.dp).height(16.dp), line)
+            SkeletonBox(Modifier.fillMaxWidth().height(12.dp), line)
+            SkeletonBox(Modifier.fillMaxWidth(0.6f).height(12.dp), line)
+            SkeletonBox(Modifier.fillMaxWidth(0.4f).height(10.dp), line)
         }
     }
 }
 
 // ---------------------------------------------------------------------------------------------------- grid
 
-private const val LOAD_MORE_THRESHOLD = 6
-
 /** Test tag of the [PagedListingGrid]'s lazy grid. */
 const val LISTING_GRID_TAG = "listingGrid"
 
 /**
- * Paged listing grid with pull-to-refresh and infinite scroll. Unlike the generic `PagedLazyGrid`, [header] (search
+ * Paged listing grid with pull-to-refresh and infinite scroll, the grid sibling of [PagedLazyColumn]. [header] (search
  * context, categories, sort) stays visible through the first load (skeleton tiles), a failed first load and the
  * [empty] state, and the footer says when the end is reached.
  */
 @Composable
-internal fun PagedListingGrid(
+fun PagedListingGrid(
     paginator: Paginator<ListingSummary>,
     modifier: Modifier = Modifier,
     state: LazyGridState = rememberLazyGridState(),
@@ -325,23 +298,8 @@ internal fun PagedListingGrid(
     tile: @Composable LazyGridItemScope.(ListingSummary) -> Unit,
 ) {
     val paged by paginator.state.collectAsStateWithLifecycle()
-    LaunchedEffect(paginator) {
-        val s = paginator.state.value
-        if (!s.loaded && !s.isLoading && s.error == null) paginator.refresh()
-    }
-    LaunchedEffect(state, paginator) {
-        snapshotFlow {
-            val info = state.layoutInfo
-            val last = info.visibleItemsInfo.lastOrNull()?.index ?: -1
-            info.totalItemsCount > 0 && last >= info.totalItemsCount - LOAD_MORE_THRESHOLD
-        }.distinctUntilChanged().collect { nearEnd -> if (nearEnd) paginator.loadMore() }
-    }
-    // A first page that doesn't fill the screen leaves us "near the end" without any scrolling.
-    LaunchedEffect(paged.items.size, paged.endReached) {
-        val info = state.layoutInfo
-        val last = info.visibleItemsInfo.lastOrNull()?.index ?: -1
-        if (paged.loaded && !paged.endReached && last >= info.totalItemsCount - LOAD_MORE_THRESHOLD) paginator.loadMore()
-    }
+    AutoStart(paginator)
+    LoadMoreNearEnd(paginator, paged, threshold = 6) { state.layoutInfo.let { it.visibleItemsInfo.lastOrNull()?.index to it.totalItemsCount } }
 
     PullToRefreshBox(isRefreshing = paged.isRefreshing, onRefresh = paginator::refresh, modifier = modifier.fillMaxSize()) {
         LazyVerticalGrid(
@@ -395,7 +353,7 @@ private fun GridFooter(paged: PagedState<ListingSummary>, onRetry: () -> Unit, e
 
 /** Small round icon badge used by facts and notices. */
 @Composable
-internal fun IconBadge(icon: ImageVector, container: Color, content: Color, size: Dp = 36.dp) {
+fun IconBadge(icon: ImageVector, container: Color, content: Color, size: Dp = 36.dp) {
     Surface(shape = CircleShape, color = container, contentColor = content, modifier = Modifier.size(size)) {
         Box(contentAlignment = Alignment.Center) { Icon(icon, contentDescription = null, modifier = Modifier.size(size * 0.55f)) }
     }

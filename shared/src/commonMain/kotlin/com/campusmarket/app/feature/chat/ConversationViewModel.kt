@@ -6,6 +6,7 @@ import com.campusmarket.app.data.ApiClient
 import com.campusmarket.app.data.ApiError
 import com.campusmarket.app.data.ChatSocket
 import com.campusmarket.app.data.SessionManager
+import com.campusmarket.app.ui.TimeFormat
 import com.campusmarket.app.ui.Validate
 import com.campusmarket.app.ui.state.EventQueue
 import com.campusmarket.app.ui.state.Paginator
@@ -19,6 +20,7 @@ import com.campusmarket.core.Conversation
 import com.campusmarket.core.ErrorCodes
 import com.campusmarket.core.Limits
 import com.campusmarket.core.Message
+import kotlin.time.Clock
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -26,14 +28,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlin.time.Clock
 
 // ---------------------------------------------------------------------------------------------------- state
 
@@ -154,7 +154,7 @@ class ConversationViewModel(
         loadConversation()
         history.refresh()
         viewModelScope.launch { live.events.collect(::onEvent) }
-        viewModelScope.launch { fallbackSync() }
+        viewModelScope.launch { live.syncWhileDown(pollWhileConnecting = true, onReconnected = ::syncNewest, poll = ::syncNewest) }
         viewModelScope.launch {
             history.state.map { it.loaded }.distinctUntilChanged().collect { loaded -> if (loaded) mergeLiveMessages() }
         }
@@ -358,26 +358,6 @@ class ConversationViewModel(
         }
     }
 
-    private suspend fun fallbackSync() {
-        var wasDown = false
-        live.status.collectLatest { status ->
-            when (status) {
-                ChatSocket.Status.Connected -> if (wasDown) {
-                    wasDown = false
-                    syncNewest()
-                }
-                ChatSocket.Status.Connecting, ChatSocket.Status.Reconnecting -> {
-                    if (status == ChatSocket.Status.Reconnecting) wasDown = true
-                    while (true) {
-                        delay(CHAT_POLL_INTERVAL_MS)
-                        syncNewest()
-                    }
-                }
-                ChatSocket.Status.Idle -> Unit
-            }
-        }
-    }
-
     /** The other participant (null until the conversation has loaded). */
     val otherUser get() = _conversation.value.valueOrNull?.otherUser
 
@@ -412,7 +392,7 @@ internal fun buildChatRows(
     endReached: Boolean,
     state: ConversationUiState,
     myId: String,
-    sameDay: (Long, Long) -> Boolean = { a, b -> ChatFormat.sameDay(a, b) },
+    sameDay: (Long, Long) -> Boolean = TimeFormat()::sameDay,
 ): List<ChatRow> {
     val bubbles = ArrayList<ChatRow.Bubble>(history.size + state.pending.size)
     state.pending.asReversed().forEach { p ->

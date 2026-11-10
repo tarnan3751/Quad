@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.campusmarket.app.data.ApiClient
 import com.campusmarket.app.ui.state.Paginator
+import com.campusmarket.app.ui.state.ResumeGate
 import com.campusmarket.app.ui.state.UserMessages
 import com.campusmarket.core.ListingStatus
 import com.campusmarket.core.ListingSummary
@@ -88,11 +89,11 @@ class MyListingsViewModel(
         }
     }
 
-    private var resumedBefore = false
+    private val resumes = ResumeGate()
 
     /** Called on every resume: coming back refreshes, since an order may have reserved or sold a listing meanwhile. */
     fun onResume() {
-        if (resumedBefore) listings.refresh() else resumedBefore = true
+        if (resumes.isReturn()) listings.refresh()
     }
 
     fun setFilter(status: ListingStatus?) {

@@ -2,7 +2,6 @@ package com.campusmarket.app.feature.listing
 
 import com.campusmarket.app.data.ApiClient
 import com.campusmarket.app.data.ApiError
-import com.campusmarket.app.ui.Format
 import com.campusmarket.app.ui.state.UserMessages
 import com.campusmarket.core.ListingDetail
 import com.campusmarket.core.ListingSummary
@@ -99,16 +98,6 @@ fun ListingDetail.toSummary(): ListingSummary = ListingSummary(
     favorited = favorited,
     createdAt = createdAt,
 )
-
-/** "Listed just now", "Listed 3h ago", "Listed Mar 4". */
-fun listedLabel(createdAt: Long, nowMillis: Long = kotlin.time.Clock.System.now().toEpochMilliseconds()): String {
-    val relative = Format.relativeTime(createdAt, nowMillis)
-    return when {
-        relative == "just now" -> "Listed just now"
-        relative.first().isDigit() -> "Listed $relative ago"
-        else -> "Listed $relative"
-    }
-}
 
 /** Applies [change] to a loaded list in place: favorite flags and edits update matching rows, deletions remove them. */
 fun List<ListingSummary>.applyChange(change: ListingChange): List<ListingSummary> = when (change) {

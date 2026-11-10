@@ -1,4 +1,4 @@
-package com.campusmarket.app.feature.chat
+package com.campusmarket.app.ui
 
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
@@ -68,5 +68,22 @@ class TimeFormatTest {
         assertEquals("on Thu, Nov 12 at 9:24 AM", us.dateTimeInline(at(2026, 11, 12, 9, 24)))
         assertEquals("Nov 12", us.date(at(2026, 11, 12, 9, 24)))
         assertEquals("Jan 2, 2027", us.date(at(2027, 1, 2, 9, 24)))
+    }
+
+    @Test
+    fun agesReadLikeABuyerWouldSayThem() {
+        val min = 60_000L
+        assertEquals("just now", us.age(now - 20_000))
+        assertEquals("5m", us.age(now - 5 * min))
+        assertEquals("3h", us.age(now - 3 * 60 * min))
+        assertEquals("2d", us.age(now - 2 * 24 * 60 * min))
+        assertEquals("Oct 11", us.age(now - 30 * 24 * 60 * min))
+        assertEquals("just now", us.ago(now))
+        assertEquals("5m ago", us.ago(now - 5 * min))
+        assertEquals("2d ago", us.ago(now - 2 * 24 * 60 * min))
+        assertEquals("Oct 11", us.ago(now - 30 * 24 * 60 * min))
+        assertEquals("Joined Mar 2025", us.memberSince(at(2025, 3, 4, 20, 0)))
+        assertEquals(true, us.sameDay(at(2026, 11, 10, 0, 5), at(2026, 11, 10, 23, 55)))
+        assertEquals(false, us.sameDay(at(2026, 11, 9, 23, 55), at(2026, 11, 10, 0, 5)))
     }
 }

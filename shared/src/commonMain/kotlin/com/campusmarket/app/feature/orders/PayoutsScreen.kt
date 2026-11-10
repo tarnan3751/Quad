@@ -34,17 +34,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
-import com.campusmarket.app.feature.chat.rememberTimeFormat
 import com.campusmarket.app.ui.components.AppTopBar
 import com.campusmarket.app.ui.components.ChipTone
 import com.campusmarket.app.ui.components.InlineError
+import com.campusmarket.app.ui.components.OnResume
 import com.campusmarket.app.ui.components.PrimaryButton
 import com.campusmarket.app.ui.components.SecondaryButton
 import com.campusmarket.app.ui.components.StatusChip
 import com.campusmarket.app.ui.components.UiStateContent
+import com.campusmarket.app.ui.rememberTimeFormat
 import com.campusmarket.app.ui.theme.CampusTheme
 import com.campusmarket.app.ui.theme.Spacing
 import com.campusmarket.core.PayoutAccountStatus
@@ -60,10 +60,7 @@ fun PayoutsScreen(nav: NavController) {
     val account by vm.account.collectAsStateWithLifecycle()
     val starting by vm.starting.collectAsStateWithLifecycle()
     val error by vm.error.collectAsStateWithLifecycle()
-    LifecycleResumeEffect(vm) {
-        vm.onResume()
-        onPauseOrDispose { }
-    }
+    OnResume(vm, vm::onResume)
 
     Scaffold(topBar = { AppTopBar("Payouts", onBack = { nav.popBackStack() }) }) { padding ->
         UiStateContent(account, onRetry = vm::reload, modifier = Modifier.fillMaxSize().padding(padding)) { status ->

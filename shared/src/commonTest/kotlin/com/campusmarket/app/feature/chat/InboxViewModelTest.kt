@@ -1,6 +1,7 @@
 package com.campusmarket.app.feature.chat
 
 import com.campusmarket.app.data.ChatSocket
+import com.campusmarket.app.data.Harness
 import com.campusmarket.app.data.NOW
 import com.campusmarket.app.data.respondError
 import com.campusmarket.app.data.respondJson
@@ -44,9 +45,9 @@ class InboxViewModelTest {
     private val c9 = conversation("c9", "u9", NOW + 50, 1, "New buyer here")
     private var offline = false
 
-    private fun TestScope.setUp(status: ChatSocket.Status = ChatSocket.Status.Connected): Triple<InboxViewModel, VmHarness, FakeLiveChat> {
+    private fun TestScope.setUp(status: ChatSocket.Status = ChatSocket.Status.Connected): Triple<InboxViewModel, Harness, FakeLiveChat> {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
-        val h = VmHarness(this) { req ->
+        val h = Harness(scope = this) { req ->
             if (offline) throw kotlinx.io.IOException("offline")
             when (req.url.encodedPath) {
                 ApiRoutes.CONVERSATIONS -> respondJson(Page.serializer(Conversation.serializer()), Page(page, null))
@@ -55,7 +56,7 @@ class InboxViewModelTest {
             }
         }
         val live = FakeLiveChat(status)
-        return Triple(InboxViewModel(h.api, live, h.session, h.userMessages), h, live)
+        return Triple(InboxViewModel(h.api, live, h.session, h.messages), h, live)
     }
 
     private fun InboxViewModel.rows() = conversations.state.value.items.map { "${it.id}:${it.unreadCount}" }

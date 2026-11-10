@@ -41,7 +41,6 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.campusmarket.app.data.ApiError
 import com.campusmarket.app.data.isModerator
-import com.campusmarket.app.feature.profile.Glyphs
 import com.campusmarket.app.navigation.LocalCurrentUser
 import com.campusmarket.app.ui.components.AppTextField
 import com.campusmarket.app.ui.components.AppTopBar
@@ -49,6 +48,7 @@ import com.campusmarket.app.ui.components.ChipTone
 import com.campusmarket.app.ui.components.EmptyState
 import com.campusmarket.app.ui.components.FilterChip
 import com.campusmarket.app.ui.components.InlineError
+import com.campusmarket.app.ui.components.QuadIcons
 import com.campusmarket.app.ui.components.StatusChip
 import com.campusmarket.app.ui.label
 import com.campusmarket.app.ui.theme.Spacing
@@ -233,10 +233,10 @@ internal fun QuoteBlock(text: String?, emptyText: String, modifier: Modifier = M
 /** Glyph for what was reported. */
 internal val ReportTargetType.glyph: ImageVector
     get() = when (this) {
-        ReportTargetType.LISTING -> Glyphs.Tag
+        ReportTargetType.LISTING -> QuadIcons.Tag
         ReportTargetType.USER -> Icons.Default.Person
-        ReportTargetType.MESSAGE -> Glyphs.ChatBubble
-        ReportTargetType.ORDER -> Glyphs.Receipt
+        ReportTargetType.MESSAGE -> QuadIcons.ChatBubble
+        ReportTargetType.ORDER -> QuadIcons.Receipt
     }
 
 /** How severe an action is, for its chip colour in the log and on closed reports. */

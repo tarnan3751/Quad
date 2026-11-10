@@ -6,6 +6,7 @@ import com.campusmarket.app.data.ApiClient
 import com.campusmarket.app.ui.label
 import com.campusmarket.app.ui.state.EventQueue
 import com.campusmarket.app.ui.state.Paginator
+import com.campusmarket.app.ui.state.ResumeGate
 import com.campusmarket.app.ui.state.UiState
 import com.campusmarket.app.ui.state.UserMessages
 import com.campusmarket.app.ui.state.load
@@ -54,7 +55,7 @@ class ModerationQueueViewModel(private val api: ApiClient, messages: UserMessage
         reports.reset()
     }
 
-    private var resumedOnce = false
+    private val resumes = ResumeGate()
 
     init {
         reports.onRefreshError = messages::showError
@@ -62,10 +63,7 @@ class ModerationQueueViewModel(private val api: ApiClient, messages: UserMessage
 
     /** Screen resumed: the first time is the initial load; later (back from a report detail) refresh the list. */
     fun onResume() {
-        if (!resumedOnce) {
-            resumedOnce = true
-            return
-        }
+        if (!resumes.isReturn()) return
         reports.refresh()
     }
 

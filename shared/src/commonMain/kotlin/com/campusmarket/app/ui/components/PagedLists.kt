@@ -10,13 +10,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.GridItemSpan
-import androidx.compose.foundation.lazy.grid.LazyGridItemScope
-import androidx.compose.foundation.lazy.grid.LazyGridScope
-import androidx.compose.foundation.lazy.grid.LazyGridState
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.material3.CircularProgressIndicator
@@ -36,8 +29,6 @@ import com.campusmarket.app.ui.state.PagedState
 import com.campusmarket.app.ui.state.Paginator
 import com.campusmarket.app.ui.theme.Spacing
 import kotlinx.coroutines.flow.distinctUntilChanged
-
-private const val LOAD_MORE_THRESHOLD = 5
 
 /**
  * Infinite list for a [Paginator]: starts the first load if nobody has, full-screen [loading] (skeleton rows by
@@ -68,19 +59,7 @@ fun <T> PagedLazyColumn(
     val paged by paginator.state.collectAsStateWithLifecycle()
     AutoStart(paginator)
 
-    LaunchedEffect(state, paginator) {
-        snapshotFlow {
-            val info = state.layoutInfo
-            val last = info.visibleItemsInfo.lastOrNull()?.index ?: -1
-            info.totalItemsCount > 0 && last >= info.totalItemsCount - LOAD_MORE_THRESHOLD
-        }.distinctUntilChanged().collect { nearEnd -> if (nearEnd) paginator.loadMore() }
-    }
-    // A page that doesn't fill the screen leaves us "near the end" without a scroll; ask again when items change.
-    LaunchedEffect(paged.items.size, paged.endReached) {
-        val info = state.layoutInfo
-        val last = info.visibleItemsInfo.lastOrNull()?.index ?: -1
-        if (paged.loaded && !paged.endReached && last >= info.totalItemsCount - LOAD_MORE_THRESHOLD) paginator.loadMore()
-    }
+    LoadMoreNearEnd(paginator, paged, threshold = 5) { state.layoutInfo.let { it.visibleItemsInfo.lastOrNull()?.index to it.totalItemsCount } }
 
     FirstLoadGate(paged, paginator, modifier, loading) {
         RefreshContainer(pullToRefresh, paged.isRefreshing, paginator::refresh, modifier) {
@@ -105,65 +84,27 @@ fun <T> PagedLazyColumn(
     }
 }
 
-/** Grid version of [PagedLazyColumn] for listing tiles (adaptive columns, ~160 dp min); first load shows listing-card skeletons. */
+/** Starts the first load unless it has started already. */
 @Composable
-fun <T> PagedLazyGrid(
-    paginator: Paginator<T>,
-    key: ((T) -> Any)?,
-    modifier: Modifier = Modifier,
-    columns: GridCells = GridCells.Adaptive(minSize = 160.dp),
-    state: LazyGridState = rememberLazyGridState(),
-    contentPadding: PaddingValues = PaddingValues(Spacing.md),
-    empty: @Composable () -> Unit = { EmptyState("Nothing here yet") },
-    header: LazyGridScope.() -> Unit = {},
-    loading: @Composable () -> Unit = { ListingGridSkeleton(columns = columns, contentPadding = contentPadding) },
-    itemContent: @Composable LazyGridItemScope.(T) -> Unit,
-) {
-    val paged by paginator.state.collectAsStateWithLifecycle()
-    AutoStart(paginator)
-
-    LaunchedEffect(state, paginator) {
-        snapshotFlow {
-            val info = state.layoutInfo
-            val last = info.visibleItemsInfo.lastOrNull()?.index ?: -1
-            info.totalItemsCount > 0 && last >= info.totalItemsCount - LOAD_MORE_THRESHOLD
-        }.distinctUntilChanged().collect { nearEnd -> if (nearEnd) paginator.loadMore() }
-    }
-    LaunchedEffect(paged.items.size, paged.endReached) {
-        val info = state.layoutInfo
-        val last = info.visibleItemsInfo.lastOrNull()?.index ?: -1
-        if (paged.loaded && !paged.endReached && last >= info.totalItemsCount - LOAD_MORE_THRESHOLD) paginator.loadMore()
-    }
-
-    FirstLoadGate(paged, paginator, modifier, loading) {
-        RefreshContainer(true, paged.isRefreshing, paginator::refresh, modifier) {
-            LazyVerticalGrid(
-                columns = columns,
-                state = state,
-                contentPadding = contentPadding,
-                horizontalArrangement = Arrangement.spacedBy(Spacing.md),
-                verticalArrangement = Arrangement.spacedBy(Spacing.md),
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                header()
-                if (paged.isEmpty) {
-                    item(key = "__empty", span = { GridItemSpan(maxLineSpan) }) { Box(Modifier.fillMaxWidth().padding(top = 48.dp)) { empty() } }
-                } else {
-                    items(count = paged.items.size, key = key?.let { k -> { index: Int -> k(paged.items[index]) } }) { index ->
-                        itemContent(paged.items[index])
-                    }
-                }
-                item(key = "__footer", span = { GridItemSpan(maxLineSpan) }) { PagingFooter(paged, paginator::retry) }
-            }
-        }
-    }
-}
-
-@Composable
-private fun <T> AutoStart(paginator: Paginator<T>) {
+internal fun <T> AutoStart(paginator: Paginator<T>) {
     LaunchedEffect(paginator) {
         val s = paginator.state.value
         if (!s.loaded && !s.isLoading && s.error == null) paginator.refresh()
+    }
+}
+
+/**
+ * Loads the next page when the last visible item comes within [threshold] of the end, including when a page doesn't
+ * fill the screen (no scroll ever happens then). [layout] gives (last visible index, total items).
+ */
+@Composable
+internal fun <T> LoadMoreNearEnd(paginator: Paginator<T>, paged: PagedState<T>, threshold: Int, layout: () -> Pair<Int?, Int>) {
+    fun nearEnd(): Boolean = layout().let { (last, total) -> total > 0 && (last ?: -1) >= total - threshold }
+    LaunchedEffect(paginator) {
+        snapshotFlow { nearEnd() }.distinctUntilChanged().collect { if (it) paginator.loadMore() }
+    }
+    LaunchedEffect(paged.items.size, paged.endReached) {
+        if (paged.loaded && !paged.endReached && nearEnd()) paginator.loadMore()
     }
 }
 

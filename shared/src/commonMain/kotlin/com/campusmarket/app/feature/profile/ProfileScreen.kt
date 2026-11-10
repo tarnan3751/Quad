@@ -30,7 +30,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.campusmarket.app.BuildInfo
@@ -52,10 +51,12 @@ import com.campusmarket.app.ui.Format
 import com.campusmarket.app.ui.components.AppTopBar
 import com.campusmarket.app.ui.components.Avatar
 import com.campusmarket.app.ui.components.ChipTone
-import com.campusmarket.app.ui.components.ConfirmDialog
+import com.campusmarket.app.ui.components.OnResume
+import com.campusmarket.app.ui.components.QuadIcons
 import com.campusmarket.app.ui.components.SecondaryButton
 import com.campusmarket.app.ui.components.StatusChip
 import com.campusmarket.app.ui.label
+import com.campusmarket.app.ui.rememberTimeFormat
 import com.campusmarket.app.ui.state.UserMessages
 import com.campusmarket.app.ui.theme.Spacing
 import com.campusmarket.core.ApiRoutes
@@ -75,10 +76,7 @@ fun ProfileScreen(nav: NavController) {
     val vm = koinViewModel<ProfileViewModel>()
     val state by vm.state.collectAsStateWithLifecycle()
     val openPage = rememberPageOpener()
-    LifecycleResumeEffect(vm) {
-        vm.refresh()
-        onPauseOrDispose {}
-    }
+    OnResume(vm, vm::refresh)
     val scroll = rememberScrollState()
     OnTabReselected(TopLevelTab.Profile) { scroll.animateScrollTo(0) }
 
@@ -117,14 +115,14 @@ fun ProfileScreen(nav: NavController) {
                 )
 
                 MenuGroup("Buying & selling") {
-                    MenuRow(Glyphs.Tag, "My listings", "Edit, mark sold or delete", onClick = { nav.navigate(MyListingsRoute) })
+                    MenuRow(QuadIcons.Tag, "My listings", "Edit, mark sold or delete", onClick = { nav.navigate(MyListingsRoute) })
                     MenuDivider()
                     MenuRow(Icons.Default.Favorite, "Favorites", "Listings you've saved", onClick = { nav.navigate(FavoritesRoute) })
                     MenuDivider()
-                    MenuRow(Glyphs.Receipt, "Orders", "Purchases and sales", onClick = { nav.navigate(OrdersRoute()) })
+                    MenuRow(QuadIcons.Receipt, "Orders", "Purchases and sales", onClick = { nav.navigate(OrdersRoute()) })
                     MenuDivider()
                     MenuRow(
-                        Glyphs.Wallet,
+                        QuadIcons.Wallet,
                         "Payouts",
                         if (user.payoutsEnabled) "Sales are paid to your bank" else "Get paid for what you sell",
                         onClick = { nav.navigate(PayoutsRoute) },
@@ -139,14 +137,14 @@ fun ProfileScreen(nav: NavController) {
 
                 if (user.isModerator) {
                     MenuGroup("Moderation") {
-                        MenuRow(Glyphs.Flag, "Reports", "Review what students reported", onClick = { nav.navigate(ModerationQueueRoute) })
+                        MenuRow(QuadIcons.Flag, "Reports", "Review what students reported", onClick = { nav.navigate(ModerationQueueRoute) })
                         MenuDivider()
-                        MenuRow(Glyphs.Gavel, "Disputes", "Decide held payments", onClick = { nav.navigate(DisputesRoute) })
+                        MenuRow(QuadIcons.Gavel, "Disputes", "Decide held payments", onClick = { nav.navigate(DisputesRoute) })
                         MenuDivider()
-                        MenuRow(Glyphs.History, "Moderation log", "Every action staff have taken", onClick = { nav.navigate(ModerationLogRoute) })
+                        MenuRow(QuadIcons.History, "Moderation log", "Every action staff have taken", onClick = { nav.navigate(ModerationLogRoute) })
                         if (user.role == UserRole.ADMIN) {
                             MenuDivider()
-                            MenuRow(Glyphs.Group, "Staff", "Add or remove moderators", onClick = { nav.navigate(StaffRoute) })
+                            MenuRow(QuadIcons.Group, "Staff", "Add or remove moderators", onClick = { nav.navigate(StaffRoute) })
                         }
                     }
                 }
@@ -158,13 +156,13 @@ fun ProfileScreen(nav: NavController) {
                 }
 
                 MenuGroup("Safety") {
-                    MenuRow(Glyphs.Block, "Blocked users", "People who can't contact you", onClick = { nav.navigate(BlockedUsersRoute) })
+                    MenuRow(QuadIcons.Block, "Blocked users", "People who can't contact you", onClick = { nav.navigate(BlockedUsersRoute) })
                     MenuDivider()
-                    MenuRow(Glyphs.Shield, "Community guidelines", "What's allowed on Quad", onClick = { openPage(ApiRoutes.LEGAL_GUIDELINES) }, trailing = { ExternalMark() })
+                    MenuRow(QuadIcons.Shield, "Community guidelines", "What's allowed on Quad", onClick = { openPage(ApiRoutes.LEGAL_GUIDELINES) }, trailing = { ExternalMark() })
                 }
 
                 MenuGroup("Legal") {
-                    MenuRow(Glyphs.Document, "Terms of service", onClick = { openPage(ApiRoutes.LEGAL_TERMS) }, trailing = { ExternalMark() })
+                    MenuRow(QuadIcons.Document, "Terms of service", onClick = { openPage(ApiRoutes.LEGAL_TERMS) }, trailing = { ExternalMark() })
                     MenuDivider()
                     MenuRow(Icons.Default.Lock, "Privacy policy", onClick = { openPage(ApiRoutes.LEGAL_PRIVACY) }, trailing = { ExternalMark() })
                 }
@@ -179,13 +177,7 @@ fun ProfileScreen(nav: NavController) {
     }
 
     if (state.confirmSignOut) {
-        ConfirmDialog(
-            title = "Sign out?",
-            message = "You'll need your campus email and password to sign in to Quad on this device again.",
-            confirmLabel = "Sign out",
-            onConfirm = vm::signOut,
-            onDismiss = vm::cancelSignOut,
-        )
+        SignOutDialog(onConfirm = vm::signOut, onDismiss = vm::cancelSignOut)
     }
 }
 
@@ -220,7 +212,7 @@ private fun OwnProfileHeader(user: UserPrivate, onEdit: () -> Unit, onPreview: (
             horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
         ) {
             SecondaryButton("Edit profile", onClick = onEdit, icon = Icons.Default.Edit, modifier = Modifier.weight(1f))
-            SecondaryButton("Public view", onClick = onPreview, icon = Glyphs.Visibility, modifier = Modifier.weight(1f))
+            SecondaryButton("Public view", onClick = onPreview, icon = QuadIcons.Visibility, modifier = Modifier.weight(1f))
         }
     }
 }
@@ -229,9 +221,9 @@ private fun OwnProfileHeader(user: UserPrivate, onEdit: () -> Unit, onPreview: (
 @Composable
 internal fun CampusLine(campusDomain: String, joinedAt: Long) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
-        Icon(Glyphs.School, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
+        Icon(QuadIcons.School, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
         Text(
-            "$campusDomain · ${Format.memberSince(joinedAt)}",
+            "$campusDomain · ${rememberTimeFormat().memberSince(joinedAt)}",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -242,7 +234,7 @@ internal fun CampusLine(campusDomain: String, joinedAt: Long) {
 @Composable
 internal fun StaffBadge(role: UserRole) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
-        Icon(Glyphs.Verified, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+        Icon(QuadIcons.Verified, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
         Text("Quad ${role.label.lowercase()}", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
     }
 }

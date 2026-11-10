@@ -36,7 +36,7 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
-import com.campusmarket.app.feature.chat.TimeFormat
+import com.campusmarket.app.ui.TimeFormat
 import com.campusmarket.app.ui.Format
 import com.campusmarket.app.ui.components.AppTextField
 import com.campusmarket.app.ui.components.AppTopBar

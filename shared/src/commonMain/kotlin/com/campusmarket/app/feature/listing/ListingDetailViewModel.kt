@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.campusmarket.app.data.ApiClient
 import com.campusmarket.app.data.ApiError
 import com.campusmarket.app.ui.state.EventQueue
+import com.campusmarket.app.ui.state.ResumeGate
 import com.campusmarket.app.ui.state.UiState
 import com.campusmarket.app.ui.state.UserMessages
 import com.campusmarket.app.ui.state.load
@@ -56,7 +57,7 @@ class ListingDetailViewModel(
 
     val events = EventQueue<ListingDetailEvent>()
 
-    private var resumedBefore = false
+    private val resumes = ResumeGate()
 
     init {
         reload()
@@ -86,7 +87,7 @@ class ListingDetailViewModel(
 
     /** Called on every resume; refreshes on returning (e.g. from checkout or chat), not on the first show. */
     fun onResume() {
-        if (resumedBefore) refresh() else resumedBefore = true
+        if (resumes.isReturn()) refresh()
     }
 
     fun toggleFavorite() {

@@ -8,6 +8,7 @@ import com.campusmarket.app.platform.ExternalLinks
 import com.campusmarket.app.ui.fieldErrorsOf
 import com.campusmarket.app.ui.state.EventQueue
 import com.campusmarket.app.ui.state.Paginator
+import com.campusmarket.app.ui.state.ResumeGate
 import com.campusmarket.app.ui.state.UiState
 import com.campusmarket.app.ui.state.UserMessages
 import com.campusmarket.app.ui.state.load
@@ -20,6 +21,9 @@ import com.campusmarket.core.Limits
 import com.campusmarket.core.Order
 import com.campusmarket.core.OrderRole
 import com.campusmarket.core.OrderStatus
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeMark
+import kotlin.time.TimeSource
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -28,9 +32,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlin.time.Duration.Companion.seconds
-import kotlin.time.TimeMark
-import kotlin.time.TimeSource
 
 // ---------------------------------------------------------------------------------------------------- list
 
@@ -48,7 +49,7 @@ class OrdersViewModel(
     private val _tab = MutableStateFlow(if (route.role.equals("seller", ignoreCase = true)) OrderRole.SELLER else OrderRole.BUYER)
     val tab: StateFlow<OrderRole> = _tab.asStateFlow()
 
-    private var resumedOnce = false
+    private val resumes = ResumeGate()
 
     init {
         buying.onRefreshError = userMessages::showError
@@ -64,10 +65,7 @@ class OrdersViewModel(
 
     /** Payment happens in the browser: when we come back, refresh a list that shows unpaid orders. */
     fun onResume() {
-        if (!resumedOnce) {
-            resumedOnce = true
-            return
-        }
+        if (!resumes.isReturn()) return
         listOf(buying, selling).forEach { p ->
             val s = p.state.value
             if (s.loaded && s.items.any { it.status == OrderStatus.PENDING_PAYMENT }) p.refresh()
@@ -237,7 +235,6 @@ class OrderDetailViewModel(
         }
     }
 
-    fun clearError() = _ui.update { it.copy(error = null) }
 
     fun onAction(action: OrderAction) {
         val o = _order.value.valueOrNull ?: return

@@ -1,4 +1,4 @@
-package com.campusmarket.app.feature.listing
+package com.campusmarket.app.ui.components
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -27,7 +27,7 @@ private fun lineIcon(name: String, vararg paths: String): ImageVector =
         }
     }.build()
 
-internal object ListingIcons {
+object ListingIcons {
     val Book by lazy {
         lineIcon(
             "Book",
@@ -138,7 +138,7 @@ internal object ListingIcons {
 }
 
 /** The category's line icon (chips, pickers, facts). */
-internal val ListingCategory.icon: ImageVector
+val ListingCategory.icon: ImageVector
     get() = when (this) {
         ListingCategory.TEXTBOOKS -> ListingIcons.Book
         ListingCategory.ELECTRONICS -> ListingIcons.Laptop

@@ -10,6 +10,7 @@ import com.campusmarket.app.ui.Validate
 import com.campusmarket.app.ui.fieldErrorsOf
 import com.campusmarket.app.ui.state.EventQueue
 import com.campusmarket.app.ui.state.Paginator
+import com.campusmarket.app.ui.state.ResumeGate
 import com.campusmarket.app.ui.state.UiState
 import com.campusmarket.app.ui.state.UserMessages
 import com.campusmarket.app.ui.state.load
@@ -304,14 +305,11 @@ class BlockedUsersViewModel(private val api: ApiClient, private val messages: Us
         load(_state) { api.myBlocks() }
     }
 
-    private var resumedOnce = false
+    private val resumes = ResumeGate()
 
     /** Back from a profile where the user may have been unblocked (or blocked): refresh quietly. */
     fun onResume() {
-        if (!resumedOnce) {
-            resumedOnce = true
-            return
-        }
+        if (!resumes.isReturn()) return
         load(_state, keepContent = true) { api.myBlocks() }
     }
 

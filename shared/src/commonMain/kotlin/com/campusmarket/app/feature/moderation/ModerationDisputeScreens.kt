@@ -34,15 +34,11 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
-import com.campusmarket.app.feature.chat.rememberTimeFormat
 import com.campusmarket.app.feature.listing.ListingDetailRoute
-import com.campusmarket.app.feature.profile.Glyphs
 import com.campusmarket.app.feature.profile.ListingLine
 import com.campusmarket.app.feature.profile.UserProfileRoute
-import com.campusmarket.app.feature.profile.ago
 import com.campusmarket.app.navigation.LocalCurrentUser
 import com.campusmarket.app.ui.Format
 import com.campusmarket.app.ui.components.AppTab
@@ -52,14 +48,17 @@ import com.campusmarket.app.ui.components.ChipTone
 import com.campusmarket.app.ui.components.CollectEvents
 import com.campusmarket.app.ui.components.EmptyState
 import com.campusmarket.app.ui.components.ErrorState
+import com.campusmarket.app.ui.components.OnResume
 import com.campusmarket.app.ui.components.OrderStatusChip
 import com.campusmarket.app.ui.components.PagedLazyColumn
 import com.campusmarket.app.ui.components.PriceText
+import com.campusmarket.app.ui.components.QuadIcons
 import com.campusmarket.app.ui.components.RatingSummary
 import com.campusmarket.app.ui.components.RemoteImage
 import com.campusmarket.app.ui.components.SecondaryButton
 import com.campusmarket.app.ui.components.StatusChip
 import com.campusmarket.app.ui.label
+import com.campusmarket.app.ui.rememberTimeFormat
 import com.campusmarket.app.ui.state.UiState
 import com.campusmarket.app.ui.theme.CampusTheme
 import com.campusmarket.app.ui.theme.Spacing
@@ -79,10 +78,7 @@ fun DisputesScreen(nav: NavController) {
     ModeratorGate("Disputes", nav) {
         val vm = koinViewModel<DisputesViewModel>()
         val status by vm.status.collectAsStateWithLifecycle()
-        LifecycleResumeEffect(vm) {
-            vm.onResume()
-            onPauseOrDispose {}
-        }
+        OnResume(vm, vm::onResume)
         Scaffold(
             topBar = { AppTopBar("Disputes", onBack = { nav.popBackStack() }, actions = { ModerationToolLinks(nav, current = DisputesRoute) }) },
         ) { padding ->
@@ -102,7 +98,7 @@ fun DisputesScreen(nav: NavController) {
                                 message = "Problems buyers report with paid orders, and orders held because a seller was suspended, show up here.",
                                 icon = Icons.Default.CheckCircle,
                             )
-                            DisputeStatus.CLOSED -> EmptyState("No closed disputes yet", icon = Glyphs.History)
+                            DisputeStatus.CLOSED -> EmptyState("No closed disputes yet", icon = QuadIcons.History)
                         }
                     },
                 ) { case ->
@@ -138,10 +134,10 @@ private fun DisputeRow(case: DisputeCase, onClick: () -> Unit) {
             )
             Row(Modifier.padding(top = Spacing.xs), horizontalArrangement = Arrangement.spacedBy(Spacing.xs), verticalAlignment = Alignment.CenterVertically) {
                 if (d.status == DisputeStatus.OPEN) {
-                    Text("Opened ${ago(d.openedAt)}", style = MaterialTheme.typography.labelMedium, color = scheme.onSurfaceVariant)
+                    Text("Opened ${rememberTimeFormat().ago(d.openedAt)}", style = MaterialTheme.typography.labelMedium, color = scheme.onSurfaceVariant)
                 } else {
                     StatusChip(d.outcome?.label ?: d.status.label, ChipTone.Neutral)
-                    d.closedAt?.let { Text(ago(it), style = MaterialTheme.typography.labelMedium, color = scheme.onSurfaceVariant) }
+                    d.closedAt?.let { Text(rememberTimeFormat().ago(it), style = MaterialTheme.typography.labelMedium, color = scheme.onSurfaceVariant) }
                 }
                 if (case.sellerSuspended) StatusChip("Seller suspended", ChipTone.Negative)
                 if (case.buyerSuspended) StatusChip("Buyer suspended", ChipTone.Negative)
@@ -246,8 +242,8 @@ private fun DisputeBody(case: DisputeCase, nav: NavController, canResolve: Boole
                 }
             }
             Text(
-                if (d.openedBySystem) "Held automatically ${ago(d.openedAt)} because the seller's account was suspended."
-                else "${case.buyer.displayName} reported a problem ${ago(d.openedAt)}.",
+                if (d.openedBySystem) "Held automatically ${rememberTimeFormat().ago(d.openedAt)} because the seller's account was suspended."
+                else "${case.buyer.displayName} reported a problem ${rememberTimeFormat().ago(d.openedAt)}.",
                 style = MaterialTheme.typography.bodySmall,
                 color = scheme.onSurfaceVariant,
             )

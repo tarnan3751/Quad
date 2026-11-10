@@ -1,6 +1,7 @@
 package com.campusmarket.app.feature.chat
 
 import com.campusmarket.app.data.ChatSocket
+import com.campusmarket.app.data.Harness
 import com.campusmarket.app.data.NOW
 import com.campusmarket.app.data.respondError
 import com.campusmarket.app.data.respondJson
@@ -15,8 +16,8 @@ import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -40,13 +41,13 @@ class UnreadConversationsTest {
 
     private var page = listOf(conversation("c1", NOW - 1_000, 2), conversation("c2", NOW - 5_000, 0), conversation("c3", NOW - 9_000, 1))
 
-    private class Setup(val unread: UnreadConversations, val h: VmHarness, val live: FakeLiveChat, private val job: Job) {
+    private class Setup(val unread: UnreadConversations, val h: Harness, val live: FakeLiveChat, private val job: Job) {
         fun close() = job.cancel()
     }
 
     private fun TestScope.setUp(status: ChatSocket.Status = ChatSocket.Status.Connected): Setup {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
-        val h = VmHarness(this) { req ->
+        val h = Harness(scope = this) { req ->
             when (req.url.encodedPath) {
                 ApiRoutes.CONVERSATIONS -> respondJson(Page.serializer(Conversation.serializer()), Page(page, null))
                 else -> respondError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
@@ -180,7 +181,7 @@ class UnreadConversationsTest {
     @Test
     fun inboxViewModelFeedsTheTotalAndClearsARowWhenOpened() = runTest {
         val s = setUp()
-        val vm = InboxViewModel(s.h.api, s.live, s.h.session, s.h.userMessages, s.unread)
+        val vm = InboxViewModel(s.h.api, s.live, s.h.session, s.h.messages, s.unread)
         advanceUntilIdle()
         s.live.emit(ChatEvent.MessageCreated(Message("m1", "c2", "u-c2", "new", NOW + 10)))
         runCurrent()
