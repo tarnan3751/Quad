@@ -77,6 +77,10 @@ import kotlinx.coroutines.launch
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
 import com.campusmarket.app.navigation.keepSnackbarsAbove
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.isImeVisible
 
 private const val LOAD_OLDER_THRESHOLD = 5
 
@@ -84,6 +88,7 @@ private const val LOAD_OLDER_THRESHOLD = 5
  * One conversation: header (other person → profile, listing → detail), history paged backwards (newest at the
  * bottom), live messages, optimistic sending with retry, read receipts, report / block.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ConversationScreen(route: ConversationRoute, nav: NavController) {
     val vm = koinViewModel<ConversationViewModel>(key = "conversation:${route.conversationId}") { parametersOf(route) }
@@ -119,24 +124,30 @@ fun ConversationScreen(route: ConversationRoute, nav: NavController) {
                 Box(Modifier.weight(1f)) { BubbleSkeletons(Modifier.align(Alignment.BottomCenter)) }
             }
             is UiState.Error -> ErrorState(s.error, body, onRetry = vm::loadConversation)
-            is UiState.Content -> Column(body) {
-                val c = s.value
-                val state by vm.state.collectAsStateWithLifecycle()
-                val mine = c.listing.sellerId == vm.myId
-                ListingStrip(
-                    c.listing,
-                    mine = mine,
-                    showBuy = !mine && c.listing.status == ListingStatus.ACTIVE && state.restriction == null,
-                    onOpen = { nav.navigate(ListingDetailRoute(c.listing.id)) },
-                    onBuy = { nav.navigate(CheckoutRoute(c.listing.id)) },
-                )
-                val connection by vm.connection.collectAsStateWithLifecycle()
-                ConnectionBanner(connection, onRetry = vm::retryConnection)
-                Box(Modifier.weight(1f)) {
-                    MessageList(vm, c, onReportMessage = { reportMessageId = it })
-                }
-                Box(Modifier.keepSnackbarsAbove()) {
-                    ComposerArea(vm, c, isBuyer = !mine, onUnblock = { blockDialog = true })
+            is UiState.Content -> BoxWithConstraints(body) {
+                // Typing in landscape leaves only a strip above the keyboard: give it to the messages and the composer.
+                val roomForStrip = !WindowInsets.isImeVisible || maxHeight >= CompactChatHeight
+                Column(Modifier.fillMaxSize()) {
+                    val c = s.value
+                    val state by vm.state.collectAsStateWithLifecycle()
+                    val mine = c.listing.sellerId == vm.myId
+                    if (roomForStrip) {
+                        ListingStrip(
+                            c.listing,
+                            mine = mine,
+                            showBuy = !mine && c.listing.status == ListingStatus.ACTIVE && state.restriction == null,
+                            onOpen = { nav.navigate(ListingDetailRoute(c.listing.id)) },
+                            onBuy = { nav.navigate(CheckoutRoute(c.listing.id)) },
+                        )
+                    }
+                    val connection by vm.connection.collectAsStateWithLifecycle()
+                    ConnectionBanner(connection, onRetry = vm::retryConnection)
+                    Box(Modifier.weight(1f)) {
+                        MessageList(vm, c, onReportMessage = { reportMessageId = it })
+                    }
+                    Box(Modifier.keepSnackbarsAbove()) {
+                        ComposerArea(vm, c, isBuyer = !mine, onUnblock = { blockDialog = true })
+                    }
                 }
             }
         }
@@ -386,3 +397,6 @@ fun MessageSellerScreen(route: MessageSellerRoute, nav: NavController) {
         }
     }
 }
+
+/** Below this height (above the keyboard) the listing strip makes way for the messages and the composer. */
+private val CompactChatHeight = 320.dp
