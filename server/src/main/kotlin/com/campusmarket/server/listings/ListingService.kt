@@ -85,7 +85,7 @@ internal fun Connection.findListing(id: UUID, forUpdate: Boolean = false): Listi
 
 internal fun Connection.renderDetail(config: AppConfig, row: ListingRow, viewerId: UUID): ListingDetail {
     val photos = query(
-        """SELECT p.id, p.storage_key, p.width, p.height
+        """SELECT p.id, p.storage_key, p.width, p.height, p.thumb_key, p.display_key
            FROM listing_photos lp JOIN photos p ON p.id = lp.photo_id
            WHERE lp.listing_id = ? ORDER BY lp.position""",
         row.id,
@@ -95,6 +95,8 @@ internal fun Connection.renderDetail(config: AppConfig, row: ListingRow, viewerI
             url = config.photoUrl(rs.getString("storage_key")),
             width = rs.intOrNull("width"),
             height = rs.intOrNull("height"),
+            thumbnailUrl = rs.getString("thumb_key")?.let(config::photoUrl),
+            displayUrl = rs.getString("display_key")?.let(config::photoUrl),
         )
     }
     val seller = loadUserPublic(config, row.sellerId, viewerId) ?: error("Seller ${row.sellerId} of listing ${row.id} is missing")

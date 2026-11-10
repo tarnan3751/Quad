@@ -142,6 +142,25 @@ internal object JpegSanitizer {
         }
     }
 
+    /** The EXIF orientation (1..8) of a JPEG, from its header segments only (1 when it has none). */
+    fun orientation(input: InputStream): Int {
+        val src = ByteSource(input)
+        if (src.read() != 0xFF || src.read() != 0xD8) throw MalformedImageException("Not a JPEG")
+        try {
+            repeat(MAX_SEGMENTS) {
+                val marker = nextMarker(src)
+                if (marker == 0xD9 || marker == 0xDA) return 1
+                if (marker != 0xD8 && marker != 0x01 && marker !in 0xD0..0xD7) {
+                    val payload = src.readSegmentPayload()
+                    if (marker == 0xE1) exifOrientation(payload)?.let { return it }
+                }
+            }
+        } catch (e: EOFException) {
+            throw MalformedImageException("Truncated JPEG header")
+        }
+        return 1
+    }
+
     private fun result(frame: ImageSize?, orientation: Int): Result {
         val display = if (frame != null && orientation in 5..8) ImageSize(frame.height, frame.width) else frame
         return Result(display, orientation)

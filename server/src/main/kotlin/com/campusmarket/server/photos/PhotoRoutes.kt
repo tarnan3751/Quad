@@ -9,33 +9,32 @@ import com.campusmarket.server.ApiException
 import com.campusmarket.server.AppDeps
 import com.campusmarket.server.badRequest
 import com.campusmarket.server.invalidField
-import com.campusmarket.server.notFound
 import com.campusmarket.server.photoUrl
 import com.campusmarket.server.queryOne
 import com.campusmarket.server.update
 import com.campusmarket.server.userId
 import io.ktor.http.ContentType
-import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.content.MultiPartData
-import io.ktor.http.content.OutgoingContent
 import io.ktor.http.content.PartData
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.auth.authenticate
 import io.ktor.server.request.contentLength
 import io.ktor.server.request.contentType
-import io.ktor.server.request.header
 import io.ktor.server.request.receiveMultipart
-import io.ktor.server.response.header
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
+import io.ktor.server.routing.application
 import io.ktor.server.routing.get
+import io.ktor.server.routing.head
 import io.ktor.server.routing.post
 import io.ktor.utils.io.ByteReadChannel
 import io.ktor.utils.io.readAvailable
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
 import java.nio.file.Files
@@ -49,7 +48,20 @@ fun Route.photoRoutes(deps: AppDeps) = photoRoutes(deps, LocalPhotoStorage(Paths
 
 /** Same as [photoRoutes] with an explicit storage backend. */
 fun Route.photoRoutes(deps: AppDeps, storage: PhotoStorage) {
-    val uploads = PhotoUploads(deps, storage)
+    val settings = application.attributes.getOrNull(PhotoSettingsKey) ?: PhotoSettings.fromEnv()
+    val variants = PhotoVariants(storage)
+    val uploads = PhotoUploads(deps, storage, variants)
+    if (settings.backfillVariants) {
+        application.launch(Dispatchers.IO + CoroutineName("photo-variants")) {
+            try {
+                VariantBackfill(deps.db, variants).run()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                LoggerFactory.getLogger(VariantBackfill::class.java).error("Photo variant backfill failed; it runs again at the next start", e)
+            }
+        }
+    }
 
     authenticate(AUTH_JWT) {
         post(ApiRoutes.PHOTOS) {
@@ -58,32 +70,15 @@ fun Route.photoRoutes(deps: AppDeps, storage: PhotoStorage) {
     }
 
     // Public: photo URLs are embedded in listings and profiles and fetched by image loaders without auth.
-    get("${ApiRoutes.UPLOADS}/{key}") {
-        val photo = storage.open(call.parameters["key"].orEmpty()) ?: notFound("Photo")
-        // keys are random and never reused, so the bytes behind a URL never change
-        val etag = "\"${call.parameters["key"]}\""
-        call.response.header(HttpHeaders.CacheControl, "public, max-age=31536000, immutable")
-        call.response.header(HttpHeaders.ETag, etag)
-        call.response.header("X-Content-Type-Options", "nosniff")
-        val ifNoneMatch = call.request.header(HttpHeaders.IfNoneMatch)
-        if (ifNoneMatch != null && ifNoneMatch.split(',').map { it.trim().removePrefix("W/") }.any { it == etag || it == "*" }) {
-            call.respond(HttpStatusCode.NotModified)
-        } else {
-            call.respond(StoredPhotoContent(photo))
-        }
-    }
-}
-
-private class StoredPhotoContent(private val photo: StoredPhoto) : OutgoingContent.ReadChannelContent() {
-    override val contentType: ContentType = ContentType.parse(photo.format.contentType)
-    override val contentLength: Long = photo.size
-    override fun readFrom(): ByteReadChannel = photo.readChannel()
+    get("${ApiRoutes.UPLOADS}/{key}") { call.respondPhoto(storage, head = false) }
+    head("${ApiRoutes.UPLOADS}/{key}") { call.respondPhoto(storage, head = true) }
 }
 
 /** POST /photos: streams the `file` part to disk under the size cap, sniffs, strips metadata, stores, records. */
 internal class PhotoUploads(
     private val deps: AppDeps,
     private val storage: PhotoStorage,
+    private val variants: PhotoVariants,
     private val maxUploadsPerHour: Int = MAX_UPLOADS_PER_HOUR,
 ) {
     companion object {
@@ -150,20 +145,41 @@ internal class PhotoUploads(
             storage.save(key, finalPath)
             leftovers.remove(finalPath)
 
+            // A variant failure never fails the upload: undecodable is final; anything else is left to the backfill.
+            val (variantKeys, variantsDone) = try {
+                variants.make(key) to true
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                log.warn("Couldn't make the variants of {}", key, e)
+                VariantKeys.NONE to false
+            }
             val id = UUID.randomUUID()
             try {
                 deps.db.tx { c ->
                     c.update(
-                        """INSERT INTO photos (id, owner_id, storage_key, content_type, size_bytes, width, height)
-                           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                        """INSERT INTO photos (id, owner_id, storage_key, content_type, size_bytes, width, height,
+                                              thumb_key, display_key, variants_done)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         id, ownerId, key, spooled.format.contentType, bytes, size?.width, size?.height,
+                        variantKeys.thumb, variantKeys.display, variantsDone,
                     )
                 }
             } catch (e: Throwable) {
-                withContext(NonCancellable) { runCatching { storage.delete(key) } }
+                withContext(NonCancellable) {
+                    (listOf(key) + listOfNotNull(variantKeys.thumb, variantKeys.display)).distinct().forEach { runCatching { storage.delete(it) } }
+                }
                 throw e
             }
-            return Photo(id = id.toString(), url = deps.config.photoUrl(key), width = size?.width, height = size?.height)
+            val config = deps.config
+            return Photo(
+                id = id.toString(),
+                url = config.photoUrl(key),
+                width = size?.width,
+                height = size?.height,
+                thumbnailUrl = variantKeys.thumb?.let(config::photoUrl),
+                displayUrl = variantKeys.display?.let(config::photoUrl),
+            )
         } finally {
             deleteQuietly(leftovers)
         }
