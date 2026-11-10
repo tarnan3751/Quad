@@ -24,7 +24,7 @@ dependencies {
     implementation(libs.ktor.server.websockets)
     implementation(libs.ktor.server.status.pages)
     implementation(libs.ktor.server.call.logging)
-    implementation(libs.ktor.server.cors)
+    implementation(libs.ktor.server.compression)
     implementation(libs.ktor.server.rate.limit)
     implementation(libs.logback)
     implementation(libs.postgres)
@@ -38,6 +38,12 @@ dependencies {
     testImplementation(libs.ktor.client.content.negotiation)
     testImplementation(libs.ktor.client.websockets)
     testImplementation(libs.kotlinx.coroutines.test)
+}
+
+// The demo seed's photos are dev-only: `:server:seed`, `:server:run` and the tests read them from the resources
+// directory, but the jar that the distribution and the Docker image ship leaves them out.
+tasks.jar {
+    exclude("seed/photos/**")
 }
 
 tasks.test {

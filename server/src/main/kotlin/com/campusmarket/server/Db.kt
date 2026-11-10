@@ -35,6 +35,15 @@ class Db(val dataSource: DataSource) : AutoCloseable {
         }
     }
 
+    /**
+     * Runs a single read statement in autocommit mode: no transaction, so no COMMIT round trip. Only for one statement
+     * (several would each see a different snapshot).
+     */
+    fun <T> readBlocking(block: (Connection) -> T): T = dataSource.connection.use { c ->
+        c.autoCommit = true
+        block(c)
+    }
+
     override fun close() {
         (dataSource as? AutoCloseable)?.close()
     }
@@ -49,6 +58,8 @@ class Db(val dataSource: DataSource) : AutoCloseable {
                 this.password = password
                 maximumPoolSize = poolSize
                 isAutoCommit = false
+                // a request waits at most 5 s for a free connection (Hikari's default is 30 s; clients give up sooner)
+                connectionTimeout = 5_000
             }
             return Db(HikariDataSource(cfg))
         }

@@ -2,12 +2,11 @@ package com.campusmarket.server.legal
 
 import com.campusmarket.core.ApiRoutes
 import com.campusmarket.server.AppDeps
+import com.campusmarket.server.respondCacheable
+import com.campusmarket.server.weakETag
 import io.ktor.http.ContentType
-import io.ktor.http.HttpHeaders
-import io.ktor.http.withCharset
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.response.header
-import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import java.security.MessageDigest
@@ -21,16 +20,16 @@ fun Route.legalRoutes(deps: AppDeps) {
     val pages = LegalPages(deps.config.legalEntityName, deps.config.supportEmail)
     for (page in LegalPage.entries) {
         val html = pages.render(page)
-        get(page.path) { call.respondLegal(html) }
+        val etag = weakETag(html)
+        get(page.path) { call.respondLegal(html, etag) }
     }
 }
 
-private suspend fun ApplicationCall.respondLegal(html: String) {
+private suspend fun ApplicationCall.respondLegal(html: String, etag: String) {
     response.header("Content-Security-Policy", LEGAL_CSP)
-    response.header(HttpHeaders.CacheControl, "public, max-age=300")
     response.header("X-Content-Type-Options", "nosniff")
     response.header("Referrer-Policy", "no-referrer")
-    respondText(html, ContentType.Text.Html.withCharset(Charsets.UTF_8))
+    respondCacheable(html, ContentType.Text.Html, "public, max-age=300", etag)
 }
 
 internal enum class LegalPage(val path: String, val title: String) {

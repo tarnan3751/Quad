@@ -9,6 +9,8 @@ data class AppConfig(
     val dbUrl: String = "jdbc:postgresql://127.0.0.1:5434/campus_market",
     val dbUser: String = "campus",
     val dbPassword: String = "campus",
+    /** JDBC connections (`DATABASE_POOL_SIZE`); a request holds one only while it runs SQL. */
+    val dbPoolSize: Int = 10,
     /** Origin clients use to reach this server; used to build absolute photo / redirect URLs. */
     val publicBaseUrl: String = "http://localhost:8080",
     val jwtSecret: String = DEV_JWT_SECRET,
@@ -74,6 +76,7 @@ data class AppConfig(
                 dbUrl = s("DATABASE_URL") ?: d.dbUrl,
                 dbUser = s("DATABASE_USER") ?: d.dbUser,
                 dbPassword = s("DATABASE_PASSWORD") ?: d.dbPassword,
+                dbPoolSize = s("DATABASE_POOL_SIZE")?.toInt() ?: d.dbPoolSize,
                 publicBaseUrl = (s("PUBLIC_BASE_URL") ?: d.publicBaseUrl).trimEnd('/'),
                 jwtSecret = s("JWT_SECRET") ?: d.jwtSecret,
                 jwtIssuer = s("JWT_ISSUER") ?: d.jwtIssuer,

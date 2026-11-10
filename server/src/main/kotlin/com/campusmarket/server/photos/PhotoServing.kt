@@ -1,5 +1,6 @@
 package com.campusmarket.server.photos
 
+import com.campusmarket.server.matchesIfNoneMatch
 import com.campusmarket.server.notFound
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
@@ -32,9 +33,8 @@ internal suspend fun ApplicationCall.respondPhoto(storage: PhotoStorage, head: B
     response.header("X-Content-Type-Options", "nosniff")
 
     // If-None-Match wins over If-Modified-Since (RFC 9110 13.1.3)
-    val ifNoneMatch = request.header(HttpHeaders.IfNoneMatch)
-    val notModified = if (ifNoneMatch != null) {
-        ifNoneMatch.split(',').map { it.trim().removePrefix("W/") }.any { it == etag || it == "*" }
+    val notModified = if (request.header(HttpHeaders.IfNoneMatch) != null) {
+        matchesIfNoneMatch(etag)
     } else {
         request.header(HttpHeaders.IfModifiedSince)?.let(::parseHttpDate)?.let { !lastModified.isAfter(it) } ?: false
     }

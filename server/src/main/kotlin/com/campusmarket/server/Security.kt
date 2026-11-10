@@ -59,7 +59,7 @@ sealed interface AccessDenial {
  * Loads the principal for [userId], enforcing that the account exists, is verified, not deleted and
  * not currently suspended. An expired timed suspension is treated as lifted.
  */
-fun loadPrincipal(db: Db, userId: UUID): Pair<UserPrincipal?, AccessDenial?> = db.txBlocking { c ->
+fun loadPrincipal(db: Db, userId: UUID): Pair<UserPrincipal?, AccessDenial?> = db.readBlocking { c ->
     c.queryOne(
         """SELECT role, campus_domain, suspended, suspended_until, suspension_reason
            FROM users WHERE id = ? AND deleted_at IS NULL AND email_verified""",

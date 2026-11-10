@@ -10,6 +10,7 @@ import com.campusmarket.server.AppDeps
 import com.campusmarket.server.asUuid
 import com.campusmarket.server.pageParams
 import com.campusmarket.server.receiveBody
+import com.campusmarket.server.respondCacheableJson
 import com.campusmarket.server.user
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
@@ -75,7 +76,7 @@ fun Route.listingRoutes(deps: AppDeps) {
             call.respond(browse.bySeller(call.user, sellerId, call.pageParams()))
         }
         get(ApiRoutes.CATEGORIES) {
-            call.respond(browse.categories(call.user))
+            call.respondCacheableJson(browse.categories(call.user))
         }
     }
 }
