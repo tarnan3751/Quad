@@ -443,25 +443,26 @@ fun RateOrderScreen(route: RateOrderRoute, nav: NavController) {
     CollectEvents(vm.done.flow) { nav.popBackStack() }
 
     Scaffold(topBar = { AppTopBar("Rate", onBack = { nav.popBackStack() }) }) { padding ->
+        // UiStateContent's modifier is for its loading and error states; the content pads itself.
         UiStateContent(orderState, onRetry = vm::reload, modifier = Modifier.fillMaxSize().padding(padding)) { order ->
             val other = order.otherParty
             when {
                 order.status != OrderStatus.COMPLETED -> EmptyState(
                     "Not ready to rate yet",
-                    Modifier.fillMaxSize(),
+                    Modifier.fillMaxSize().padding(padding),
                     message = "You can rate ${other.displayName} once the order is completed.",
                     icon = Icons.Filled.Star,
                 )
                 order.iHaveRated -> EmptyState(
                     "Already rated",
-                    Modifier.fillMaxSize(),
+                    Modifier.fillMaxSize().padding(padding),
                     message = "Thanks! You've rated ${other.displayName} for this order.",
                     icon = Icons.Filled.CheckCircle,
                     actionLabel = "Done",
                     onAction = { nav.popBackStack() },
                 )
                 else -> FormColumn(
-                    Modifier.fillMaxSize().consumeWindowInsets(padding),
+                    Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Column(
