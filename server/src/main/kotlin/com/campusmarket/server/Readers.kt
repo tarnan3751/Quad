@@ -49,8 +49,9 @@ private fun ResultSet.toUserPublic(config: AppConfig): UserPublic {
 fun Connection.loadUsersPublic(config: AppConfig, ids: Collection<UUID>, viewerId: UUID? = null): Map<UUID, UserPublic> {
     if (ids.isEmpty()) return emptyMap()
     return query(
-        """SELECT $USER_COLS, EXISTS (SELECT 1 FROM blocks b WHERE b.blocker_id = ? AND b.blocked_id = u.id) AS blocked_by_me
-           FROM $USERS_WITH_AVATAR WHERE u.id = ANY(?)""",
+        """SELECT $USER_COLS, b.blocked_id IS NOT NULL AS blocked_by_me
+           FROM $USERS_WITH_AVATAR LEFT JOIN blocks b ON b.blocker_id = ? AND b.blocked_id = u.id
+           WHERE u.id = ANY(?)""",
         viewerId, ids.distinct(),
     ) { rs -> rs.uuid("id") to rs.toUserPublic(config) }.toMap()
 }
@@ -86,8 +87,9 @@ fun Connection.loadListingSummaries(config: AppConfig, ids: Collection<UUID>, vi
         """SELECT l.id, l.title, l.price_cents, l.currency, l.category, l.condition, l.status, l.seller_id, l.created_at,
                   CASE WHEN s.deleted_at IS NULL THEN s.display_name ELSE 'Deleted user' END AS seller_name,
                   ph.storage_key, ph.thumb_key, ph.width, ph.height,
-                  EXISTS (SELECT 1 FROM favorites f WHERE f.user_id = ? AND f.listing_id = l.id) AS favorited
+                  f.user_id IS NOT NULL AS favorited
            FROM listings l JOIN users s ON s.id = l.seller_id
+           LEFT JOIN favorites f ON f.user_id = ? AND f.listing_id = l.id
            LEFT JOIN LATERAL (SELECT p.storage_key, p.thumb_key, p.width, p.height
                               FROM listing_photos lp JOIN photos p ON p.id = lp.photo_id
                               WHERE lp.listing_id = l.id ORDER BY lp.position LIMIT 1) ph ON true

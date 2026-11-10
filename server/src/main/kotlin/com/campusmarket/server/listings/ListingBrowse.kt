@@ -15,6 +15,7 @@ import com.campusmarket.server.invalidField
 import com.campusmarket.server.loadListingSummaries
 import com.campusmarket.server.notFound
 import com.campusmarket.server.query
+import com.campusmarket.server.queryFreshPlan
 import com.campusmarket.server.queryOne
 import com.campusmarket.server.uuid
 import io.ktor.http.Parameters
@@ -130,7 +131,7 @@ internal class ListingBrowse(private val deps: AppDeps) {
         )
         sql.add(" LIMIT ?", page.limit + 1)
 
-        val hits = c.query(sql) { rs ->
+        val hits = c.queryFreshPlan(sql.toString(), *sql.paramsArray()) { rs ->
             Hit(
                 rs.uuid("id"),
                 Keyset(sort.name, rs.instantMicros("created_at"), rs.uuid("id"), rs.getInt("price_cents"), rs.getFloat("rank")),
