@@ -84,8 +84,6 @@ import com.campusmarket.app.data.ServerConfig
 import com.campusmarket.app.data.isModerator
 import com.campusmarket.app.feature.chat.MessageSellerRoute
 import com.campusmarket.app.feature.listing.ListingDetailRoute
-import com.campusmarket.app.ui.components.ListingTile
-import com.campusmarket.app.ui.components.PagedListingGrid
 import com.campusmarket.app.feature.moderation.ActionRunner
 import com.campusmarket.app.feature.moderation.ModerationActionDialog
 import com.campusmarket.app.feature.moderation.ReportSheet
@@ -104,8 +102,11 @@ import com.campusmarket.app.ui.components.ErrorState
 import com.campusmarket.app.ui.components.InlineError
 import com.campusmarket.app.ui.components.ListRowSkeletons
 import com.campusmarket.app.ui.components.ListSkeleton
+import com.campusmarket.app.ui.components.ListingTile
 import com.campusmarket.app.ui.components.PagedLazyColumn
+import com.campusmarket.app.ui.components.PagedListingGrid
 import com.campusmarket.app.ui.components.PrimaryButton
+import com.campusmarket.app.ui.components.QuadIcons
 import com.campusmarket.app.ui.components.RatingStars
 import com.campusmarket.app.ui.components.ServerSettingsDialog
 import com.campusmarket.app.ui.components.ShimmerGroup
@@ -177,7 +178,7 @@ fun EditProfileScreen(nav: NavController) {
                         modifier = Modifier.align(Alignment.BottomEnd).size(36.dp)
                             .border(3.dp, MaterialTheme.colorScheme.background, CircleShape),
                     ) {
-                        Box(contentAlignment = Alignment.Center) { Icon(Glyphs.Camera, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                        Box(contentAlignment = Alignment.Center) { Icon(QuadIcons.Camera, contentDescription = null, modifier = Modifier.size(18.dp)) }
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
@@ -216,7 +217,7 @@ fun EditProfileScreen(nav: NavController) {
             )
             Surface(shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.surfaceContainerHighest, modifier = Modifier.fillMaxWidth()) {
                 Row(Modifier.padding(Spacing.md), horizontalArrangement = Arrangement.spacedBy(Spacing.md), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Glyphs.School, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+                    Icon(QuadIcons.School, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
                     Text(
                         "${me.email} · ${me.campusDomain}\nYour email and campus come from your school account and can't be changed.",
                         style = MaterialTheme.typography.bodySmall,
@@ -306,24 +307,24 @@ fun UserProfileScreen(route: UserProfileRoute, nav: NavController) {
                             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                                 DropdownMenuItem(
                                     text = { Text("Report ${loaded.displayName}") },
-                                    leadingIcon = { Icon(Glyphs.Flag, contentDescription = null) },
+                                    leadingIcon = { Icon(QuadIcons.Flag, contentDescription = null) },
                                     onClick = { menuOpen = false; reporting = true },
                                 )
                                 DropdownMenuItem(
                                     text = { Text(if (loaded.blockedByMe) "Unblock ${loaded.displayName}" else "Block ${loaded.displayName}") },
-                                    leadingIcon = { Icon(Glyphs.Block, contentDescription = null) },
+                                    leadingIcon = { Icon(QuadIcons.Block, contentDescription = null) },
                                     onClick = { menuOpen = false; blocking = true },
                                 )
                                 if (me.isModerator) {
                                     HorizontalDivider()
                                     DropdownMenuItem(
                                         text = { Text("Suspend account…") },
-                                        leadingIcon = { Icon(Glyphs.Gavel, contentDescription = null) },
+                                        leadingIcon = { Icon(QuadIcons.Gavel, contentDescription = null) },
                                         onClick = { menuOpen = false; modRunner.clearError(); modAction = ModUserAction.Suspend },
                                     )
                                     DropdownMenuItem(
                                         text = { Text("Lift suspension…") },
-                                        leadingIcon = { Icon(Glyphs.Undo, contentDescription = null) },
+                                        leadingIcon = { Icon(QuadIcons.Undo, contentDescription = null) },
                                         onClick = { menuOpen = false; modRunner.clearError(); modAction = ModUserAction.Unsuspend },
                                     )
                                 }
@@ -374,7 +375,7 @@ fun UserProfileScreen(route: UserProfileRoute, nav: NavController) {
                                     if (isMe) "You have no active listings" else "Nothing for sale right now",
                                     message = if (isMe) "Listings you post show up here for everyone on ${user.campusDomain}."
                                     else "${user.displayName} isn't selling anything at the moment. Check back later.",
-                                    icon = Glyphs.Tag,
+                                    icon = QuadIcons.Tag,
                                     modifier = Modifier.fillMaxWidth().height(240.dp),
                                 )
                             },
@@ -547,7 +548,7 @@ private fun PublicProfileHeader(user: UserPublic, isMe: Boolean, listingCount: S
         when {
             isMe -> Surface(shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.surfaceContainerHighest, modifier = Modifier.fillMaxWidth()) {
                 Row(Modifier.padding(start = Spacing.md), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Glyphs.Visibility, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                    Icon(QuadIcons.Visibility, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
                     Text(
                         "This is how other students see you",
                         style = MaterialTheme.typography.bodyMedium,
@@ -559,14 +560,14 @@ private fun PublicProfileHeader(user: UserPublic, isMe: Boolean, listingCount: S
             }
             else -> {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                    ActionTile(Glyphs.ChatBubble, "Message", actions.onMessage, emphasized = true, enabled = !user.blockedByMe, modifier = Modifier.weight(1f))
-                    ActionTile(Glyphs.Flag, "Report", actions.onReport, modifier = Modifier.weight(1f))
-                    ActionTile(Glyphs.Block, if (user.blockedByMe) "Unblock" else "Block", actions.onBlock, modifier = Modifier.weight(1f))
+                    ActionTile(QuadIcons.ChatBubble, "Message", actions.onMessage, emphasized = true, enabled = !user.blockedByMe, modifier = Modifier.weight(1f))
+                    ActionTile(QuadIcons.Flag, "Report", actions.onReport, modifier = Modifier.weight(1f))
+                    ActionTile(QuadIcons.Block, if (user.blockedByMe) "Unblock" else "Block", actions.onBlock, modifier = Modifier.weight(1f))
                 }
                 if (user.blockedByMe) {
                     Surface(shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth().padding(top = Spacing.xs)) {
                         Row(Modifier.padding(Spacing.md), horizontalArrangement = Arrangement.spacedBy(Spacing.sm), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Glyphs.Block, contentDescription = null, tint = MaterialTheme.colorScheme.onErrorContainer, modifier = Modifier.size(18.dp))
+                            Icon(QuadIcons.Block, contentDescription = null, tint = MaterialTheme.colorScheme.onErrorContainer, modifier = Modifier.size(18.dp))
                             Text(
                                 "You blocked ${user.displayName}. You can't message or buy from each other, and their listings are hidden from you.",
                                 color = MaterialTheme.colorScheme.onErrorContainer,
@@ -712,7 +713,7 @@ private fun RatingRow(rating: Rating, onClickRater: () -> Unit) {
             if (rating.comment.isNotBlank()) Text(rating.comment, style = MaterialTheme.typography.bodyMedium)
             rating.listingTitle?.let {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
-                    Icon(Glyphs.Tag, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(14.dp))
+                    Icon(QuadIcons.Tag, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(14.dp))
                     Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
@@ -778,22 +779,22 @@ fun SettingsScreen(nav: NavController) {
             MenuGroup("Account") {
                 MenuRow(Icons.Default.Email, user.email, "Your sign-in email. It can't be changed.")
                 MenuDivider()
-                MenuRow(Glyphs.School, user.campusDomain, "Your campus: you see and trade with students here")
+                MenuRow(QuadIcons.School, user.campusDomain, "Your campus: you see and trade with students here")
                 if (user.role != UserRole.USER) {
                     MenuDivider()
-                    MenuRow(Glyphs.Verified, user.role.label, "Staff access to moderation tools")
+                    MenuRow(QuadIcons.Verified, user.role.label, "Staff access to moderation tools")
                 }
             }
             MenuGroup("Profile") {
                 MenuRow(Icons.Default.AccountCircle, "Edit profile", "Name, photo and bio", onClick = { nav.navigate(EditProfileRoute) })
             }
             MenuGroup("Privacy & safety") {
-                MenuRow(Glyphs.Block, "Blocked users", "People who can't message you or buy from you", onClick = { nav.navigate(BlockedUsersRoute) })
+                MenuRow(QuadIcons.Block, "Blocked users", "People who can't message you or buy from you", onClick = { nav.navigate(BlockedUsersRoute) })
                 MenuDivider()
-                MenuRow(Glyphs.Shield, "Community guidelines", onClick = { openPage(ApiRoutes.LEGAL_GUIDELINES) }, trailing = { ExternalMark() })
+                MenuRow(QuadIcons.Shield, "Community guidelines", onClick = { openPage(ApiRoutes.LEGAL_GUIDELINES) }, trailing = { ExternalMark() })
             }
             MenuGroup("About") {
-                MenuRow(Glyphs.Document, "Terms of service", onClick = { openPage(ApiRoutes.LEGAL_TERMS) }, trailing = { ExternalMark() })
+                MenuRow(QuadIcons.Document, "Terms of service", onClick = { openPage(ApiRoutes.LEGAL_TERMS) }, trailing = { ExternalMark() })
                 MenuDivider()
                 MenuRow(Icons.Default.Lock, "Privacy policy", onClick = { openPage(ApiRoutes.LEGAL_PRIVACY) }, trailing = { ExternalMark() })
                 MenuDivider()
@@ -939,7 +940,7 @@ fun BlockedUsersScreen(nav: NavController) {
                             "No one blocked",
                             Modifier.fillMaxWidth().padding(top = Spacing.xxl),
                             message = "To block someone, open their profile or a chat with them and choose Block.",
-                            icon = Glyphs.Block,
+                            icon = QuadIcons.Block,
                         )
                     } else {
                         MenuGroup(null, Modifier.padding(top = 0.dp)) {

@@ -37,9 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
-import com.campusmarket.app.ui.rememberTimeFormat
 import com.campusmarket.app.feature.listing.ListingDetailRoute
-import com.campusmarket.app.feature.profile.Glyphs
 import com.campusmarket.app.feature.profile.ListingLine
 import com.campusmarket.app.feature.profile.UserProfileRoute
 import com.campusmarket.app.navigation.LocalCurrentUser
@@ -54,11 +52,13 @@ import com.campusmarket.app.ui.components.ErrorState
 import com.campusmarket.app.ui.components.OrderStatusChip
 import com.campusmarket.app.ui.components.PagedLazyColumn
 import com.campusmarket.app.ui.components.PriceText
+import com.campusmarket.app.ui.components.QuadIcons
 import com.campusmarket.app.ui.components.RatingSummary
 import com.campusmarket.app.ui.components.RemoteImage
 import com.campusmarket.app.ui.components.SecondaryButton
 import com.campusmarket.app.ui.components.StatusChip
 import com.campusmarket.app.ui.label
+import com.campusmarket.app.ui.rememberTimeFormat
 import com.campusmarket.app.ui.state.UiState
 import com.campusmarket.app.ui.theme.CampusTheme
 import com.campusmarket.app.ui.theme.Spacing
@@ -101,7 +101,7 @@ fun DisputesScreen(nav: NavController) {
                                 message = "Problems buyers report with paid orders, and orders held because a seller was suspended, show up here.",
                                 icon = Icons.Default.CheckCircle,
                             )
-                            DisputeStatus.CLOSED -> EmptyState("No closed disputes yet", icon = Glyphs.History)
+                            DisputeStatus.CLOSED -> EmptyState("No closed disputes yet", icon = QuadIcons.History)
                         }
                     },
                 ) { case ->
