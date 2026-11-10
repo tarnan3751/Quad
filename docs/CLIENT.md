@@ -19,11 +19,15 @@ Read `docs/CONTRACT.md` first: endpoints, wire types (`core/`) and the product s
 | Server | `./gradlew :server:run` → http://localhost:8080 (devMode: verification codes are shown in the app) |
 | Desktop harness | `./gradlew :desktopApp:run`. Server from `CAMPUS_MARKET_API` (default `http://localhost:8080`). Always a debug build. |
 | Android | `./gradlew :androidApp:installDebug`. The emulator reaches the host at `http://10.0.2.2:8080` (the default). |
+| Android, release code | `./gradlew :androidApp:installBenchmark`: the `benchmark` build type is `release` (R8, resource shrinking, not debuggable) signed with the local debug key and allowed to reach the HTTP dev server. Use it to measure performance (debug Compose is several times slower) and to check R8 keep rules before a release. Never distribute it. |
+| Android, store build | `./gradlew :androidApp:assembleRelease` / `:androidApp:bundleRelease` (AAB). R8 full mode + resource shrinking, English resources only, HTTPS only. Unsigned until an upload key is set up (docs/RELEASE.md); the R8 mapping is in `androidApp/build/outputs/mapping/release/`. |
 | iOS | Open `iosApp/iosApp.xcodeproj` in Xcode (not on the dev machine yet). The simulator uses `http://localhost:8080`. |
 | Other server (e.g. phone on LAN) | Debug builds only: Welcome screen → "Dev server · …" (or Settings → API server). The override is persisted. |
 | Deep links | Android: `adb shell am start -a android.intent.action.VIEW -d "campusmarket://orders/<id>"`. Desktop: `./gradlew :desktopApp:run --args="campusmarket://orders/<id>"`. iOS: `xcrun simctl openurl booted campusmarket://payouts`. |
 
 Photo / avatar URLs from the server are absolute and built from the server's `PUBLIC_BASE_URL`, which defaults to `http://localhost:8080` and can't be reached from the emulator. `ServerConfig.resolve()` rewrites loopback origins to the app's base URL. `RemoteImage` and `ExternalLinks` do this for you, so never load server URLs any other way.
+
+Photos come in sizes (docs/SERVER_NOTES.md "Photos"); load the smallest that fills the slot, through the helpers in `ui/components/Images.kt`, which fall back to the original when a variant is missing: `listing.listImageUrl` for grid tiles and list rows (inbox, orders, moderation), `user.avatarImageUrl` for avatars, `photo.screenImageUrl` for the listing photo pager, `photo.smallImageUrl` for the editor's photo strip, and `photo.url` (the original) only for the zoomable full-screen viewer. A grid tile's thumbnail is about a ninth of the original's bytes.
 
 ## Package layout (`shared/src/commonMain/kotlin/com/campusmarket/app/`)
 
@@ -31,7 +35,7 @@ Photo / avatar URLs from the server are absolute and built from the server's `PU
 App.kt                     root composable (theme, Coil, URL resolver, AppNavigation)
 di/Koin.kt                 coreModule + list of feature modules + initKoin
 data/                      ApiClient, ApiError, SessionManager, TokenStore, ServerConfig, ChatSocket, HttpClient config
-platform/                  expect/actual + platform glue: Platform.kt, ExternalLinks, DeepLinks, ImagePicker
+platform/                  expect/actual + platform glue: Platform.kt, ExternalLinks, DeepLinks, ImagePicker, ImageCache, NetworkMonitor
 navigation/AppNavigation.kt  auth gate, bottom bar (TopLevelTab), NavHosts, deep-link routing, snackbars, LocalCurrentUser
 ui/theme/Theme.kt          CampusMarketTheme (Quad's "Golden Hour"), CampusTheme.colors / gradients, GoldenHour swatches, Spacing
 ui/components/             reusable components (catalogue below)
@@ -66,7 +70,7 @@ Composable screen ── koinViewModel() ──▶ ViewModel ──▶ ApiClient
                                                      TokenStore ◀── SessionManager (StateFlow<SessionState>)
 ```
 
-- **DI: Koin 4.** Core singletons (`coreModule` in `di/Koin.kt`): `ServerConfig`, `TokenStore`, `HttpClient`, `ApiClient`, `SessionManager`, `ChatSocket`, `UserMessages`, `ExternalLinks`, `AppEnvironment`, plus the platform `PlatformUrlLauncher`. Each feature registers its view models in its own module (`browseModule`, `listingModule`, …), which is already listed in `featureModules`.
+- **DI: Koin 4.** Core singletons (`coreModule` in `di/Koin.kt`): `ServerConfig`, `TokenStore`, `HttpClient`, `ApiClient`, `SessionManager`, `ChatSocket`, `UserMessages`, `ExternalLinks`, `AppEnvironment`, plus the platform `PlatformUrlLauncher` and `NetworkMonitor`. `initKoin` builds the session (a Keystore / Keychain read) and the HTTP client on a background thread at launch, so the first frame doesn't wait for them. Each feature registers its view models in its own module (`browseModule`, `listingModule`, …), which is already listed in `featureModules`.
 - **View models:** `androidx.lifecycle.ViewModel` (multiplatform), scoped to the navigation back-stack entry by `koinViewModel()`. Expose immutable state as `StateFlow` and take actions as plain functions.
 - **Route arguments → view model:** pass the route object.
   ```kotlin
@@ -105,6 +109,7 @@ Auth calls (`register / verifyEmail / resendCode / login / logout`) are used thr
   try { api.createOrder(listingId) }
   catch (e: ApiError) { when (e.code) { ErrorCodes.PAYOUTS_NOT_ENABLED -> …; ErrorCodes.LISTING_UNAVAILABLE -> …; else -> messages.showError(e) } }
   ```
+- **Threads:** call `ApiClient` from the main thread (view models do). Each call, including a token refresh and the JSON decoding, runs on the HTTP engine's I/O dispatcher and resumes on the caller's.
 - **Auth is automatic:** bearer header, proactive refresh 30 s before expiry, refresh on 401 (single-flight: concurrent calls share one refresh) and one retry. If refresh is rejected or the account is suspended, the session is cleared, the app drops to the Welcome screen (which shows the reason), and the call throws `SESSION_EXPIRED`. Don't handle that case yourself.
 - **Endpoints returning `OkResponse` return `Unit`.**
 - **Paging:** every list function takes `cursor` and `limit` (defaults: server's). `nextCursor == null` means the end. `Paginator` handles this.
@@ -115,7 +120,7 @@ Auth calls (`register / verifyEmail / resendCode / login / logout`) are used thr
 ### Chat live updates (`data/ChatSocket.kt`)
 
 - `chatSocket.events: SharedFlow<ChatEvent>` (and `chatSocket.messages: Flow<Message>`) is hot and connects on demand: the websocket opens when the first collector subscribes and closes 5 s after the last one leaves. Collect it in the inbox / conversation view model's `viewModelScope`.
-- It reconnects with backoff (1 s → 30 s). On a policy-violation close it refreshes the token first. `chatSocket.status` exposes `Idle / Connecting / Connected / Reconnecting` for a "Reconnecting…" hint.
+- It reconnects with backoff (1 s → 30 s), and at once when the platform `NetworkMonitor` (Android `ConnectivityManager`, iOS `NWPathMonitor`) says a network is back. On a policy-violation close it refreshes the token first. `chatSocket.status` exposes `Idle / Connecting / Connected / Reconnecting` for a "Reconnecting…" hint.
 - **Send with REST** (`api.sendMessage`) to get the created `Message` and typed errors (`BLOCKED`). The server echoes it as `MessageCreated` on the socket too, so **de-duplicate by `message.id`**. `chatSocket.markRead(id)` / `api.markConversationRead(id)` mark a conversation read. `chatSocket.reconnectNow()` skips the backoff wait.
 - **Unread total (Inbox tab badge):** `UnreadConversations` (`feature/chat/`, Koin single) exposes `count: StateFlow<Int>`, the number of conversations with unread messages (0 when signed out). Collect it where the badge is drawn: `koinInject<UnreadConversations>().count.collectAsStateWithLifecycle()`. While collected it syncs the first page of `GET /conversations`, follows socket events (polling while the socket is down; collecting keeps the socket open, stopping 5 s after the last collector) and takes what the inbox / conversation screens report, so badge and list agree. `refresh()` re-syncs on demand.
 - **Clock times:** chat, order and moderation screens format times with `rememberTimeFormat()` (`feature/chat/TimeFormat.kt`), which follows the device's 12/24-hour setting (Android `DateFormat.is24HourFormat`, iOS `j` skeleton, desktop locale) and words dates the way people say them ("Yesterday", "Thu, Nov 12 at 9:24 AM", "in 2 days, 4 hours"). On Android the setting is re-read on every resume (it's changed in the Settings app). Don't hand-format clock times. Tests pin it with `LocalUse24HourClock` or construct `TimeFormat(use24h, tz, now)` directly.
@@ -181,7 +186,7 @@ Route args are primitives/strings. Use enum *names* as strings if you need an en
 | `UiStateContent(state, onRetry, loading = { … }) { value -> }` | Loading/error/content switch for `UiState` |
 | `CollectEvents(flow) { }` | Consume `EventQueue` events |
 | `PagedLazyColumn`, `PagedLazyGrid` | Infinite lists for a `Paginator` (skeleton first load, pull-to-refresh, footer, empty) |
-| `RemoteImage(url, …)` | Coil image: shimmers while loading, `placeholderIcon` (a photo icon) when missing or failed; resolves dev URLs |
+| `RemoteImage(url, …)` | Coil image: shimmers while loading, `placeholderIcon` (a photo icon) when missing or failed; resolves dev URLs. Pass the size that fits the slot (`listing.listImageUrl`, `user.avatarImageUrl`: see the photo sizes note under "Running") |
 | `Avatar(url, name, size, contentDescription = name)` | Round photo over initials on a Golden Hour colour picked from the name (initials show while loading and if the photo fails). Pass `contentDescription = null` when the name is printed next to it |
 | `CountBadge(count)` | Berry count pill ("3", "99+"), or a dot for 0 |
 | `PriceText(cents)` | Price in the price colour (berry on light, amber on dark), weight 800 |
@@ -208,7 +213,7 @@ them to `ui/components` if another feature needs them):
 |---|---|
 | `ListingTile`, `ListingTileSkeleton` | Grid tile: square cropped photo, price, title clamped to 2 lines with both lines reserved, "condition · 2h ago", status badge, heart. Every tile in a row has the same height |
 | `PagedListingGrid` | Paged grid for a `Paginator<ListingSummary>` whose header (categories, sort) stays on screen through skeleton loading, a failed first load and the empty state; footer shows loading more / retry / end of list |
-| `ListingImage` | Photo with a pulse while loading, a photo outline when missing and a crossed-out photo when it fails |
+| `ListingImage` | Photo with a pulse while loading, a photo outline when missing and a crossed-out photo when it fails. `placeholderUrl`: a smaller copy already on screen (the tile's thumbnail under the pager photo, the pager photo under the zoomable original) shows at once from memory while the larger one loads (`rememberImageModel`) |
 | `FavoriteButton` | 48 dp heart toggle (pops and gives haptic feedback when it fills) |
 | `PriceInput` | Dollar field: decimal keypad, `$` prefix, thousands separators while typing, at most two decimals |
 | `PhotoViewer`, `PageDots` | Full-screen photos on black, edge to edge (`edgeToEdgeDialogProperties()` + light status-bar icons): swipe, pinch / double-tap zoom, pan |
@@ -280,6 +285,7 @@ are code identifiers, like the `com.campusmarket` packages.)
   listing state (loading, empty, error, sold / reserved / removed / blocked, long titles, 1.3x font, landscape) against a
   fake server and a local photo server, no dev server needed.
 - Copy: plain English strings inline. No string resources yet (single locale). Sentence case. Money always via `Format.price` / `PriceText`.
+- **Performance.** Coil (`newImageLoader` in `ui/components/Images.kt`, installed by `App()`) keeps decoded images in a memory cache sized per platform and downloads in a disk cache under the platform cache directory (`platform/ImageCache.*`); requests are sized to the composable. Lazy lists and grids need a stable `key` (and a `contentType` when rows differ). The `:core` wire types are declared stable for the Compose compiler (`shared/compose-stability.conf`), so a row given an equal copy after a refresh skips recomposition; `./gradlew :shared:compileKotlinJvm -PcomposeReports` writes the compiler's stability reports to `shared/build/compose-reports`. Measure on the `benchmark` build, not debug.
 - Text inputs: enforce `Limits` with `maxLength` and `Validate.*`. The server stays authoritative, so always surface `ApiError.fields`.
 - Never call `HttpClient` directly from features, never store tokens, never load server URLs without `RemoteImage` / `ExternalLinks`.
 - Keep `iosMain` minimal. Anything platform-specific goes behind a small interface in `platform/` (ask the foundation owner).
@@ -288,7 +294,8 @@ are code identifiers, like the `com.campusmarket` packages.)
 
 ## Platform notes
 
-- **Android:** `CampusMarketApp` calls `initCampusMarket(context)`. `MainActivity` is `singleTask` and forwards `campusmarket://` intents (cold start + `onNewIntent`) to `DeepLinks`. Cleartext HTTP is allowed only in debug (`src/debug/res/xml/network_security_config.xml`). Images come from the system photo picker, so the app needs no media permissions. The window theme (`Theme.Quad`, `res/values*/themes.xml`) paints the warm-white / after-dark background behind Compose and the Android 12+ splash, so launch never flashes white in dark mode (and sets `windowLightStatusBar` per theme for the window before Compose takes over). Predictive back is on (`android:enableOnBackInvokedCallback`), so handle back with `BackHandler` (never `onBackPressed`); in-app back animations need Android 14+.
+- **Android:** `CampusMarketApp` calls `initCampusMarket(context)`. `MainActivity` is `singleTask` and forwards `campusmarket://` intents (cold start + `onNewIntent`) to `DeepLinks`. Cleartext HTTP is allowed only in the debug and benchmark builds (`src/debug/res/xml/network_security_config.xml`, `src/benchmark/…`). Images come from the system photo picker, so the app needs no media permissions. The window theme (`Theme.Quad`, `res/values*/themes.xml`) paints the warm-white / after-dark background behind Compose and the Android 12+ splash, so launch never flashes white in dark mode (and sets `windowLightStatusBar` per theme for the window before Compose takes over). Predictive back is on (`android:enableOnBackInvokedCallback`), so handle back with `BackHandler` (never `onBackPressed`); in-app back animations need Android 14+.
+  Release and benchmark builds run R8 (keep rules beyond the libraries' own: `androidApp/proguard-rules.pro`): after adding a library that reflects (or a serializable type looked up by name), run `installBenchmark` and walk the flow it touches.
 - **iOS:** `MainViewController()` starts Koin. `iOSApp.swift` forwards `.onOpenURL` to `MainViewControllerKt.handleDeepLink(url:)`. `Info.plist` registers the `campusmarket` scheme, has photo/camera/local-network usage strings, sets `NSAllowsLocalNetworking` (HTTP to localhost/.local only), and sets `UIViewControllerBasedStatusBarAppearance` to NO so `StatusBarIcons` can set the app-wide status bar style (the SwiftUI host never asks the Compose view controller). The display name comes from `APP_NAME` in `Configuration/Config.xcconfig`. The launch screen is the `LaunchBackground` colour from the asset catalog (warm white / after dark). The Kotlin side compiles (`./gradlew :shared:compileKotlinIosSimulatorArm64`). Swift and linking need Xcode.
 - **Desktop:** dev harness only. URL opening uses `java.awt.Desktop`. There's no URL-scheme registration, so pass a deep link as a program argument instead.
 
