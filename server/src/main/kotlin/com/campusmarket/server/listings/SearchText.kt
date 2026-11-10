@@ -5,15 +5,92 @@ import java.sql.Connection
 import java.text.Normalizer
 import java.util.Locale
 
+/** A condition on the listing row `l`, with its parameters. */
+internal class Cond(val sql: String, vararg val params: Any?)
+
+/**
+ * One relevance class of a text match: every listing in it ranks the same ([rank]) and they are ordered newest first.
+ * [cheap] is quick to test on a row; [indexed] selects the same rows in a form an index can find them by.
+ */
+internal class MatchTier(val rank: Float, val cheap: Cond, val indexed: Cond)
+
 /** How a free-text query is matched against listings. */
 internal sealed interface TextMatch {
-    /** Full-text match against `listings.search`; [tsquery] is Postgres' own canonical rendering of the query. */
-    data class FullText(val tsquery: String) : TextMatch
+    /** Every match, as one class (for the orderings that don't rank). */
+    fun any(campus: String): MatchTier
 
-    /** Case-insensitive substring match on title/description, for queries too short (or too stop-wordy) for full text. */
+    /** The matches by relevance, best first: the classes are disjoint and together equal [any]. */
+    fun ranked(campus: String): List<MatchTier>
+
+    /**
+     * Full-text match against `listings.search`; [tsquery] is Postgres' own canonical rendering of the query.
+     * [inTitle] is the same query restricted to title lexemes, [anyInTitle] matches a title with at least one of the
+     * [terms] terms. Ranking: every term in the title, then some of them, then description only.
+     */
+    data class FullText(val tsquery: String, val inTitle: String, val anyInTitle: String, val terms: Int) : TextMatch {
+        override fun any(campus: String): MatchTier = Cond("l.search @@ ?::tsquery", tsquery).let { MatchTier(0f, it, it) }
+
+        override fun ranked(campus: String): List<MatchTier> = buildList {
+            add(
+                MatchTier(
+                    RANK_TITLE,
+                    Cond("l.search @@ ?::tsquery", inTitle),
+                    // title lexemes are the weight-A ones of l.search; the first condition is for listings_title_search_idx
+                    Cond("$ACTIVE AND to_tsvector('english', l.title) @@ ?::tsquery AND l.search @@ ?::tsquery", tsquery, inTitle),
+                ),
+            )
+            if (terms > 1) {
+                val some = Cond("l.search @@ ?::tsquery AND l.search @@ ?::tsquery AND NOT l.search @@ ?::tsquery", tsquery, anyInTitle, inTitle)
+                add(MatchTier(RANK_PARTIAL, some, some))
+            }
+            val rest = Cond("l.search @@ ?::tsquery AND NOT l.search @@ ?::tsquery", tsquery, anyInTitle)
+            add(MatchTier(RANK_BODY, rest, rest))
+        }
+    }
+
+    /**
+     * Case-insensitive substring match on title/description, for queries too short (or too stop-wordy) for full text.
+     * Ranking: title starts with the text, title contains it, description only. The indexed forms go through the
+     * `search_grams` indexes (V6_listings_1), which hold each text's one- and two-character pieces per campus.
+     */
     data class Substring(val text: String) : TextMatch {
         val containsPattern: String get() = "%" + escapeLike(text) + "%"
         val prefixPattern: String get() = escapeLike(text) + "%"
+
+        override fun any(campus: String): MatchTier = MatchTier(
+            0f,
+            Cond("(l.title ILIKE ? ESCAPE '!' OR l.description ILIKE ? ESCAPE '!')", containsPattern, containsPattern),
+            Cond(
+                """$ACTIVE AND (($TITLE_GRAMS @> search_pattern_grams(?, ?) AND l.title ILIKE ? ESCAPE '!')
+                    OR ($DESCRIPTION_GRAMS @> search_pattern_grams(?, ?) AND l.description ILIKE ? ESCAPE '!'))""",
+                campus, text, containsPattern, campus, text, containsPattern,
+            ),
+        )
+
+        override fun ranked(campus: String): List<MatchTier> {
+            val prefix = Cond("l.title ILIKE ? ESCAPE '!'", prefixPattern)
+            val inTitle = Cond("l.title ILIKE ? ESCAPE '!' AND NOT l.title ILIKE ? ESCAPE '!'", containsPattern, prefixPattern)
+            val inBody = Cond("l.description ILIKE ? ESCAPE '!' AND NOT l.title ILIKE ? ESCAPE '!'", containsPattern, containsPattern)
+            return listOf(
+                MatchTier(RANK_TITLE, prefix, Cond("$ACTIVE AND $TITLE_GRAMS @> ARRAY[? || '|^^' || left(lower(?), 2)] AND ${prefix.sql}", campus, text, *prefix.params)),
+                MatchTier(RANK_PARTIAL, inTitle, Cond("$ACTIVE AND $TITLE_GRAMS @> search_pattern_grams(?, ?) AND ${inTitle.sql}", campus, text, *inTitle.params)),
+                MatchTier(RANK_BODY, inBody, Cond("$ACTIVE AND $DESCRIPTION_GRAMS @> search_pattern_grams(?, ?) AND ${inBody.sql}", campus, text, *inBody.params)),
+            )
+        }
+    }
+
+    companion object {
+        const val RANK_TITLE = 1.0f
+        const val RANK_PARTIAL = 0.6f
+        const val RANK_BODY = 0.2f
+
+        // The indexed forms run in a query that hides its own campus and status conditions from the planner; the
+        // indexes that cover ACTIVE listings only need this one to be usable.
+        private const val ACTIVE = "l.status = 'ACTIVE'"
+
+        // spelled exactly like the index expressions, or the indexes aren't used
+        private const val TITLE_GRAMS = "search_grams(l.campus_domain, l.title)"
+        private const val DESCRIPTION_GRAMS = "search_grams(l.campus_domain, l.description)"
     }
 }
 
@@ -48,12 +125,18 @@ internal object SearchText {
         val terms = terms(q)
         if (terms.sumOf { it.length } < MIN_FULL_TEXT_CHARS) return TextMatch.Substring(q)
         val head = terms.dropLast(1).joinToString(" ")
-        val prefixLexeme = "'" + terms.last() + "':*" // safe: the term is letters/digits only
-        val (text, nodes) = c.queryOne(
-            "SELECT q::text, numnode(q) FROM (SELECT plainto_tsquery('english', ?) && to_tsquery('english', ?) AS q) x",
-            head, prefixLexeme,
-        ) { it.getString(1) to it.getInt(2) }!!
-        return if (nodes == 0) TextMatch.Substring(q) else TextMatch.FullText(text)
+        // safe to quote: the terms are letters/digits only
+        val prefixLexeme = "'" + terms.last() + "':*"
+        val titleLexemes = terms.dropLast(1).map { "'$it':A" } + "'${terms.last()}':*A"
+        return c.queryOne(
+            """SELECT q::text, numnode(q), to_tsquery('english', ?)::text, to_tsquery('english', ?)::text
+               FROM (SELECT plainto_tsquery('english', ?) && to_tsquery('english', ?) AS q) x""",
+            titleLexemes.joinToString(" & "), titleLexemes.joinToString(" | "), head, prefixLexeme,
+        ) { rs ->
+            val nodes = rs.getInt(2) // n lexemes joined by n - 1 operators
+            if (nodes == 0) TextMatch.Substring(q)
+            else TextMatch.FullText(rs.getString(1), inTitle = rs.getString(3), anyInTitle = rs.getString(4), terms = (nodes + 1) / 2)
+        }!!
     }
 }
 
