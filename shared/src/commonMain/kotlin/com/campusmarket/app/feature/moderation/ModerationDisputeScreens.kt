@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import com.campusmarket.app.feature.chat.rememberTimeFormat
 import com.campusmarket.app.feature.listing.ListingDetailRoute
 import com.campusmarket.app.feature.profile.Glyphs
 import com.campusmarket.app.feature.profile.ListingLine
@@ -287,10 +288,11 @@ private fun DisputeBody(case: DisputeCase, nav: NavController, canResolve: Boole
             }
             HorizontalDivider(Modifier.padding(horizontal = Spacing.lg), color = scheme.outlineVariant)
             Column(Modifier.padding(horizontal = Spacing.lg, vertical = Spacing.sm), verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
-                AmountRow("Ordered", Format.dateTime(case.orderCreatedAt))
-                case.paidAt?.let { AmountRow("Paid", Format.dateTime(it)) }
-                AmountRow("Problem reported", Format.dateTime(d.openedAt))
-                d.closedAt?.let { AmountRow("Closed", Format.dateTime(it)) }
+                val times = rememberTimeFormat()
+                AmountRow("Ordered", times.dateTime(case.orderCreatedAt))
+                case.paidAt?.let { AmountRow("Paid", times.dateTime(it)) }
+                AmountRow("Problem reported", times.dateTime(d.openedAt))
+                d.closedAt?.let { AmountRow("Closed", times.dateTime(it)) }
             }
         }
     }
@@ -301,7 +303,8 @@ private fun DisputeBody(case: DisputeCase, nav: NavController, canResolve: Boole
             Surface(shape = MaterialTheme.shapes.medium, color = scheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.screen)) {
                 Column(Modifier.padding(Spacing.lg), verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
                     Text(d.outcome?.label ?: d.status.label, style = MaterialTheme.typography.titleMedium)
-                    val by = listOfNotNull(case.resolvedBy?.displayName?.let { "by $it" }, d.closedAt?.let(Format::dateTime))
+                    val times = rememberTimeFormat()
+                    val by = listOfNotNull(case.resolvedBy?.displayName?.let { "by $it" }, d.closedAt?.let(times::dateTime))
                     if (by.isNotEmpty()) Text(by.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant)
                     if (case.resolvedBy != null) QuoteBlock(case.resolutionNote, "No note was left.")
                 }
