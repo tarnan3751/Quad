@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -35,8 +34,6 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -98,6 +95,7 @@ import com.campusmarket.app.ui.components.CollectEvents
 import com.campusmarket.app.ui.components.ConfirmDialog
 import com.campusmarket.app.ui.components.EmptyState
 import com.campusmarket.app.ui.components.ErrorState
+import com.campusmarket.app.ui.components.FormColumn
 import com.campusmarket.app.ui.components.InlineError
 import com.campusmarket.app.ui.components.ListRowSkeletons
 import com.campusmarket.app.ui.components.ListSkeleton
@@ -113,6 +111,7 @@ import com.campusmarket.app.ui.components.ShimmerGroup
 import com.campusmarket.app.ui.components.SkeletonBox
 import com.campusmarket.app.ui.components.SkeletonLeading
 import com.campusmarket.app.ui.components.avatarImageUrl
+import com.campusmarket.app.ui.components.formSubmit
 import com.campusmarket.app.ui.label
 import com.campusmarket.app.ui.rememberTimeFormat
 import com.campusmarket.app.ui.state.UiState
@@ -154,11 +153,11 @@ fun EditProfileScreen(nav: NavController) {
     BackHandler(enabled = unsaved) { confirmDiscard = true }
 
     Scaffold(topBar = { AppTopBar("Edit profile", onBack = goBack) }) { padding ->
-        Column(
-            Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding().verticalScroll(rememberScrollState())
-                .padding(horizontal = Spacing.screen, vertical = Spacing.lg),
+        FormColumn(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)) {
+          Column(
+            Modifier.fillMaxWidth().padding(horizontal = Spacing.screen, vertical = Spacing.lg),
             verticalArrangement = Arrangement.spacedBy(Spacing.lg),
-        ) {
+          ) {
             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
                 Box(
                     Modifier.size(120.dp)
@@ -230,10 +229,11 @@ fun EditProfileScreen(nav: NavController) {
             PrimaryButton(
                 "Save changes",
                 onClick = vm::save,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().formSubmit(),
                 enabled = state.canSave,
                 loading = state.saving,
             )
+          }
         }
     }
     if (confirmDiscard) {
@@ -827,31 +827,25 @@ fun SettingsScreen(nav: NavController) {
     }
     when (state.deleteStep) {
         DeleteStep.None -> Unit
-        DeleteStep.Warn -> AlertDialog(
-            onDismissRequest = vm::cancelDelete,
-            icon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
-            title = { Text("Delete your account?") },
-            text = {
-                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                    Text("Your Quad account (${user.email}) will be deleted. This can't be undone.", style = MaterialTheme.typography.bodyMedium)
-                    Bullet("Your name, photo and bio are removed. Messages you sent and ratings you gave stay, shown as \"Deleted user\".")
-                    Bullet("Your active and reserved listings are taken down. Your favorites and blocked list are cleared.")
-                    Bullet("You're signed out on every device. Past orders stay in the other person's history.")
-                    Text(
-                        "You can't delete your account while an order is awaiting payment, paid or on hold. Finish or cancel those first.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = vm::continueDelete,
-                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                ) { Text("Continue") }
-            },
-            dismissButton = { TextButton(onClick = vm::cancelDelete) { Text("Keep my account") } },
-        )
+        DeleteStep.Warn -> ConfirmDialog(
+            title = "Delete your account?",
+            confirmLabel = "Continue",
+            onConfirm = vm::continueDelete,
+            onDismiss = vm::cancelDelete,
+            dismissLabel = "Keep my account",
+            destructive = true,
+            icon = Icons.Default.Delete,
+        ) {
+            Text("Your Quad account (${user.email}) will be deleted. This can't be undone.", style = MaterialTheme.typography.bodyMedium)
+            Bullet("Your name, photo and bio are removed. Messages you sent and ratings you gave stay, shown as \"Deleted user\".")
+            Bullet("Your active and reserved listings are taken down. Your favorites and blocked list are cleared.")
+            Bullet("You're signed out on every device. Past orders stay in the other person's history.")
+            Text(
+                "You can't delete your account while an order is awaiting payment, paid or on hold. Finish or cancel those first.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         DeleteStep.Confirm -> ConfirmDialog(
             title = "Confirm deletion",
             confirmLabel = "Delete account",

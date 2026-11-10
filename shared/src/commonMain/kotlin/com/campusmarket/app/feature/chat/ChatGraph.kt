@@ -20,9 +20,10 @@ fun NavGraphBuilder.chatGraph(nav: NavController) {
 val chatModule = module {
     single<LiveChat> { SocketLiveChat(get()) }
     single { UnreadConversations(api = get(), live = get(), session = get(), scope = get(AppScope)) }
+    single { ChatOutbox() }
     viewModel { InboxViewModel(api = get(), live = get(), session = get(), userMessages = get(), unread = get()) }
     viewModel { params ->
-        ConversationViewModel(route = params.get(), api = get(), live = get(), session = get(), userMessages = get(), unread = get())
+        ConversationViewModel(route = params.get(), api = get(), live = get(), session = get(), userMessages = get(), unread = get(), outbox = get())
     }
     viewModel { params -> MessageSellerViewModel(route = params.get(), api = get()) }
 }

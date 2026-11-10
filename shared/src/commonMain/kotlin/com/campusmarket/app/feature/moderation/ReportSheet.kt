@@ -7,15 +7,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.Icon
@@ -40,9 +37,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.campusmarket.app.data.ApiClient
 import com.campusmarket.app.data.ApiError
 import com.campusmarket.app.ui.components.AppTextField
+import com.campusmarket.app.ui.components.FormColumn
 import com.campusmarket.app.ui.components.InlineError
 import com.campusmarket.app.ui.components.PrimaryButton
 import com.campusmarket.app.ui.components.QuadIcons
+import com.campusmarket.app.ui.components.formSubmit
 import com.campusmarket.app.ui.theme.Spacing
 import com.campusmarket.core.CreateReportRequest
 import com.campusmarket.core.Limits
@@ -169,11 +168,11 @@ fun ReportSheet(
         onDismissRequest = { if (!state.submitting) finish() },
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {
-        Column(
-            Modifier.fillMaxWidth().imePadding().navigationBarsPadding().verticalScroll(rememberScrollState())
-                .padding(horizontal = Spacing.screen).padding(bottom = Spacing.lg),
+        FormColumn(Modifier.fillMaxWidth().navigationBarsPadding()) {
+          Column(
+            Modifier.fillMaxWidth().padding(horizontal = Spacing.screen).padding(bottom = Spacing.lg),
             verticalArrangement = Arrangement.spacedBy(Spacing.sm),
-        ) {
+          ) {
             when {
                 state.submitted -> {
                     Outcome(
@@ -228,10 +227,11 @@ fun ReportSheet(
                         enabled = !state.submitting,
                     )
                     InlineError(state.formError, Modifier.fillMaxWidth())
-                    PrimaryButton("Send report", onClick = controller::submit, modifier = Modifier.fillMaxWidth(), loading = state.submitting)
+                    PrimaryButton("Send report", onClick = controller::submit, modifier = Modifier.fillMaxWidth().formSubmit(), loading = state.submitting)
                     TextButton(onClick = onDismiss, enabled = !state.submitting, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Cancel") }
                 }
             }
+          }
         }
     }
 }

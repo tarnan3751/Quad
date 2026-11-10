@@ -9,16 +9,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.consumeWindowInsets
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Warning
@@ -43,10 +40,12 @@ import com.campusmarket.app.ui.components.AppTopBar
 import com.campusmarket.app.ui.components.ChipTone
 import com.campusmarket.app.ui.components.CollectEvents
 import com.campusmarket.app.ui.components.EmptyState
+import com.campusmarket.app.ui.components.FormColumn
 import com.campusmarket.app.ui.components.InlineError
 import com.campusmarket.app.ui.components.PrimaryButton
 import com.campusmarket.app.ui.components.StatusChip
 import com.campusmarket.app.ui.components.UiStateContent
+import com.campusmarket.app.ui.components.formSubmit
 import com.campusmarket.app.ui.label
 import com.campusmarket.app.ui.theme.Spacing
 import com.campusmarket.core.DisputeStatus
@@ -79,8 +78,8 @@ fun ReportProblemScreen(route: ReportProblemRoute, nav: NavController) {
                 )
                 return@UiStateContent
             }
-            Column(
-                Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding().verticalScroll(rememberScrollState()),
+            FormColumn(
+                Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Column(
@@ -132,7 +131,7 @@ fun ReportProblemScreen(route: ReportProblemRoute, nav: NavController) {
                         enabled = !state.submitting,
                     )
                     InlineError(state.formError, Modifier.fillMaxWidth())
-                    PrimaryButton("Report problem", onClick = vm::submit, loading = state.submitting, modifier = Modifier.fillMaxWidth())
+                    PrimaryButton("Report problem", onClick = vm::submit, loading = state.submitting, modifier = Modifier.fillMaxWidth().formSubmit())
                 }
             }
         }

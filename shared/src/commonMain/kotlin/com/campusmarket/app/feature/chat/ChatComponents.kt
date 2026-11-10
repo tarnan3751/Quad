@@ -29,6 +29,7 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -53,7 +54,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -169,7 +169,7 @@ internal fun DaySeparator(label: String) {
 
 /**
  * One message. Mine: right, primary colour; theirs: left, neutral. The time sits in the last bubble of a group.
- * Long-press theirs to report; a failed one of mine offers retry / delete (tap, long-press or the caption).
+ * Long-press theirs to report; a failed one of mine has Retry / Delete under it (and in a menu on tap or long-press).
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -250,24 +250,31 @@ internal fun MessageBubble(
         }
         when (row.delivery) {
             Delivery.Sending -> BubbleCaption("Sending…")
-            Delivery.Failed -> Row(
-                Modifier
-                    .heightIn(min = 48.dp)
-                    .clip(RoundedCornerShape(50))
-                    .clickable(role = Role.Button, onClickLabel = "Retry sending", onClick = onRetry)
-                    .padding(horizontal = Spacing.sm),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(Icons.Filled.Warning, contentDescription = null, modifier = Modifier.size(14.dp), tint = scheme.error)
-                Spacer(Modifier.width(Spacing.xs))
-                Text(
-                    "${(row.error ?: "Not sent").trimEnd('.')}. Tap to retry",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = scheme.error,
-                )
-            }
+            Delivery.Failed -> FailedCaption(row.error ?: "Not sent", onRetry, onDiscard)
             Delivery.Sent -> row.receipt?.let { BubbleCaption(if (it == Receipt.Seen) "Seen" else "Sent") }
         }
+    }
+}
+
+/** Under a message that wasn't sent: why, and what can be done about it. The text stays until one of them is chosen. */
+@Composable
+private fun FailedCaption(reason: String, onRetry: () -> Unit, onDiscard: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Row(Modifier.padding(start = Spacing.sm), verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.Filled.Warning, contentDescription = null, modifier = Modifier.size(14.dp), tint = scheme.error)
+        Spacer(Modifier.width(Spacing.xs))
+        Text(reason, style = MaterialTheme.typography.labelMedium, color = scheme.error, modifier = Modifier.weight(1f, fill = false))
+        TextButton(
+            onClick = onRetry,
+            modifier = Modifier.semantics { contentDescription = "Retry sending" },
+            contentPadding = PaddingValues(horizontal = Spacing.sm),
+        ) { Text("Retry", fontWeight = FontWeight.Bold) }
+        TextButton(
+            onClick = onDiscard,
+            modifier = Modifier.semantics { contentDescription = "Delete unsent message" },
+            colors = ButtonDefaults.textButtonColors(contentColor = scheme.onSurfaceVariant),
+            contentPadding = PaddingValues(horizontal = Spacing.sm),
+        ) { Text("Delete") }
     }
 }
 

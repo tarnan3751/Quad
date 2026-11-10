@@ -91,8 +91,8 @@ class ConversationViewModelTest {
         return Triple(server, server.harness(this), FakeLiveChat(status))
     }
 
-    private fun vm(h: Harness, live: FakeLiveChat) =
-        ConversationViewModel(ConversationRoute("c1"), h.api, live, h.session, h.messages, nowMillis = { NOW + 500 })
+    private fun vm(h: Harness, live: FakeLiveChat, outbox: ChatOutbox = ChatOutbox()) =
+        ConversationViewModel(ConversationRoute("c1"), h.api, live, h.session, h.messages, outbox = outbox, nowMillis = { NOW + 500 })
 
     private fun ConversationViewModel.bubbles() = rows.value.filterIsInstance<ChatRow.Bubble>()
 
@@ -254,6 +254,162 @@ class ConversationViewModelTest {
         vm.discard(vm.state.value.pending.single().localId)
         assertTrue(vm.bubbles().none { it.body == "Second" })
         vm.close()
+    }
+
+    @Test
+    fun sendRejectedByTheServerKeepsTheMessageAsNotSent() = runTest {
+        val (server, h, live) = setUp()
+        val vm = vm(h, live)
+        advanceUntilIdle()
+        server.sendStatus = HttpStatusCode.InternalServerError
+        server.sendCode = ErrorCodes.INTERNAL
+
+        vm.onDraft("Can you do 4pm?")
+        vm.send()
+        advanceUntilIdle()
+
+        assertEquals("", vm.state.value.draft, "the text moved into the bubble")
+        val bubble = vm.bubbles().first()
+        assertEquals("Can you do 4pm?", bubble.body)
+        assertEquals(Delivery.Failed, bubble.delivery)
+        assertTrue(bubble.mine)
+        assertTrue(!bubble.error.isNullOrBlank())
+        assertNull(vm.state.value.restriction, "a server error doesn't lock the composer")
+        // Nothing takes it away: not a live event from the other person, not a re-sync.
+        live.emit(ChatEvent.MessageCreated(msg("m3", "u2", "Hello?", NOW + 10)))
+        vm.syncNewest()
+        advanceUntilIdle()
+        assertEquals(listOf("Can you do 4pm?", "Hello?"), vm.bubbles().take(2).map { it.body })
+        assertEquals(Delivery.Failed, vm.state.value.pending.single().delivery)
+        vm.close()
+    }
+
+    @Test
+    fun retryAfterAFailureSendsTheSameTextOnce() = runTest {
+        val (server, h, live) = setUp()
+        val vm = vm(h, live)
+        advanceUntilIdle()
+        server.sendThrows = true
+        vm.onDraft("On my way")
+        vm.send()
+        advanceUntilIdle()
+        val failed = vm.state.value.pending.single()
+
+        // Still failing: it stays, still marked.
+        vm.retry(failed.localId)
+        advanceUntilIdle()
+        assertEquals(Delivery.Failed, vm.state.value.pending.single().delivery)
+
+        server.sendThrows = false
+        server.sendGate = CompletableDeferred()
+        vm.retry(failed.localId)
+        runCurrent()
+        assertEquals(Delivery.Sending, vm.state.value.pending.single().delivery)
+        vm.retry(failed.localId) // a second tap while it's sending does nothing
+        server.sendGate!!.complete(Unit)
+        advanceUntilIdle()
+
+        assertTrue(vm.state.value.pending.isEmpty())
+        assertEquals(1, server.sentCount)
+        assertEquals(1, vm.bubbles().count { it.body == "On my way" })
+        assertEquals(Delivery.Sent, vm.bubbles().first { it.body == "On my way" }.delivery)
+        vm.close()
+    }
+
+    @Test
+    fun discardRemovesOnlyThatFailedMessage() = runTest {
+        val (server, h, live) = setUp()
+        val vm = vm(h, live)
+        advanceUntilIdle()
+        server.sendThrows = true
+        vm.onDraft("First")
+        vm.send()
+        vm.onDraft("Second")
+        vm.send()
+        advanceUntilIdle()
+        val (first, second) = vm.state.value.pending
+
+        vm.discard(first.localId)
+
+        assertEquals(listOf(second), vm.state.value.pending)
+        assertTrue(vm.bubbles().none { it.body == "First" })
+        assertEquals(Delivery.Failed, vm.bubbles().first { it.body == "Second" }.delivery)
+        assertEquals(0, server.sentCount)
+        vm.close()
+    }
+
+    @Test
+    fun unsentMessagesAndTheDraftAreStillThereAfterLeavingAndComingBack() = runTest {
+        val (server, h, live) = setUp()
+        val outbox = ChatOutbox()
+        val first = vm(h, live, outbox)
+        advanceUntilIdle()
+        server.sendThrows = true
+        first.onDraft("Is 5pm ok?")
+        first.send()
+        advanceUntilIdle()
+        first.onDraft("half typed")
+        first.close()
+
+        val second = vm(h, live, outbox)
+        advanceUntilIdle()
+        val restored = second.state.value.pending.single()
+        assertEquals("Is 5pm ok?", restored.body)
+        assertEquals(Delivery.Failed, restored.delivery)
+        assertEquals("half typed", second.state.value.draft)
+
+        server.sendThrows = false
+        second.retry(restored.localId)
+        advanceUntilIdle()
+        assertTrue(second.state.value.pending.isEmpty())
+        assertEquals("Is 5pm ok?", second.history.state.value.items.first().body)
+        second.close()
+
+        // Sent now, so a third visit starts clean (the draft is still unsent).
+        val third = vm(h, live, outbox)
+        advanceUntilIdle()
+        assertTrue(third.state.value.pending.isEmpty())
+        assertEquals("half typed", third.state.value.draft)
+        third.close()
+    }
+
+    @Test
+    fun aSendCutOffByLeavingComesBackAsNotSentUnlessTheServerGotIt() = runTest {
+        val (server, h, live) = setUp()
+        val outbox = ChatOutbox()
+        server.sendGate = CompletableDeferred()
+        val first = vm(h, live, outbox)
+        advanceUntilIdle()
+        first.onDraft("Leaving now")
+        first.send()
+        runCurrent()
+        assertEquals(Delivery.Sending, first.state.value.pending.single().delivery)
+        first.close()
+
+        // The server never got it: it's offered again.
+        val second = vm(h, live, outbox)
+        advanceUntilIdle()
+        assertEquals(Delivery.Failed, second.state.value.pending.single().delivery)
+        assertEquals("Leaving now", second.bubbles().first().body)
+        second.close()
+
+        // The server did get it: the history has it, so the unsent copy goes.
+        server.newest.add(0, msg("m5", me, "Leaving now", NOW + 400))
+        val third = vm(h, live, outbox)
+        advanceUntilIdle()
+        assertTrue(third.state.value.pending.isEmpty())
+        assertEquals(1, third.bubbles().count { it.body == "Leaving now" })
+        third.close()
+    }
+
+    @Test
+    fun outboxIsPerUser() {
+        val outbox = ChatOutbox()
+        outbox.save("u1", "c1", "draft", listOf(PendingMessage("l1", "hi", 1, Delivery.Failed)))
+        assertEquals(ChatOutbox.Entry(), outbox.load("u2", "c1"))
+        assertEquals("draft", outbox.load("u1", "c1").draft)
+        outbox.save("u1", "c1", " ", emptyList())
+        assertEquals(ChatOutbox.Entry(), outbox.load("u1", "c1"))
     }
 
     @Test

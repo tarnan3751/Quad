@@ -100,6 +100,7 @@ import com.campusmarket.app.ui.components.PrimaryButton
 import com.campusmarket.app.ui.components.QuadIcons
 import com.campusmarket.app.ui.components.SecondaryButton
 import com.campusmarket.app.ui.components.icon
+import com.campusmarket.app.ui.components.isCompactHeight
 import com.campusmarket.app.ui.state.UiState
 import com.campusmarket.app.ui.theme.Spacing
 import com.campusmarket.core.CategoryInfo
@@ -147,17 +148,15 @@ fun BrowseScreen(nav: NavController) {
         gridState.animateScrollToItem(0)
     }
 
+    // Landscape on a phone: the title bar would take a fifth of the height, so Favorites moves into the search row.
+    val compact = isCompactHeight()
+    val favorites: @Composable () -> Unit = {
+        IconButton(onClick = { nav.navigate(FavoritesRoute) }) {
+            Icon(Icons.Filled.FavoriteBorder, contentDescription = "Favorites")
+        }
+    }
     Scaffold(
-        topBar = {
-            AppTopBar(
-                title = "Browse",
-                actions = {
-                    IconButton(onClick = { nav.navigate(FavoritesRoute) }) {
-                        Icon(Icons.Filled.FavoriteBorder, contentDescription = "Favorites")
-                    }
-                },
-            )
-        },
+        topBar = { if (!compact) AppTopBar(title = "Browse", actions = { favorites() }) },
     ) { padding ->
         // A focus target ahead of the search field: when another screen's focused text field goes away (e.g. back
         // from a half-filled Sell form), Android hands focus to the first focusable thing on screen. Without this it's
@@ -185,6 +184,7 @@ fun BrowseScreen(nav: NavController) {
                     keyboard?.hide()
                     vm.openFilters()
                 },
+                trailing = if (compact) favorites else null,
             )
             if (showRecents) {
                 RecentSearchesPanel(
@@ -204,6 +204,7 @@ fun BrowseScreen(nav: NavController) {
                 PagedListingGrid(
                     paginator = vm.listings,
                     state = gridState,
+                    minTileWidth = if (compact) 140.dp else 160.dp,
                     header = {
                         item(key = "__header", span = { GridItemSpan(maxLineSpan) }) {
                             Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
@@ -290,6 +291,7 @@ private fun SearchBarRow(
     onTap: () -> Unit,
     filterCount: Int,
     onOpenFilters: () -> Unit,
+    trailing: (@Composable () -> Unit)? = null,
 ) {
     val interactions = remember { MutableInteractionSource() }
     LaunchedEffect(interactions) {
@@ -334,6 +336,7 @@ private fun SearchBarRow(
                 Icon(QuadIcons.Tune, contentDescription = if (filterCount > 0) "Filters, $filterCount active" else "Filters")
             }
         }
+        trailing?.invoke()
     }
 }
 
