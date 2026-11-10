@@ -148,11 +148,19 @@ How text search stays quick (see `ListingBrowse.textSearch`):
 ## Chat
 - Cursors are opaque; messages come newest-first; conversations ordered by last activity.
 - Send: body trimmed, 1..2000 chars; errors in `fields.body` (or `fields.initialMessage` on start).
+- **Retrying a send:** put a fresh id (a UUID) in `SendMessageRequest.clientId` for every message and repeat it on every
+  retry of that message. The server keeps one message per (sender, `clientId`) and answers a repeat with the stored
+  one, so a send whose response was lost (timeout, app killed) can always be retried. `Message.clientId` comes back in
+  the response, in the history and on the socket: match it against what is still pending locally. Messages from
+  clients that send no id have `clientId` null and are never de-duplicated. Migration `V6_chat_1`.
 - Blocked either way: history readable, send → 403 `BLOCKED`. Sending to a deleted user → 409.
 - WebSocket: `GET /api/v1/ws?token=<accessToken>`. Bad/expired token → accepted then closed with VIOLATED_POLICY (1008): refresh the access token, then reconnect.
   An **open** socket is also closed with 1008 when its access token expires (so about every 15 minutes) and within ~30 s
   of the account being suspended or deleted. Same handling: refresh, reconnect (a suspended account's refresh fails with
-  403 `ACCOUNT_SUSPENDED`), and re-fetch via REST anything that may have arrived in between.
+  403 `ACCOUNT_SUSPENDED`), and re-fetch via REST anything that may have arrived in between. To avoid the gap, open a
+  second socket with a refreshed token shortly before the first one's token expires, wait for a `Pong` on it (the
+  socket is subscribed by then), and close the old one; both deliver for a moment, so de-duplicate by message id
+  (the app does this, see docs/CLIENT.md).
 - Events fan out to all sockets of both participants, **including the sender's own socket** — de-duplicate messages by id.
 - A rejected WS command is silently dropped (no error frame). **Send messages via REST** (so failures are visible) and use the socket for receiving; use WS `Ping` for keep-alive if needed.
 - Mark-read always emits `ConversationRead` to both sides.

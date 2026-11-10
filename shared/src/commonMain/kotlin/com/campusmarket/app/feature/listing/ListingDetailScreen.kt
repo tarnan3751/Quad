@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.pager.HorizontalPager
@@ -75,6 +76,7 @@ import com.campusmarket.app.feature.orders.OrdersRoute
 import com.campusmarket.app.feature.profile.UserProfileRoute
 import com.campusmarket.app.navigation.keepSnackbarsAbove
 import com.campusmarket.app.ui.components.AppTopBar
+import com.campusmarket.app.ui.components.BackButton
 import com.campusmarket.app.ui.components.Avatar
 import com.campusmarket.app.ui.components.CollectEvents
 import com.campusmarket.app.ui.components.ConfirmDialog
@@ -93,6 +95,7 @@ import com.campusmarket.app.ui.components.ShimmerGroup
 import com.campusmarket.app.ui.components.SkeletonBox
 import com.campusmarket.app.ui.components.avatarImageUrl
 import com.campusmarket.app.ui.components.icon
+import com.campusmarket.app.ui.components.isCompactHeight
 import com.campusmarket.app.ui.components.screenImageUrl
 import com.campusmarket.app.ui.rememberTimeFormat
 import com.campusmarket.app.ui.state.UiState
@@ -110,7 +113,8 @@ import org.koin.core.parameter.parametersOf
 /**
  * Listing detail: photo pager (side by side with the details on wide windows), price and title, scannable facts,
  * description, seller card, and a pinned action bar that always says what you can do: buy / message, edit, or why
- * not (reserved, sold, removed, blocked).
+ * not (reserved, sold, removed, blocked). On a short window (a phone in landscape) there is no title bar: the photo
+ * fills the left half with back / favorite / more floating on it, and the action bar sits under the details only.
  */
 @Composable
 fun ListingDetailScreen(route: ListingDetailRoute, nav: NavController) {
@@ -133,52 +137,86 @@ fun ListingDetailScreen(route: ListingDetailRoute, nav: NavController) {
 
     val listing = (state as? UiState.Content)?.value
     val openSales = { nav.navigate(OrdersRoute(role = OrderRole.SELLER.name.lowercase())) }
-    Scaffold(
-        topBar = {
-            AppTopBar(
-                title = if (showTitleInBar) listing?.title.orEmpty() else "",
-                onBack = { nav.popBackStack() },
-                actions = {
-                    if (listing != null) {
-                        if (!listing.isMine) FavoriteButton(listing.favorited, onToggle = vm::toggleFavorite, onPhoto = false)
-                        OverflowMenu(
-                            listing = listing,
-                            onReport = { reporting = true },
-                            onSellerProfile = { nav.navigate(UserProfileRoute(listing.seller.id)) },
-                            onEdit = { nav.navigate(EditListingRoute(listing.id)) },
-                            onDelete = vm::askDelete,
-                        )
-                    }
-                },
+    val actions: @Composable () -> Unit = {
+        if (listing != null) {
+            if (!listing.isMine) FavoriteButton(listing.favorited, onToggle = vm::toggleFavorite, onPhoto = false)
+            OverflowMenu(
+                listing = listing,
+                onReport = { reporting = true },
+                onSellerProfile = { nav.navigate(UserProfileRoute(listing.seller.id)) },
+                onEdit = { nav.navigate(EditListingRoute(listing.id)) },
+                onDelete = vm::askDelete,
             )
-        },
-        bottomBar = {
-            if (listing != null) Box(Modifier.keepSnackbarsAbove()) {
-                DetailActionBar(
-                    listing = listing,
-                    unblocking = ui.unblocking,
-                    onMessage = { nav.navigate(MessageSellerRoute(listing.id)) },
-                    onBuy = { nav.navigate(CheckoutRoute(listing.id)) },
-                    onEdit = { nav.navigate(EditListingRoute(listing.id)) },
-                    onDelete = vm::askDelete,
-                    onViewSales = openSales,
-                    onUnblock = vm::unblockSeller,
-                )
+        }
+    }
+    val actionBar: @Composable (compact: Boolean) -> Unit = { compact ->
+        if (listing != null) Box(Modifier.keepSnackbarsAbove()) {
+            DetailActionBar(
+                listing = listing,
+                unblocking = ui.unblocking,
+                compact = compact,
+                onMessage = { nav.navigate(MessageSellerRoute(listing.id)) },
+                onBuy = { nav.navigate(CheckoutRoute(listing.id)) },
+                onEdit = { nav.navigate(EditListingRoute(listing.id)) },
+                onDelete = vm::askDelete,
+                onViewSales = openSales,
+                onUnblock = vm::unblockSeller,
+            )
+        }
+    }
+    if (isCompactHeight()) {
+        // A phone in landscape has no height for a title bar and a full-width action bar: the photo takes the whole
+        // left half with the bar's buttons floating on it, and the actions are pinned under the details only.
+        Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
+            Row(Modifier.fillMaxSize().statusBarsPadding()) {
+                Box(Modifier.weight(1f).fillMaxHeight()) {
+                    when (val s = state) {
+                        UiState.Loading -> ShimmerGroup { SkeletonBox(Modifier.fillMaxSize(), RectangleShape) }
+                        is UiState.Error -> Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainerHighest))
+                        is UiState.Content -> PhotoPager(s.value, { viewerPage = it }, Modifier.fillMaxSize(), showArrows = true)
+                    }
+                    FloatingBar(Modifier.align(Alignment.TopStart)) { BackButton(onClick = { nav.popBackStack() }) }
+                    if (listing != null) FloatingBar(Modifier.align(Alignment.TopEnd), content = actions)
+                }
+                Column(Modifier.weight(1f).fillMaxHeight()) {
+                    val pane = Modifier.weight(1f).fillMaxWidth()
+                    when (val s = state) {
+                        UiState.Loading -> DetailTextSkeleton(pane)
+                        is UiState.Error -> ErrorState(s.error, pane, onRetry = vm::reload)
+                        is UiState.Content -> PullToRefreshBox(isRefreshing = ui.refreshing, onRefresh = vm::refresh, modifier = pane) {
+                            Column(Modifier.fillMaxSize().verticalScroll(scroll)) {
+                                DetailContent(s.value, onSellerClick = { nav.navigate(UserProfileRoute(s.value.seller.id)) }, showNotice = true)
+                            }
+                        }
+                    }
+                    actionBar(true)
+                }
             }
-        },
-    ) { padding ->
-        val modifier = Modifier.fillMaxSize().padding(padding)
-        when (val s = state) {
-            UiState.Loading -> DetailSkeleton(modifier)
-            is UiState.Error -> ErrorState(s.error, modifier, onRetry = vm::reload)
-            is UiState.Content -> PullToRefreshBox(isRefreshing = ui.refreshing, onRefresh = vm::refresh, modifier = modifier) {
-                DetailBody(
-                    listing = s.value,
-                    scroll = scroll,
-                    onTitlePositioned = { titleScrollThreshold = it },
-                    onPhotoClick = { viewerPage = it },
-                    onSellerClick = { nav.navigate(UserProfileRoute(s.value.seller.id)) },
+        }
+    } else {
+        Scaffold(
+            topBar = {
+                AppTopBar(
+                    title = if (showTitleInBar) listing?.title.orEmpty() else "",
+                    onBack = { nav.popBackStack() },
+                    actions = { actions() },
                 )
+            },
+            bottomBar = { actionBar(false) },
+        ) { padding ->
+            val modifier = Modifier.fillMaxSize().padding(padding)
+            when (val s = state) {
+                UiState.Loading -> DetailSkeleton(modifier)
+                is UiState.Error -> ErrorState(s.error, modifier, onRetry = vm::reload)
+                is UiState.Content -> PullToRefreshBox(isRefreshing = ui.refreshing, onRefresh = vm::refresh, modifier = modifier) {
+                    DetailBody(
+                        listing = s.value,
+                        scroll = scroll,
+                        onTitlePositioned = { titleScrollThreshold = it },
+                        onPhotoClick = { viewerPage = it },
+                        onSellerClick = { nav.navigate(UserProfileRoute(s.value.seller.id)) },
+                    )
+                }
             }
         }
     }
@@ -209,6 +247,19 @@ fun ListingDetailScreen(route: ListingDetailRoute, nav: NavController) {
 }
 
 // ---------------------------------------------------------------------------------------------------- top bar
+
+/** Top-bar buttons on a translucent pill, for floating over the photo where there is no bar. */
+@Composable
+private fun FloatingBar(modifier: Modifier, content: @Composable () -> Unit) {
+    Surface(
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.9f),
+        shadowElevation = 1.dp,
+        modifier = modifier.padding(Spacing.sm),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) { content() }
+    }
+}
 
 @Composable
 private fun OverflowMenu(
@@ -294,12 +345,15 @@ private fun DetailBody(
     }
 }
 
+/** [showNotice]: the "why you can't buy this" notice goes here instead of the action bar (compact height). */
 @Composable
-private fun DetailContent(listing: ListingDetail, onSellerClick: () -> Unit) {
+private fun DetailContent(listing: ListingDetail, onSellerClick: () -> Unit, showNotice: Boolean = false) {
     Column(
         Modifier.fillMaxWidth().padding(start = Spacing.screen, end = Spacing.screen, top = Spacing.lg, bottom = Spacing.xl),
         verticalArrangement = Arrangement.spacedBy(Spacing.lg),
     ) {
+        val notice = if (showNotice) listing.notice() else null
+        if (notice != null) Notice(notice, Modifier.fillMaxWidth())
         Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
                 PriceText(listing.priceCents, currency = listing.currency, style = CampusTheme.priceLarge)
@@ -479,15 +533,26 @@ private fun DetailSkeleton(modifier: Modifier) {
         ShimmerGroup {
             Column {
                 SkeletonBox(Modifier.fillMaxWidth().height(photoHeight), RectangleShape)
-                Column(Modifier.padding(Spacing.screen), verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
-                    SkeletonBox(Modifier.width(96.dp).height(28.dp), line)
-                    SkeletonBox(Modifier.width(280.dp).height(22.dp), line)
-                    SkeletonBox(Modifier.width(140.dp).height(14.dp), line)
-                    Spacer(Modifier.height(Spacing.sm))
-                    SkeletonBox(Modifier.fillMaxWidth().height(150.dp), MaterialTheme.shapes.medium)
-                }
+                DetailTextLines(line)
             }
         }
+    }
+}
+
+/** The details column alone (compact height: the photo's placeholder is beside it). */
+@Composable
+private fun DetailTextSkeleton(modifier: Modifier) {
+    Box(modifier) { ShimmerGroup { DetailTextLines(RoundedCornerShape(6.dp)) } }
+}
+
+@Composable
+private fun DetailTextLines(line: RoundedCornerShape) {
+    Column(Modifier.padding(Spacing.screen), verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
+        SkeletonBox(Modifier.width(96.dp).height(28.dp), line)
+        SkeletonBox(Modifier.width(280.dp).height(22.dp), line)
+        SkeletonBox(Modifier.width(140.dp).height(14.dp), line)
+        Spacer(Modifier.height(Spacing.sm))
+        SkeletonBox(Modifier.fillMaxWidth().height(150.dp), MaterialTheme.shapes.medium)
     }
 }
 
@@ -515,11 +580,15 @@ private fun ListingDetail.notice(): BarNotice? = when {
     else -> null
 }
 
-/** The pinned bottom bar: what you can do with this listing, or why you can't. */
+/**
+ * The pinned bottom bar: what you can do with this listing, or why you can't. [compact] (a short window): buttons
+ * only, tighter; the notice is shown with the details instead.
+ */
 @Composable
 private fun DetailActionBar(
     listing: ListingDetail,
     unblocking: Boolean,
+    compact: Boolean,
     onMessage: () -> Unit,
     onBuy: () -> Unit,
     onEdit: () -> Unit,
@@ -527,7 +596,7 @@ private fun DetailActionBar(
     onViewSales: () -> Unit,
     onUnblock: () -> Unit,
 ) {
-    val notice = listing.notice()
+    val notice = if (compact) null else listing.notice()
     val buttons: List<@Composable (Modifier) -> Unit> = buildList {
         if (listing.isMine) {
             when {
@@ -545,7 +614,7 @@ private fun DetailActionBar(
     if (notice == null && buttons.isEmpty()) return
     Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shadowElevation = 8.dp) {
         Column(
-            Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = Spacing.screen, vertical = Spacing.md),
+            Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = Spacing.screen, vertical = if (compact) Spacing.sm else Spacing.md),
             verticalArrangement = Arrangement.spacedBy(Spacing.md),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {

@@ -65,6 +65,7 @@ import com.campusmarket.app.feature.profile.BlockUserDialog
 import com.campusmarket.app.feature.profile.UserProfileRoute
 import com.campusmarket.app.navigation.keepSnackbarsAbove
 import com.campusmarket.app.ui.components.AppTopBar
+import com.campusmarket.app.ui.components.isCompactHeight
 import com.campusmarket.app.ui.components.Avatar
 import com.campusmarket.app.ui.components.BackButton
 import com.campusmarket.app.ui.components.CollectEvents
@@ -103,6 +104,9 @@ fun ConversationScreen(route: ConversationRoute, nav: NavController) {
     var reportMessageId by remember { mutableStateOf<String?>(null) }
     var blockDialog by remember { mutableStateOf(false) }
     val conversation = (conversationState as? UiState.Content)?.value
+    // A phone in landscape: the listing moves into the top bar, so its strip doesn't take a third of the messages' room.
+    val compact = isCompactHeight()
+    val restricted by remember { derivedStateOf { vm.state.value.restriction != null } }
 
     Scaffold(
         topBar = {
@@ -115,6 +119,17 @@ fun ConversationScreen(route: ConversationRoute, nav: NavController) {
                     onOpenProfile = { nav.navigate(UserProfileRoute(conversation.otherUser.id)) },
                     onReport = { reportUser = true },
                     onBlock = { blockDialog = true },
+                    listing = {
+                        if (compact) {
+                            val mine = conversation.listing.sellerId == vm.myId
+                            ListingChip(
+                                conversation.listing,
+                                showBuy = !mine && conversation.listing.status == ListingStatus.ACTIVE && !restricted,
+                                onOpen = { nav.navigate(ListingDetailRoute(conversation.listing.id)) },
+                                onBuy = { nav.navigate(CheckoutRoute(conversation.listing.id)) },
+                            )
+                        }
+                    },
                 )
             }
         },
@@ -129,7 +144,7 @@ fun ConversationScreen(route: ConversationRoute, nav: NavController) {
             is UiState.Content -> BoxWithConstraints(body) {
                 // Typing in landscape leaves only a strip above the keyboard: give it to the messages and the composer.
                 val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
-                val roomForStrip = !imeVisible || maxHeight >= CompactChatHeight
+                val roomForStrip = !compact && (!imeVisible || maxHeight >= CompactChatHeight)
                 Column(Modifier.fillMaxSize()) {
                     val c = s.value
                     val state by vm.state.collectAsStateWithLifecycle()
@@ -188,6 +203,7 @@ private fun ConversationTopBar(
     onOpenProfile: () -> Unit,
     onReport: () -> Unit,
     onBlock: () -> Unit,
+    listing: @Composable () -> Unit = {},
 ) {
     val other = conversation.otherUser
     var menu by remember { mutableStateOf(false) }
@@ -211,6 +227,7 @@ private fun ConversationTopBar(
             }
         },
         actions = {
+            listing()
             Box {
                 IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, contentDescription = "More options") }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {

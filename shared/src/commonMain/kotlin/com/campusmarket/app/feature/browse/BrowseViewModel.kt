@@ -100,7 +100,7 @@ class BrowseViewModel(
     /** Categories with ACTIVE counts for my campus. */
     val categories: StateFlow<UiState<List<CategoryInfo>>> = _categories.asStateFlow()
 
-    val listings = Paginator(viewModelScope, key = { it.id }) { cursor, limit ->
+    val listings = Paginator(viewModelScope, messages = messages, key = { it.id }) { cursor, limit ->
         api.listings(_state.value.query, cursor, limit)
     }
 
@@ -111,7 +111,6 @@ class BrowseViewModel(
 
     init {
         // A failed pull-to-refresh keeps the grid; say why instead of silently dropping the spinner (e.g. offline).
-        listings.onRefreshError = messages::showError
         listings.refresh()
         load(_categories) { api.categories() }
         viewModelScope.launch {

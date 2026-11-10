@@ -273,10 +273,17 @@ data class Message(
     val senderId: String,
     val body: String,
     val createdAt: Long,
+    /** The id the sender's client gave this message (`SendMessageRequest.clientId`); null when it sent none. */
+    val clientId: String? = null,
 )
 
+/**
+ * [clientId]: an id the client makes up per message (1..`Limits.MESSAGE_CLIENT_ID_MAX` of `A-Z a-z 0-9 - _`, e.g. a
+ * UUID). Sending the same id again returns the message already stored instead of creating another, so a send whose
+ * response was lost can be retried safely.
+ */
 @Serializable
-data class SendMessageRequest(val body: String)
+data class SendMessageRequest(val body: String, val clientId: String? = null)
 
 /** Frames pushed by the server over the /ws websocket (JSON text frames, polymorphic on "type"). */
 @Serializable
@@ -299,7 +306,7 @@ sealed class ChatEvent {
 sealed class ChatCommand {
     @Serializable
     @kotlinx.serialization.SerialName("send")
-    data class Send(val conversationId: String, val body: String) : ChatCommand()
+    data class Send(val conversationId: String, val body: String, val clientId: String? = null) : ChatCommand()
 
     @Serializable
     @kotlinx.serialization.SerialName("read")

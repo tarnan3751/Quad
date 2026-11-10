@@ -82,7 +82,7 @@ fun Route.chatRoutes(deps: AppDeps, hub: ChatHub = InProcessChatHub()) {
                 post("messages") {
                     val id = call.parameters["id"].asUuid("Conversation")
                     val req = call.receiveBody<SendMessageRequest>()
-                    call.respond(service.send(call.user, id, req.body))
+                    call.respond(service.send(call.user, id, req.body, req.clientId))
                 }
                 post("read") {
                     service.markRead(call.user, call.parameters["id"].asUuid("Conversation"))
@@ -177,7 +177,7 @@ fun Route.chatRoutes(deps: AppDeps, hub: ChatHub = InProcessChatHub()) {
                 }
                 try {
                     when (command) {
-                        is ChatCommand.Send -> service.send(current, command.conversationId.asUuid("Conversation"), command.body)
+                        is ChatCommand.Send -> service.send(current, command.conversationId.asUuid("Conversation"), command.body, command.clientId)
                         is ChatCommand.MarkRead -> service.markRead(current, command.conversationId.asUuid("Conversation"))
                         ChatCommand.Ping -> {}
                     }

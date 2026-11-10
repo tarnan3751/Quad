@@ -20,7 +20,9 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -66,6 +68,7 @@ import org.koin.compose.viewmodel.koinViewModel
 fun InboxScreen(nav: NavController) {
     val vm = koinViewModel<InboxViewModel>()
     val connection by vm.connection.collectAsStateWithLifecycle()
+    val notSent by vm.notSent.collectAsStateWithLifecycle()
     val times = rememberTimeFormat()
     OnResume(vm, vm::onResume)
 
@@ -94,6 +97,7 @@ fun InboxScreen(nav: NavController) {
                 ConversationRow(
                     conversation,
                     stamp = times.inboxStamp(conversation.activityAt),
+                    notSent = notSent[conversation.id]?.body,
                     onClick = {
                         vm.onOpen(conversation.id)
                         nav.navigate(ConversationRoute(conversation.id))
@@ -105,8 +109,9 @@ fun InboxScreen(nav: NavController) {
     }
 }
 
+/** [notSent]: the text of a message of mine that failed to send and still waits in the conversation. */
 @Composable
-private fun ConversationRow(conversation: Conversation, stamp: String, onClick: () -> Unit) {
+private fun ConversationRow(conversation: Conversation, stamp: String, notSent: String? = null, onClick: () -> Unit) {
     val unread = conversation.unreadCount > 0
     val other = conversation.otherUser
     val scheme = MaterialTheme.colorScheme
@@ -118,7 +123,9 @@ private fun ConversationRow(conversation: Conversation, stamp: String, onClick: 
         if (other.blockedByMe) append(", blocked")
         append(", ").append(conversation.listing.title)
         if (conversation.listing.status != ListingStatus.ACTIVE) append(", ").append(conversation.listing.status.label)
-        append(". ").append(preview ?: "No messages yet").append(", ").append(stamp)
+        append(". ")
+        if (notSent != null) append("Not sent: ").append(ChatFormat.preview(notSent)) else append(preview ?: "No messages yet")
+        append(", ").append(stamp)
         if (unread) append(if (conversation.unreadCount == 1) ", 1 unread message" else ", ${conversation.unreadCount} unread messages")
     }
     Row(
@@ -192,16 +199,30 @@ private fun ConversationRow(conversation: Conversation, stamp: String, onClick: 
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    preview ?: "No messages yet",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = if (unread) FontWeight.SemiBold else FontWeight.Normal,
-                    fontStyle = if (preview == null) FontStyle.Italic else FontStyle.Normal,
-                    color = if (unread) scheme.onSurface else scheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
+                if (notSent != null) {
+                    Icon(Icons.Filled.Warning, contentDescription = null, modifier = Modifier.size(14.dp), tint = scheme.error)
+                    Spacer(Modifier.width(Spacing.xs))
+                    Text(
+                        "Not sent: " + ChatFormat.preview(notSent),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = scheme.error,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                } else {
+                    Text(
+                        preview ?: "No messages yet",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = if (unread) FontWeight.SemiBold else FontWeight.Normal,
+                        fontStyle = if (preview == null) FontStyle.Italic else FontStyle.Normal,
+                        color = if (unread) scheme.onSurface else scheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
                 if (unread) {
                     Spacer(Modifier.width(Spacing.sm))
                     UnreadCount(conversation.unreadCount)

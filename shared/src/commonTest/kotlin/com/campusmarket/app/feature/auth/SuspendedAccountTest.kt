@@ -31,7 +31,7 @@ class SuspendedAccountTest {
     fun deletionAsksForThePasswordAgainThenConfirmsTwice() = withMainDispatcher {
         runTest {
             val h = Harness(initial = null) { respondJson(OkResponse.serializer(), OkResponse()) }
-            val vm = DeleteSuspendedAccountViewModel(h.api)
+            val vm = DeleteSuspendedAccountViewModel(h.api, SessionManager(h.api, h.tokens, backgroundScope))
             vm.prepare("ada@uni.edu")
             assertEquals(DeleteAccountStep.Info, vm.state.value.step)
             assertEquals("ada@uni.edu", vm.state.value.email, "prefilled")
@@ -61,7 +61,7 @@ class SuspendedAccountTest {
     fun wrongCredentialsGoBackToThePasswordStep() = withMainDispatcher {
         runTest {
             val h = Harness(initial = null) { respondError(HttpStatusCode.Unauthorized, ErrorCodes.INVALID_CREDENTIALS, "Incorrect email or password") }
-            val vm = DeleteSuspendedAccountViewModel(h.api)
+            val vm = DeleteSuspendedAccountViewModel(h.api, SessionManager(h.api, h.tokens, backgroundScope))
             vm.prepare(null)
             vm.startDeletion()
             vm.onEmail("not-an-email")
@@ -82,7 +82,7 @@ class SuspendedAccountTest {
             val h = Harness(initial = null) {
                 respondError(HttpStatusCode.Conflict, ErrorCodes.CONFLICT, "You have orders in progress. Complete or cancel them before deleting your account.")
             }
-            val vm = DeleteSuspendedAccountViewModel(h.api)
+            val vm = DeleteSuspendedAccountViewModel(h.api, SessionManager(h.api, h.tokens, backgroundScope))
             vm.prepare("ada@uni.edu")
             vm.startDeletion()
             vm.onPassword("pw")
@@ -112,7 +112,7 @@ class SuspendedAccountTest {
             assertEquals(ErrorCodes.ACCOUNT_SUSPENDED, h.api.sessionEndReason.value?.code)
             assertEquals(testUser.email, h.api.sessionEndEmail)
 
-            val vm = DeleteSuspendedAccountViewModel(h.api)
+            val vm = DeleteSuspendedAccountViewModel(h.api, SessionManager(h.api, h.tokens, backgroundScope))
             vm.prepare(h.api.sessionEndEmail)
             vm.startDeletion()
             vm.onPassword("pw")

@@ -8,15 +8,21 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -38,6 +44,7 @@ import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -96,48 +103,83 @@ fun WelcomeScreen(nav: NavController) {
     val baseUrl by server.baseUrl.collectAsStateWithLifecycle()
     var showServer by remember { mutableStateOf(false) }
 
-    // The hero's sky is amber at the top in both themes, so the status-bar icons over it are dark.
-    StatusBarIcons(darkIcons = true)
+    val actions: @Composable ColumnScope.() -> Unit = {
+        signOutReason?.let { SignOutNotice(it, Modifier.widthIn(max = FormMaxWidth).fillMaxWidth()) }
+        PrimaryButton(
+            "Create account",
+            onClick = { nav.navigate(RegisterRoute) },
+            modifier = Modifier.widthIn(max = FormMaxWidth).fillMaxWidth(),
+        )
+        SecondaryButton(
+            "Sign in",
+            onClick = { nav.navigate(LoginRoute()) },
+            modifier = Modifier.widthIn(max = FormMaxWidth).fillMaxWidth(),
+        )
+        Text(
+            "Only verified campus (.edu) emails can join.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+        // Debug builds only (release ignores overrides): which server this build talks to, and a way to change it.
+        if (server.canOverride) {
+            TextButton(
+                onClick = { showServer = true },
+                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant),
+            ) {
+                Text("Dev server · ${baseUrl.substringAfter("://")}", style = MaterialTheme.typography.labelSmall)
+            }
+        }
+    }
+    // The hero's colour runs to the screen edge, under a display cutout or a side navigation bar; what's on it stays clear.
+    val sides = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)
     // Fills the screen, but scrolls on short ones (landscape, large text, a sign-out notice) instead of squashing.
     BoxWithConstraints(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        // On a short screen the hero gets a fixed, smaller size and the page scrolls; otherwise it takes what's left.
-        val compact = maxHeight < 600.dp
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).heightIn(min = maxHeight)) {
-            WelcomeHero(compact, Modifier.fillMaxWidth().then(if (compact) Modifier.height(280.dp) else Modifier.weight(1f)))
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .padding(start = Spacing.xl, end = Spacing.xl, top = Spacing.xl, bottom = Spacing.lg),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(Spacing.md),
-            ) {
-                signOutReason?.let { SignOutNotice(it, Modifier.fillMaxWidth().widthIn(max = FormMaxWidth)) }
-                PrimaryButton(
-                    "Create account",
-                    onClick = { nav.navigate(RegisterRoute) },
-                    modifier = Modifier.fillMaxWidth().widthIn(max = FormMaxWidth),
+        if (maxHeight < 480.dp && maxWidth > maxHeight) {
+            // A phone in landscape: the hero beside the buttons instead of pushing them off the screen. It starts
+            // below the status bar, whose other half is over the plain background.
+            Row(Modifier.fillMaxSize().statusBarsPadding()) {
+                WelcomeHero(
+                    compact = true,
+                    shape = RoundedCornerShape(topEnd = 36.dp, bottomEnd = 36.dp),
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                    contentModifier = Modifier.windowInsetsPadding(sides.only(WindowInsetsSides.Start)).navigationBarsPadding(),
                 )
-                SecondaryButton(
-                    "Sign in",
-                    onClick = { nav.navigate(LoginRoute()) },
-                    modifier = Modifier.fillMaxWidth().widthIn(max = FormMaxWidth),
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .verticalScroll(rememberScrollState())
+                        .windowInsetsPadding(sides.only(WindowInsetsSides.End))
+                        .navigationBarsPadding()
+                        .padding(horizontal = Spacing.xl, vertical = Spacing.lg),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(Spacing.md, Alignment.CenterVertically),
+                    content = actions,
                 )
-                Text(
-                    "Only verified campus (.edu) emails can join.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
+            }
+        } else {
+            // The hero's sky is amber at the top in both themes, so the status-bar icons over it are dark.
+            StatusBarIcons(darkIcons = true)
+            // On a short screen the hero gets a fixed, smaller size and the page scrolls; otherwise it takes what's left.
+            val compact = maxHeight < 600.dp
+            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).heightIn(min = maxHeight)) {
+                WelcomeHero(
+                    compact = compact,
+                    shape = RoundedCornerShape(bottomStart = 36.dp, bottomEnd = 36.dp),
+                    modifier = Modifier.fillMaxWidth().then(if (compact) Modifier.height(280.dp) else Modifier.weight(1f)),
+                    contentModifier = Modifier.statusBarsPadding().windowInsetsPadding(sides),
                 )
-                // Debug builds only (release ignores overrides): which server this build talks to, and a way to change it.
-                if (server.canOverride) {
-                    TextButton(
-                        onClick = { showServer = true },
-                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant),
-                    ) {
-                        Text("Dev server · ${baseUrl.substringAfter("://")}", style = MaterialTheme.typography.labelSmall)
-                    }
-                }
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .windowInsetsPadding(sides)
+                        .navigationBarsPadding()
+                        .padding(start = Spacing.xl, end = Spacing.xl, top = Spacing.xl, bottom = Spacing.lg),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(Spacing.md),
+                    content = actions,
+                )
             }
         }
     }
@@ -149,11 +191,11 @@ fun WelcomeScreen(nav: NavController) {
  * darker half of the gradient).
  */
 @Composable
-private fun WelcomeHero(compact: Boolean, modifier: Modifier) {
+private fun WelcomeHero(compact: Boolean, shape: Shape, modifier: Modifier, contentModifier: Modifier) {
     Column(
         modifier
-            .background(CampusTheme.heroGradient, RoundedCornerShape(bottomStart = 36.dp, bottomEnd = 36.dp))
-            .statusBarsPadding()
+            .background(CampusTheme.heroGradient, shape)
+            .then(contentModifier)
             .padding(horizontal = Spacing.xl, vertical = if (compact) Spacing.lg else Spacing.xl),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -364,13 +406,17 @@ fun LoginScreen(route: LoginRoute, nav: NavController) {
  */
 @Composable
 private fun AuthFormScaffold(onBack: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
-    Scaffold(topBar = { AppTopBar("", onBack = onBack) }) { padding ->
+    val sides = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)
+    Scaffold(
+        topBar = { AppTopBar("", onBack = onBack) },
+        modifier = Modifier.background(MaterialTheme.colorScheme.background).windowInsetsPadding(sides),
+    ) { padding ->
         FormColumn(
             Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Column(
-                Modifier.fillMaxWidth().widthIn(max = FormMaxWidth).padding(start = Spacing.xl, end = Spacing.xl, bottom = Spacing.xl),
+                Modifier.widthIn(max = FormMaxWidth).fillMaxWidth().padding(start = Spacing.xl, end = Spacing.xl, bottom = Spacing.xl),
                 verticalArrangement = Arrangement.spacedBy(Spacing.md),
             ) {
                 QuadAppIcon(size = 48.dp, modifier = Modifier.padding(bottom = Spacing.sm))

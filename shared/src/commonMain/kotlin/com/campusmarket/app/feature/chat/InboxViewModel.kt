@@ -14,9 +14,11 @@ import com.campusmarket.core.Conversation
 import com.campusmarket.core.Limits
 import com.campusmarket.core.Message
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /**
@@ -33,11 +35,20 @@ class InboxViewModel(
     private val session: SessionManager,
     private val userMessages: UserMessages,
     private val unread: UnreadConversations? = null,
+    outbox: ChatOutbox = ChatOutbox(),
 ) : ViewModel() {
 
-    val conversations = Paginator(viewModelScope, key = { it.id }) { cursor, limit -> api.conversations(cursor, limit) }
+    val conversations = Paginator(viewModelScope, messages = userMessages, key = { it.id }) { cursor, limit -> api.conversations(cursor, limit) }
 
     val connection: StateFlow<ChatSocket.Status> = live.status
+
+    /**
+     * Conversations with messages of mine that didn't go out, by id: the newest such message. They wait in the
+     * conversation for Retry or Delete, and the row says so until then.
+     */
+    val notSent: StateFlow<Map<String, PendingMessage>> = outbox.entries(session.currentUser?.id.orEmpty())
+        .map { entries -> entries.mapNotNull { (id, entry) -> entry.notSent.lastOrNull()?.let { id to it } }.toMap() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
     private val myId: String? get() = session.currentUser?.id
     private val seenMessageIds = LinkedHashSet<String>()
@@ -45,7 +56,6 @@ class InboxViewModel(
     private val resumes = ResumeGate()
 
     init {
-        conversations.onRefreshError = userMessages::showError
         conversations.refresh()
         viewModelScope.launch { live.events.collect(::onEvent) }
         viewModelScope.launch { live.syncWhileDown(pollWhileConnecting = true, onReconnected = ::catchUp, poll = ::syncFirstPage) }

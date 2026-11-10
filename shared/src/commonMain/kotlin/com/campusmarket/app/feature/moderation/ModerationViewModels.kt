@@ -34,7 +34,7 @@ class ModerationQueueViewModel(private val api: ApiClient, messages: UserMessage
     private val _type = MutableStateFlow<ReportTargetType?>(null)
     val type: StateFlow<ReportTargetType?> = _type.asStateFlow()
 
-    val reports = Paginator<Report>(viewModelScope, key = { it.id }) { cursor, limit -> fetch(cursor, limit) }
+    val reports = Paginator<Report>(viewModelScope, messages = messages, key = { it.id }) { cursor, limit -> fetch(cursor, limit) }
 
     /** Skips pages with nothing of the wanted type, so a filter never shows "empty" while more reports exist. */
     private suspend fun fetch(cursor: String?, limit: Int): Page<Report> {
@@ -56,10 +56,6 @@ class ModerationQueueViewModel(private val api: ApiClient, messages: UserMessage
     }
 
     private val resumes = ResumeGate()
-
-    init {
-        reports.onRefreshError = messages::showError
-    }
 
     /** Screen resumed: the first time is the initial load; later (back from a report detail) refresh the list. */
     fun onResume() {
@@ -182,11 +178,7 @@ fun canRestoreListing(status: ListingStatus) = status == ListingStatus.REMOVED
 // ---------------------------------------------------------------------------------------------------- log
 
 class ModerationLogViewModel(private val api: ApiClient, messages: UserMessages) : ViewModel() {
-    val entries = Paginator<ModerationLogEntry>(viewModelScope, key = { it.id }) { cursor, limit ->
+    val entries = Paginator<ModerationLogEntry>(viewModelScope, messages = messages, key = { it.id }) { cursor, limit ->
         api.moderationLog(cursor, limit)
-    }
-
-    init {
-        entries.onRefreshError = messages::showError
     }
 }

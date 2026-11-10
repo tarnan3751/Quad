@@ -11,7 +11,9 @@ import io.ktor.client.engine.mock.toByteArray
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -19,6 +21,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class ApiClientAuthTest {
 
     @Test
@@ -62,10 +65,11 @@ class ApiClientAuthTest {
 
     @Test
     fun concurrentUnauthorizedCallsShareOneRefresh() = runTest {
+        val refreshMayAnswer = CompletableDeferred<Unit>()
         val h = Harness { req ->
             when (req.url.encodedPath) {
                 ApiRoutes.REFRESH -> {
-                    delay(50) // keep the refresh in flight while the other callers hit 401
+                    refreshMayAnswer.await() // keep the refresh in flight while the other callers hit 401
                     respondJson(AuthResponse.serializer(), authResponse("access-2", "refresh-2"))
                 }
                 else ->
@@ -74,7 +78,10 @@ class ApiClientAuthTest {
             }
         }
 
-        val results = (1..5).map { async { h.api.me() } }.awaitAll()
+        val calls = (1..5).map { async { h.api.me() } }
+        runCurrent() // all five got their 401 and wait for the one refresh
+        refreshMayAnswer.complete(Unit)
+        val results = calls.awaitAll()
 
         assertEquals(5, results.size)
         assertEquals(1, h.requestsTo(ApiRoutes.REFRESH).size, "refresh must be single-flight")

@@ -30,6 +30,7 @@ import com.campusmarket.server.update
 import com.campusmarket.server.uuid
 import com.campusmarket.server.withoutControlChars
 import java.sql.Connection
+import java.sql.ResultSet
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.UUID
@@ -69,13 +70,41 @@ internal class ChatService(private val deps: AppDeps, private val hub: ChatHub) 
         return body
     }
 
+    private val clientIdPattern = Regex("[A-Za-z0-9_-]{1,${Limits.MESSAGE_CLIENT_ID_MAX}}")
+
+    private fun normalizeClientId(raw: String?): String? {
+        if (raw == null) return null
+        if (!clientIdPattern.matches(raw)) {
+            invalidField("clientId", "Use 1 to ${Limits.MESSAGE_CLIENT_ID_MAX} letters, digits, hyphens or underscores")
+        }
+        return raw
+    }
+
+    private fun ResultSet.message() = Message(
+        uuid("id").toString(), uuid("conversation_id").toString(), uuid("sender_id").toString(), getString("body"),
+        millis("created_at"), getString("client_id"),
+    )
+
+    /** The message [senderId] already sent with [clientId], if any. One sender never uses an id for two conversations. */
+    private fun Connection.messageByClientId(p: Participation, senderId: UUID, clientId: String): Message? {
+        val existing = queryOne(
+            "SELECT id, conversation_id, sender_id, body, created_at, client_id FROM messages WHERE sender_id = ? AND client_id = ?",
+            senderId, clientId,
+        ) { it.message() } ?: return null
+        if (existing.conversationId != p.id.toString()) invalidField("clientId", "This id was already used for another message")
+        return existing
+    }
+
     private fun preview(body: String): String {
         val flat = body.replace(Regex("\\s+"), " ")
         return if (flat.length <= PREVIEW_MAX) flat else flat.take(PREVIEW_MAX - 1).trimEnd() + "…"
     }
 
-    /** Inserts a message, enforcing block and availability rules, and updates the conversation summary + sender read mark. */
-    private fun Connection.insertMessage(p: Participation, senderId: UUID, body: String): Message {
+    /**
+     * Inserts a message, enforcing block and availability rules, and updates the conversation summary + sender read mark.
+     * Returns null when a concurrent send with the same [clientId] won the insert (it has committed by then).
+     */
+    private fun Connection.insertMessage(p: Participation, senderId: UUID, body: String, clientId: String? = null): Message? {
         val other = p.other(senderId)
         val (blocked, otherGone) = queryOne(
             """SELECT EXISTS (SELECT 1 FROM blocks WHERE (blocker_id = ? AND blocked_id = ?) OR (blocker_id = ? AND blocked_id = ?)),
@@ -86,7 +115,12 @@ internal class ChatService(private val deps: AppDeps, private val hub: ChatHub) 
         if (otherGone) conflict("This user is no longer available")
         val id = UUID.randomUUID()
         val at = now()
-        update("INSERT INTO messages (id, conversation_id, sender_id, body, created_at) VALUES (?, ?, ?, ?, ?)", id, p.id, senderId, body, at)
+        val inserted = update(
+            """INSERT INTO messages (id, conversation_id, sender_id, body, created_at, client_id) VALUES (?, ?, ?, ?, ?, ?)
+               ON CONFLICT (sender_id, client_id) WHERE client_id IS NOT NULL DO NOTHING""",
+            id, p.id, senderId, body, at, clientId,
+        )
+        if (inserted == 0) return null
         // The preview follows the newest message (a concurrent send may have committed a later one); the sender has read it.
         val readCol = p.readColumn(senderId)
         update(
@@ -95,7 +129,7 @@ internal class ChatService(private val deps: AppDeps, private val hub: ChatHub) 
                WHERE id = ?""",
             at, preview(body), at, at, p.id,
         )
-        return Message(id.toString(), p.id.toString(), senderId.toString(), body, at.toEpochMilli())
+        return Message(id.toString(), p.id.toString(), senderId.toString(), body, at.toEpochMilli(), clientId)
     }
 
     // ---------- operations ----------
@@ -147,12 +181,9 @@ internal class ChatService(private val deps: AppDeps, private val hub: ChatHub) 
 
     suspend fun messages(user: UserPrincipal, id: UUID, page: PageParams): Page<Message> = db.tx { c ->
         c.requireParticipation(user, id)
-        val sql = Sql("SELECT id, created_at, conversation_id, sender_id, body FROM messages WHERE conversation_id = ?", id)
+        val sql = Sql("SELECT id, created_at, conversation_id, sender_id, body, client_id FROM messages WHERE conversation_id = ?", id)
             .keysetPage("created_at", "id", KeysetCursor.decode(page.cursor), page.limit)
-        val rows = c.page(sql, page.limit, { it.second }) {
-            Message(it.uuid("id").toString(), it.uuid("conversation_id").toString(), it.uuid("sender_id").toString(), it.getString("body"), it.millis("created_at")) to
-                it.keyset()
-        }
+        val rows = c.page(sql, page.limit, { it.second }) { it.message() to it.keyset() }
         Page(rows.items.map { it.first }, rows.nextCursor)
     }
 
@@ -160,14 +191,23 @@ internal class ChatService(private val deps: AppDeps, private val hub: ChatHub) 
     private fun throttleMessage(user: UserPrincipal) =
         deps.throttle.acquire(UserThrottle.Action.MESSAGE, user.id, "You're sending messages too fast. Wait a moment and try again.")
 
-    suspend fun send(user: UserPrincipal, conversationId: UUID, rawBody: String): Message {
+    /**
+     * Sends a message. With a [rawClientId] the send is idempotent per (sender, client id): a repeat (a retry after a
+     * lost response, over REST or the websocket) returns the stored message and neither creates nor publishes another.
+     */
+    suspend fun send(user: UserPrincipal, conversationId: UUID, rawBody: String, rawClientId: String? = null): Message {
         val body = normalizeBody(rawBody, "body")
-        throttleMessage(user)
+        val clientId = normalizeClientId(rawClientId)
         val (message, participants) = db.tx { c ->
             val p = c.requireParticipation(user, conversationId)
-            c.insertMessage(p, user.id, body) to p.both
+            // A repeat costs nothing from the message budget and still succeeds if the two have blocked each other since.
+            val existing = clientId?.let { c.messageByClientId(p, user.id, it) }
+            if (existing != null) return@tx existing to null
+            throttleMessage(user)
+            val created = c.insertMessage(p, user.id, body, clientId)
+            if (created != null) created to p.both else c.messageByClientId(p, user.id, clientId!!)!! to null
         }
-        hub.publish(participants, ChatEvent.MessageCreated(message))
+        if (participants != null) hub.publish(participants, ChatEvent.MessageCreated(message))
         return message
     }
 

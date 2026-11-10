@@ -19,5 +19,5 @@ val authModule = module {
     viewModel { RegisterViewModel(session = get(), pending = get()) }
     viewModel { params -> VerifyEmailViewModel(route = params.get(), session = get(), pending = get()) }
     viewModel { params -> LoginViewModel(route = params.get(), session = get(), pending = get()) }
-    viewModel { DeleteSuspendedAccountViewModel(api = get()) }
+    viewModel { DeleteSuspendedAccountViewModel(api = get(), session = get()) }
 }

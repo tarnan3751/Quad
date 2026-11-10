@@ -4,12 +4,14 @@ import com.campusmarket.app.data.ApiClient
 import com.campusmarket.app.data.ChatSocket
 import com.campusmarket.app.data.ServerConfig
 import com.campusmarket.app.data.SessionManager
+import com.campusmarket.app.data.SignOutListener
 import com.campusmarket.app.data.SecretStorage
 import com.campusmarket.app.data.SecureTokenStore
 import com.campusmarket.app.data.TokenStore
 import com.campusmarket.app.data.installCampusMarketDefaults
 import com.campusmarket.app.feature.auth.authModule
 import com.campusmarket.app.feature.browse.browseModule
+import com.campusmarket.app.feature.chat.ChatOutbox
 import com.campusmarket.app.feature.chat.chatModule
 import com.campusmarket.app.feature.listing.listingModule
 import com.campusmarket.app.feature.moderation.moderationModule
@@ -36,6 +38,12 @@ import org.koin.mp.KoinPlatformTools
 /** Qualifier for the process-lifetime [CoroutineScope] (`get(AppScope)`). */
 val AppScope = named("appScope")
 
+/**
+ * Qualifier for the platform [SecretStorage] that holds the chat outbox (unsent messages and drafts): the same
+ * protection as the session, in its own slot.
+ */
+val OutboxSecrets = named("chatOutboxSecrets")
+
 /** Core singletons shared by every feature. Owned by the client foundation; features add their own modules. */
 fun coreModule(environment: AppEnvironment): Module = module {
     single { environment }
@@ -54,7 +62,7 @@ fun coreModule(environment: AppEnvironment): Module = module {
     }
     single<HttpClient> { createPlatformHttpClient { installCampusMarketDefaults(debugLogging = environment.isDebug) } }
     single { ApiClient(get(), get(), get()) }
-    single { SessionManager(get(), get(), get(AppScope)) }
+    single { SessionManager(get(), get(), get(AppScope), signOutListeners = { getKoin().getAll<SignOutListener>() }) }
     single { ChatSocket(get(), get(), get(), get(), get(AppScope), getOrNull<NetworkMonitor>()?.available() ?: emptyFlow()) }
     single { UserMessages() }
     single { ExternalLinks(get(), get()) }
@@ -84,6 +92,7 @@ fun initKoin(environment: AppEnvironment, platformModule: Module) {
         runCatching {
             koin.get<SessionManager>()
             koin.get<ChatSocket>()
+            koin.get<ChatOutbox>() // decrypts the stored outbox
         }
     }
 }

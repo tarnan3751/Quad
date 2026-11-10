@@ -21,6 +21,8 @@ import com.campusmarket.core.ErrorCodes
 import com.campusmarket.core.Limits
 import com.campusmarket.core.Message
 import kotlin.time.Clock
+import kotlin.uuid.ExperimentalUuidApi
+import kotlin.uuid.Uuid
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -34,6 +36,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.serialization.Serializable
 
 // ---------------------------------------------------------------------------------------------------- state
 
@@ -49,16 +52,19 @@ enum class SendRestriction {
     UserUnavailable,
 }
 
+@Serializable
 enum class Delivery { Sent, Sending, Failed }
 
 /** A message I sent that the server hasn't confirmed yet (or rejected). */
+@Serializable
 data class PendingMessage(
+    /** Made up here and sent as the message's `clientId`, so the server stores it once however often it is retried. */
     val localId: String,
     val body: String,
     val createdAt: Long,
     val delivery: Delivery = Delivery.Sending,
     val error: String? = null,
-    /** The send was cut off (I left the chat while it was sending), so the server may have the message after all. */
+    /** The send was cut off (I left the chat or the app died while it was sending), so the server may have it after all. */
     val unconfirmed: Boolean = false,
 )
 
@@ -108,8 +114,10 @@ enum class Receipt { Sent, Seen }
  * - History: [history] pages `GET /conversations/{id}/messages` (newest first) backwards in time.
  * - Live: `MessageCreated` events for this conversation are merged by id (the server also echoes my own REST sends),
  *   `ConversationRead` from the other person drives the "Seen" receipt.
- * - Sending: REST with an optimistic bubble; failures stay in the list as "Not sent" with retry / discard. The draft
- *   and unsent messages live in the [ChatOutbox], so they are still here after leaving the conversation and coming back.
+ * - Sending: REST with an optimistic bubble; failures stay in the list as "Not sent" with retry / discard. Each message
+ *   carries a client id, so a retry of one the server did receive (the response was lost) returns that message
+ *   instead of sending it twice, and a server message with a pending bubble's id retires the bubble. The draft and
+ *   unsent messages live in the [ChatOutbox], so they are still here after leaving the conversation or restarting the app.
  *   `BLOCKED` and deleted-user errors disable the composer with an explanation ([ConversationUiState.restriction]).
  * - Read: marked read when the screen becomes visible and on every new incoming message while visible.
  * - Fallback: while the socket is down the newest page is re-fetched every [CHAT_POLL_INTERVAL_MS], and once on reconnect.
@@ -123,6 +131,7 @@ class ConversationViewModel(
     private val unread: UnreadConversations? = null,
     private val outbox: ChatOutbox = ChatOutbox(),
     private val nowMillis: () -> Long = { Clock.System.now().toEpochMilliseconds() },
+    private val newClientId: () -> String = ::newMessageClientId,
 ) : ViewModel() {
 
     val conversationId: String = route.conversationId
@@ -139,10 +148,7 @@ class ConversationViewModel(
         outbox.load(myId, conversationId).let { saved ->
             ConversationUiState(
                 draft = saved.draft,
-                // A send that was still running when the chat was left was cancelled with it.
-                pending = saved.pending.map {
-                    if (it.delivery == Delivery.Sending) it.copy(delivery = Delivery.Failed, error = "Not sent", unconfirmed = true) else it
-                },
+                pending = saved.pending.map { it.interrupted() },
             )
         },
     )
@@ -157,7 +163,6 @@ class ConversationViewModel(
 
     /** Messages that arrived live or from my sends, re-merged after a (re)load replaces the list. */
     private val liveMessages = LinkedHashMap<String, Message>()
-    private var localCounter = 0
     private var visible = false
     private var lastIncomingAt = 0L
     private var markedUpTo = NEVER
@@ -181,19 +186,25 @@ class ConversationViewModel(
     }
 
     override fun onCleared() {
-        saveUnsent(_state.value)
+        // A send still running is cancelled with this view model.
+        outbox.save(myId, conversationId, _state.value.draft, _state.value.pending.map { it.interrupted() })
     }
 
     private fun saveUnsent(s: ConversationUiState) = outbox.save(myId, conversationId, s.draft, s.pending)
 
-    /** An interrupted send that did reach the server is in the history now: drop its "Not sent" copy. */
+    /**
+     * A pending message the server has after all (its client id is in the history) is dropped. A server that doesn't
+     * return client ids is matched by text and time instead, for interrupted sends only.
+     */
     private fun dropDeliveredPending() {
-        if (_state.value.pending.none { it.unconfirmed }) return
+        if (_state.value.pending.isEmpty()) return
         val mine = history.state.value.items.filter { it.senderId == myId }
+        val delivered = mine.mapNotNullTo(HashSet()) { it.clientId }
         _state.update { s ->
             s.copy(
                 pending = s.pending.filterNot { p ->
-                    p.unconfirmed && mine.any { it.body == p.body && it.createdAt >= p.createdAt - CLOCK_SKEW_MS }
+                    p.localId in delivered ||
+                        (p.unconfirmed && mine.any { it.clientId == null && it.body == p.body && it.createdAt >= p.createdAt - CLOCK_SKEW_MS })
                 },
             )
         }
@@ -273,7 +284,7 @@ class ConversationViewModel(
             _state.update { it.copy(draftError = error) }
             return
         }
-        val pending = PendingMessage(localId = "local-${nowMillis()}-${localCounter++}", body = body, createdAt = nowMillis())
+        val pending = PendingMessage(localId = newClientId(), body = body, createdAt = nowMillis())
         _state.update { it.copy(draft = "", draftError = null, pending = it.pending + pending) }
         deliver(pending)
     }
@@ -293,7 +304,7 @@ class ConversationViewModel(
     private fun deliver(p: PendingMessage) {
         viewModelScope.launch {
             try {
-                val sent = api.sendMessage(conversationId, p.body)
+                val sent = api.sendMessage(conversationId, p.body, clientId = p.localId)
                 discard(p.localId)
                 addMessages(listOf(sent))
             } catch (e: CancellationException) {
@@ -342,8 +353,8 @@ class ConversationViewModel(
     }
 
     private fun onLiveMessage(message: Message) {
-        if (message.senderId == myId) {
-            // Echo of my own REST send (often before the REST response): retire the matching optimistic bubble.
+        if (message.senderId == myId && message.clientId == null) {
+            // Echo of my own REST send from a server without client ids: retire the optimistic bubble with that text.
             _state.update { s ->
                 val match = s.pending.firstOrNull { it.delivery == Delivery.Sending && it.body == message.body }
                 if (match == null) s else s.copy(pending = s.pending - match)
@@ -356,6 +367,10 @@ class ConversationViewModel(
     private fun addMessages(messages: List<Message>) {
         if (messages.isEmpty()) return
         messages.forEach { rememberLive(it) }
+        // My own message coming back (the socket's echo, often before the REST response, or a sync after a send whose
+        // response was lost): its bubble is no longer pending.
+        val delivered = messages.mapNotNullTo(HashSet()) { m -> m.clientId?.takeIf { m.senderId == myId } }
+        if (delivered.isNotEmpty()) _state.update { s -> s.copy(pending = s.pending.filterNot { it.localId in delivered }) }
         history.update { current -> mergeNewestFirst(current, messages) }
         val incoming = messages.filter { it.senderId != myId }
         val newestIncoming = incoming.maxOfOrNull { it.createdAt }
@@ -410,6 +425,10 @@ class ConversationViewModel(
 }
 
 // ---------------------------------------------------------------------------------------------------- pure helpers
+
+/** A fresh id for one message (`SendMessageRequest.clientId`). */
+@OptIn(ExperimentalUuidApi::class)
+internal fun newMessageClientId(): String = Uuid.random().toString()
 
 /** Merges [incoming] into a newest-first list, dropping ids already present. Order: createdAt desc, id desc (server order). */
 internal fun mergeNewestFirst(current: List<Message>, incoming: Collection<Message>): List<Message> {
