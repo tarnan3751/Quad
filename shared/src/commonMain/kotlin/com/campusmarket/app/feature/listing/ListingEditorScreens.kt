@@ -111,8 +111,10 @@ fun SellScreen(nav: NavController) {
             nav.navigate(ListingDetailRoute(event.listingId))
         }
     }
-    // Back on the Sell tab leaves it (and its form) for good: ask first if there's something to lose.
-    BackHandler(enabled = vm.hasUnsavedChanges) { confirmLeave = true }
+    // Back on the Sell tab leaves it (and its form) for good: ask first if there's something to lose. Keyed on the
+    // form so this scope re-reads it: hasUnsavedChanges alone isn't observable state, and the guard stayed off.
+    val unsaved = remember(form) { vm.hasUnsavedChanges }
+    BackHandler(enabled = unsaved) { confirmLeave = true }
 
     Scaffold(
         topBar = {
