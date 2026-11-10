@@ -6,10 +6,10 @@ Read `docs/CONTRACT.md` first: endpoints, wire types (`core/`) and the product s
 ## TL;DR for feature engineers
 
 1. Find your package in the ownership table below. Edit only files in it.
-2. Your destinations are already defined (`XxxRoutes.kt`) and registered (`XxxGraph.kt`), each with a placeholder screen in the file where you'll build it. Replace the `PlaceholderScreen(...)` call with the real UI.
+2. Your destinations are defined in `XxxRoutes.kt` and registered in `XxxGraph.kt`.
 3. One `ViewModel` per screen. Inject `ApiClient` (and `SessionManager`, `ChatSocket`, `ExternalLinks`, `UserMessages` as needed) through the constructor. Register it in your feature's Koin module, which lives in your `XxxGraph.kt`.
-4. Single objects use `UiState<T>` and `UiStateContent`. Lists use `Paginator` and `PagedLazyColumn`/`PagedLazyGrid`. Forms follow the auth feature (`feature/auth/AuthViewModels.kt`).
-5. Build with components from `ui/components` and the theme in `ui/theme`. Don't hard-code colours.
+4. Single objects use `UiState<T>` and `UiStateContent`. Lists use `Paginator` and `PagedLazyColumn` (`PagedListingGrid` for listing tiles). Forms follow the auth feature (`feature/auth/AuthViewModels.kt`).
+5. Build with components from `ui/components` and the theme in `ui/theme`. Don't hard-code colours. Before writing a row, card, skeleton, dialog, icon or date format, look for it there first; if a second feature needs a piece of yours, move it there rather than copying it.
 6. Verify: `./gradlew :shared:jvmTest :desktopApp:compileKotlin :androidApp:assembleDebug --console=plain`, then click through in `./gradlew :desktopApp:run`.
 
 ## Running
@@ -38,7 +38,8 @@ navigation/AppNavigation.kt  auth gate, bottom bar (TopLevelTab), NavHosts, deep
 ui/theme/Theme.kt          CampusMarketTheme (Quad's "Golden Hour"), CampusTheme.colors / gradients, GoldenHour swatches, Spacing
 ui/components/             reusable components (catalogue below)
 ui/state/                  UiState, load(), EventQueue, Paginator/PagedState, UserMessages
-ui/Format.kt, Labels.kt, Validation.kt   formatting, enum labels, form validation
+ui/TimeFormat.kt           every date and time (12/24-hour clock, "3h ago", "Yesterday", countdowns)
+ui/Format.kt, Labels.kt, Validation.kt   money / rating formatting, enum labels, form validation
 feature/auth/              (foundation) welcome, register, verify, login: the reference implementation
 feature/browse/  feature/listing/        → A
 feature/chat/    feature/orders/         → B
@@ -89,8 +90,9 @@ Composable screen ── koinViewModel() ──▶ ViewModel ──▶ ApiClient
 | Need | Use |
 |---|---|
 | Load one thing (listing, order, profile) | `MutableStateFlow<UiState<T>>(UiState.Loading)` + `load(state) { api.listing(id) }`; render with `UiStateContent(state, onRetry = vm::reload) { … }` (pass `loading = { … }` with a skeleton when the layout is known). Pull-to-refresh: `load(state, keepContent = true) { … }`. Optimistic edits: `state.updateContent { it.copy(favorited = true) }`. |
-| Cursor list (`Page<T>`) | `val items = Paginator(viewModelScope, key = { it.id }) { cursor, limit -> api.xxx(cursor = cursor, limit = limit) }` and render with `PagedLazyColumn(vm.items, key = { it.id }) { … }` / `PagedLazyGrid`. It starts the first load (skeleton rows / listing-card skeletons; override with `loading = { … }`), handles pull-to-refresh, infinite scroll, retry footer and empty state. New query: `reset()`. Local edits: `items.update { list -> … }`. |
+| Cursor list (`Page<T>`) | `val items = Paginator(viewModelScope, key = { it.id }) { cursor, limit -> api.xxx(cursor = cursor, limit = limit) }` and render with `PagedLazyColumn(vm.items, key = { it.id }) { … }` (listing tiles: `PagedListingGrid`). It starts the first load (skeleton rows / tile skeletons; override with `loading = { … }`), handles pull-to-refresh, infinite scroll, retry footer and empty state. New query: `reset()`. Local edits: `items.update { list -> … }`. |
 | Form | Immutable `XxxState(fields…, fieldErrors: Map<String,String>, formError: String?, submitting)`. Validate locally with `Validate.*` + `fieldErrorsOf(...)`, then call the API and map failures with `e.toFormErrors(codeToField)`. Show errors with `AppTextField(error = state.fieldErrors["title"])` and `InlineError(state.formError)`. Flag a field as soon as the user leaves it with `Modifier.onFocusLost(vm::checkTitle)` (skip empty fields). Pass `loading = state.submitting` to the submit button and return early from `submit()` while submitting (double taps). See `feature/auth/AuthViewModels.kt`. |
+| Refresh when the user comes back (from another screen or the browser) | Screen: `OnResume(vm, vm::onResume)`. View model: `private val resumes = ResumeGate()` and `fun onResume() { if (resumes.isReturn()) refresh() }` (the first resume is the initial load, which is already running). |
 | One-off event (navigate after save, open URL) | `val events = EventQueue<MyEvent>()`, `events.send(...)` in the VM, `CollectEvents(vm.events.flow) { … }` in the screen. |
 | Snackbar / toast | Inject `UserMessages`: `messages.show("Listing deleted")`, `messages.show("Removed", "Undo") { … }` or `messages.showError(e)` / `showError("Couldn't save", "Retry") { … }` (errors get an alert icon, stay longer and can be closed). It survives navigation. Keep the text short and plain. On a screen with a pinned bottom bar (action bar, chat composer) put `Modifier.keepSnackbarsAbove()` (`navigation/`) on it so snackbars show above it, not over it. |
 | Inbox tab badge | `UnreadConversations` (Koin single, `feature/chat/`): the shell collects `count` (conversations with unread messages) for the Inbox tab; it follows the chat socket while collected and re-syncs on resume. |
@@ -120,7 +122,7 @@ Auth calls (`register / verifyEmail / resendCode / login / logout`) are used thr
 - It reconnects with backoff (1 s → 30 s). On a policy-violation close it refreshes the token first. `chatSocket.status` exposes `Idle / Connecting / Connected / Reconnecting` for a "Reconnecting…" hint.
 - **Send with REST** (`api.sendMessage`) to get the created `Message` and typed errors (`BLOCKED`). The server echoes it as `MessageCreated` on the socket too, so **de-duplicate by `message.id`**. `chatSocket.markRead(id)` / `api.markConversationRead(id)` mark a conversation read. `chatSocket.reconnectNow()` skips the backoff wait.
 - **Unread total (Inbox tab badge):** `UnreadConversations` (`feature/chat/`, Koin single) exposes `count: StateFlow<Int>`, the number of conversations with unread messages (0 when signed out). Collect it where the badge is drawn: `koinInject<UnreadConversations>().count.collectAsStateWithLifecycle()`. While collected it syncs the first page of `GET /conversations`, follows socket events (polling while the socket is down; collecting keeps the socket open, stopping 5 s after the last collector) and takes what the inbox / conversation screens report, so badge and list agree. `refresh()` re-syncs on demand.
-- **Clock times:** chat, order and moderation screens format times with `rememberTimeFormat()` (`feature/chat/TimeFormat.kt`), which follows the device's 12/24-hour setting (Android `DateFormat.is24HourFormat`, iOS `j` skeleton, desktop locale) and words dates the way people say them ("Yesterday", "Thu, Nov 12 at 9:24 AM", "in 2 days, 4 hours"). On Android the setting is re-read on every resume (it's changed in the Settings app). Don't hand-format clock times. Tests pin it with `LocalUse24HourClock` or construct `TimeFormat(use24h, tz, now)` directly.
+- **Dates and times:** every screen formats them with `rememberTimeFormat()` (`ui/TimeFormat.kt`), which follows the device's 12/24-hour setting (Android `DateFormat.is24HourFormat`, iOS `j` skeleton, desktop locale) and words dates the way people say them ("Yesterday", "Thu, Nov 12 at 9:24 AM", "in 2 days, 4 hours", "3h ago", "Joined Mar 2025"). On Android the setting is re-read on every resume (it's changed in the Settings app). Don't hand-format dates or times. Tests pin it with `LocalUse24HourClock` or construct `TimeFormat(use24h, tz, now)` directly.
 
 ## Navigation
 
@@ -174,47 +176,41 @@ Route args are primitives/strings. Use enum *names* as strings if you need an en
 | `PrimaryButton`, `SecondaryButton`, `DestructiveButton` | 48 dp pill buttons with `loading` spinner + optional icon. Primary = Golden Hour gradient with white label (one per screen: the main call to action); Secondary = ghost pill with a primary-colour ring; Destructive = solid error red |
 | `FilterChip(selected, onClick, label, …)` | Quad's filter chip: Material's `FilterChip` API, import `com.campusmarket.app.ui.components.FilterChip` instead of the Material one. Pill; gradient + white label when selected |
 | `AppTextField` | Outlined field with `error` (field error), `supportingText`, `maxLength` counter, prefix/icons, `contentType` (autofill hint, e.g. `ContentType.PersonFullName`) |
-| `EmailField`, `PasswordField` (eye toggle, `newPassword` for sign-up), `PriceField` ($ prefix, decimal keyboard) | Specialised fields with autofill hints. The keyboard's Next / Done keeps its default (next field / hide keyboard) after your `onImeAction`. Price text ↔ cents via `Format.parsePriceCents` / `Format.priceInput` |
+| `EmailField`, `PasswordField` (eye toggle, `newPassword` for sign-up) | Specialised fields with autofill hints. The keyboard's Next / Done keeps its default (next field / hide keyboard) after your `onImeAction`. Prices: `PriceInput` in `feature/listing`; text ↔ cents via `Format.parsePriceCents` / `Format.priceInput` |
 | `CodeField(value, onValueChange, length)` | One-time code in separate boxes (digits only, number keyboard, one-time-code autofill) |
 | `Modifier.onFocusLost { }` | Run a check when focus leaves a field (inline validation) |
 | `InlineError(message)`, `InfoBanner(message, icon)` | Form-level error banner (alert icon, announced by screen readers); the same banner in neutral colours for notices that aren't failures |
 | `LoadingState`, `ErrorState(ApiError, onRetry)`, `EmptyState(title, message, icon, actionLabel, onAction, secondaryActionLabel, onSecondaryAction)` | Full-area states. Empty / error states scroll instead of clipping in short spaces; offline errors get a cloud icon and neutral colours. An empty state should say what goes here and offer the one action that fills it |
-| `ListingGridSkeleton`, `ListSkeleton(leading = SkeletonLeading.Avatar/Thumbnail/None)`, `ListingCardSkeleton`, `ListRowSkeleton`, `SkeletonBox`, `SkeletonLine`, `ShimmerGroup` | Shimmering placeholders in the shape of the content. Prefer them to a spinner whenever the layout is known (e.g. `UiStateContent(…, loading = { MyDetailSkeleton() })`) |
+| `ListSkeleton(leading = SkeletonLeading.Avatar/Thumbnail/None)`, `ListRowSkeletons(rows)` (plain column, for sheets and scrolling screens), `ListRowSkeleton`, `ListingTileSkeleton`, `SkeletonBox`, `SkeletonLine`, `ShimmerGroup` | Shimmering placeholders in the shape of the content. Prefer them to a spinner whenever the layout is known (e.g. `UiStateContent(…, loading = { MyDetailSkeleton() })`) |
 | `UiStateContent(state, onRetry, loading = { … }) { value -> }` | Loading/error/content switch for `UiState` |
 | `CollectEvents(flow) { }` | Consume `EventQueue` events |
-| `PagedLazyColumn`, `PagedLazyGrid` | Infinite lists for a `Paginator` (skeleton first load, pull-to-refresh, footer, empty) |
+| `PagedLazyColumn` | Infinite list for a `Paginator` (skeleton first load, pull-to-refresh, footer, empty) |
+| `PagedListingGrid` | Paged grid for a `Paginator<ListingSummary>` whose header (categories, sort) stays on screen through skeleton loading, a failed first load and the empty state; footer shows loading more / retry / end of list |
+| `OnResume(key) { }` | Runs on every resume of the screen (see "Refresh when the user comes back") |
 | `RemoteImage(url, …)` | Coil image: shimmers while loading, `placeholderIcon` (a photo icon) when missing or failed; resolves dev URLs |
 | `Avatar(url, name, size, contentDescription = name)` | Round photo over initials on a Golden Hour colour picked from the name (initials show while loading and if the photo fails). Pass `contentDescription = null` when the name is printed next to it |
 | `CountBadge(count)` | Berry count pill ("3", "99+"), or a dot for 0 |
 | `PriceText(cents)` | Price in the price colour (berry on light, amber on dark), weight 800 |
 | `RatingStars(rating)`, `RatingSummary(avg, count)`, `RatingInput(stars, onChange)` | Display (fractional; read as "Rated 4.8 out of 5, 12 ratings") and input (48 dp stars) |
 | `StatusChip(text, ChipTone)`, `ListingStatusChip`, `OrderStatusChip`, `ReportStatusChip`, `ConditionChip` | Status pills (consistent colours) |
-| `ListingCard(listing, onClick, onToggleFavorite?)` | Grid tile (square photo, price, title, condition · age, status, heart with a 48 dp target) |
-| `ListingRow(listing, onClick, supporting, trailing)` | Compact list row with thumbnail |
+| `ListingTile(listing, onClick, onToggleFavorite?)` | Grid tile: square cropped photo, price, title clamped to 2 lines with both lines reserved, "condition · 2h ago", status badge, heart. Every tile in a row has the same height |
+| `ListingImage` | Listing photo with a pulse while loading, a photo outline when missing and a crossed-out photo when it fails |
+| `FavoriteButton` | 48 dp heart toggle (pops and gives haptic feedback when it fills) |
+| `ListingIcons`, `ListingCategory.icon`, `IconBadge` | Line icons for categories and listing facts; an icon in a tinted circle |
 | `UserRow(user, onClick, supporting, trailing)` | Avatar + name + rating (seller card, order parties, blocked users) |
-| `AppTopBar(title, onBack, actions, scrollBehavior)`, `BackButton`, `SectionHeader` | Chrome. Titles and section headers are headings for screen readers |
+| `AppTopBar(title, onBack, actions, scrollBehavior)`, `BackButton` | Chrome. Titles are headings for screen readers |
 | `AppNavigationBar { AppNavigationBarItem(selected, onClick, icon, label, badgeCount, badgeDot, badgeDescription) }` | The bottom tab bar (used by `AppNavigation`); the selected tab sits in a gradient pill; optional count badge |
 | `AppSnackbar(data)`, `AppSnackbarVisuals` | The shell's snackbar (rounded, inverse colours, alert icon for errors). `UserMessages` already uses it |
-| `QuadIcons.*` | Icons missing from `material-icons-core`: `ChatBubble(Outline)`, `AddCircleOutline`, `Visibility(Off)`, `Image`, `CloudOff`, `ErrorOutline` |
+| `QuadIcons.*` | Filled icons missing from `material-icons-core` (chat bubbles, visibility, image, cloud off, error, flag, block, shield, tag, receipt, wallet, gavel, history, group, camera, school, document, verified, undo, open in new, tune, …). Add new ones here |
 | `QuadMark(size, color)`, `QuadAppIcon(size)`, `QuadWordmark(color, fontSize)` | Brand: the "Sun on the Quad" mark (see Theme), the app icon tile, the lowercase `quad` wordmark. For brand moments only (Welcome, auth headers) |
-| `ConfirmDialog(title, message, confirmLabel, onConfirm, onDismiss, destructive, loading)` | Confirmations. Destructive: red confirm, neutral Cancel |
+| `ConfirmDialog(title, message, confirmLabel, onConfirm, onDismiss, destructive, loading)` | Confirmations. Destructive: red confirm, neutral Cancel. For bullets, a field or an `InlineError`, pass `content = { … }` instead of `message` (and `confirmEnabled`) |
 | `ServerSettingsDialog` | Debug server override (Welcome → "Dev server · …", and Settings) |
-| `PlaceholderScreen` | Temporary. Delete its usages as you build screens. |
 
-Also: `Format.price / relativeTime / date / dateTime / memberSince / rating`, enum labels (`ListingStatus.label`, `OrderStatus.label`, `ReportStatus.label`, `ModerationAction.label`, …; `ListingCategory`, `ListingCondition`, `ReportReason` already have `.label` in core), and `Validate.*` for `Limits`-based checks.
+Also: `Format.price / rating / parsePriceCents`, `rememberTimeFormat()` (`time`, `dateTime`, `dayLabel`, `inboxStamp`, `age`, `ago`, `date`, `memberSince`, `countdown`), enum labels (`ListingStatus.label`, `OrderStatus.label`, `ReportStatus.label`, `ModerationAction.label`, …; `ListingCategory`, `ListingCondition`, `ReportReason` already have `.label` in core), and `Validate.*` for `Limits`-based checks.
 
-Storefront pieces that live in `feature/listing/` (feature-local for now, used by browse, the listing screens and public profiles; promote
-them to `ui/components` if another feature needs them):
-
-| Piece | Use |
-|---|---|
-| `ListingTile`, `ListingTileSkeleton` | Grid tile: square cropped photo, price, title clamped to 2 lines with both lines reserved, "condition · 2h ago", status badge, heart. Every tile in a row has the same height |
-| `PagedListingGrid` | Paged grid for a `Paginator<ListingSummary>` whose header (categories, sort) stays on screen through skeleton loading, a failed first load and the empty state; footer shows loading more / retry / end of list |
-| `ListingImage` | Photo with a pulse while loading, a photo outline when missing and a crossed-out photo when it fails |
-| `FavoriteButton` | 48 dp heart toggle (pops and gives haptic feedback when it fills) |
-| `PriceInput` | Dollar field: decimal keypad, `$` prefix, thousands separators while typing, at most two decimals |
-| `PhotoViewer`, `PageDots` | Full-screen photos on black, edge to edge (`edgeToEdgeDialogProperties()` + light status-bar icons): swipe, pinch / double-tap zoom, pan |
-| `ListingIcons`, `ListingCategory.icon`, `ListingCondition.hint`, `timeAgo` | Line icons for categories and facts, condition explanations, "2h ago" |
+Storefront pieces that stay in `feature/listing/`: `PriceInput` (dollar field: decimal keypad, `$` prefix, thousands
+separators while typing, at most two decimals), `PhotoViewer` / `PageDots` (full-screen photos on black, edge to edge:
+swipe, pinch / double-tap zoom, pan) and `ListingCondition.hint` (condition explanations).
 
 
 ## Theme and conventions
@@ -270,26 +266,29 @@ are code identifiers, like the `com.campusmarket` packages.)
 - **Loading, empty, error.** First loads show skeletons in the shape of the content (the paged lists do this for you);
   a bare spinner is for things without a known shape. Empty states say what goes here and offer the action that fills
   it. Errors come with a retry. Touch targets are at least 48 dp.
-- Screenshots: `CAMPUS_MARKET_LIVE=http://127.0.0.1:8080 CAMPUS_MARKET_SCREENSHOTS=/some/dir ./gradlew :shared:jvmTest --tests '*BrandScreenshotTest*'`
-  renders the main screens in light and dark against a running dev server (read-only); `*UiCoreScreenshotTest*` renders
-  the auth screens, the shell's loading / offline states, the tab bar badge, 1.3× text and a gallery of the shared
-  components (mostly against a fake server). Use `127.0.0.1`: the test JVM may not reach `localhost` over IPv6.
-  `ProfileModerationScreenshotTest` (same variables) covers every profile and moderation screen as students, a
-  moderator and an admin; `ProfileModerationStatesScreenshotTest` (only `CAMPUS_MARKET_SCREENSHOTS`) renders states the
-  demo data lacks (many ratings, photo avatars from `CAMPUS_MARKET_SHOT_PHOTOS`, loading, errors, a busy log) against a
-  fake server. Both honour `CAMPUS_MARKET_FONT_SCALE=1.3`.
-- Chat / orders gallery: `CAMPUS_MARKET_SCREENSHOTS=/some/dir ./gradlew :shared:jvmTest --tests '*ChatOrdersGalleryTest*'` renders
-  every chat, order (each status, buyer and seller), checkout and payouts state, light, dark and at 1.3x font scale,
-  against a fake server (`CHAT_ORDERS_ONLY=chat,orders,…` narrows it; `CHAT_ORDERS_PHOTOS=<dir of jpgs>` adds photos).
-- Storefront gallery: `CAMPUS_MARKET_SCREENSHOTS=/some/dir ./gradlew :shared:jvmTest --tests '*ListingScreenshotTest*'` renders every browse /
-  listing state (loading, empty, error, sold / reserved / removed / blocked, long titles, 1.3x font, landscape) against a
-  fake server and a local photo server, no dev server needed.
+- Screenshots: opt-in galleries in `shared/src/jvmTest` render phone-sized (412 × 892 dp at 2x) PNGs in light and dark,
+  `./gradlew :shared:jvmTest --tests '*<Gallery>*'` with `CAMPUS_MARKET_SCREENSHOTS=/some/dir` (they skip without it).
+  Live ones also need `CAMPUS_MARKET_LIVE=http://127.0.0.1:8080` (a dev server with the demo data; they only sign in and
+  navigate). Use `127.0.0.1`: the test JVM may not reach `localhost` over IPv6. `CAMPUS_MARKET_FONT_SCALE=1.3` renders
+  larger text, `CAMPUS_MARKET_SHOT_PHOTOS=<dir of jpgs>` gives the fake-server galleries photos.
+
+  | Gallery | Server | Covers |
+  |---|---|---|
+  | `BrandScreenshotTest` | live | welcome, sign in, browse, filters, empty search, listing detail, favorites, sell, inbox, conversation, profile, settings, an order, the report queue, and the seller's own listing / edit / my listings / sold listing |
+  | `UiCoreScreenshotTest` | fake | auth screens and errors, suspension notice, the shell's loading / offline states, tab badge, push transition, landscape, 1.3× text, and a gallery of the shared components, states and dialog |
+  | `ProfileModerationScreenshotTest` | live | every profile and moderation screen as a student, a moderator and an admin |
+  | `ProfileModerationStatesScreenshotTest` | fake | profile / moderation states the demo data lacks (many ratings, photo avatars, loading, errors, a busy log) |
+  | `ChatOrdersGalleryTest` | fake | every chat, order (each status, buyer and seller), checkout and payouts state, light, dark and 1.3x (`CAMPUS_MARKET_SHOT_ONLY=chat,orders,…` narrows it) |
+  | `ListingScreenshotTest` | fake + local photo server | every browse / listing state: loading, empty, error, sold / reserved / removed / blocked, long titles, 1.3x, landscape |
+
+  Tests that change data on a live server opt in with `CAMPUS_MARKET_LIVE_API` instead: `LiveServerTest` (storefront
+  view models and the Sell form, against the demo data, cleaning up after itself) and `LiveServerE2ETest` (chat, orders,
+  ratings and payouts between two throwaway accounts).
 - Copy: plain English strings inline. No string resources yet (single locale). Sentence case. Money always via `Format.price` / `PriceText`.
 - Text inputs: enforce `Limits` with `maxLength` and `Validate.*`. The server stays authoritative, so always surface `ApiError.fields`.
 - Never call `HttpClient` directly from features, never store tokens, never load server URLs without `RemoteImage` / `ExternalLinks`.
 - Keep `iosMain` minimal. Anything platform-specific goes behind a small interface in `platform/` (ask the foundation owner).
-- Tests: `shared/src/commonTest` runs on the JVM (`./gradlew :shared:jvmTest`). `data/TestSupport.kt` has a `Harness` with a Ktor `MockEngine` that you can reuse to test view-model logic against fake responses. `shared/src/jvmTest/.../AppSmokeTest.kt` drives the real `App()` (Compose desktop UI test) against a fake server, covering auth, tabs, destinations, deep links and sign-out. Copy its pattern for your flows, and click through `runOnUiThread { node.performClick() }`, because navigation must run on the UI thread.
-- When your screens stop using the sample ids, update the matching steps in `AppSmokeTest`. Each step there clicks a placeholder link by its text.
+- Tests: `shared/src/commonTest` runs on the JVM (`./gradlew :shared:jvmTest`). `data/TestSupport.kt` is the test kit: `Harness` (the real `ApiClient` on a scripted `MockEngine`, with user messages and recorded external links; pass `scope = this` to run HTTP on the test scheduler), `respondJson` / `respondError`, request `bodyText` / `decode`, `withMainDispatcher` and `awaitValue`. UI tests in `shared/src/jvmTest` drive the real `App()` with `TestApp.kt`: `FakeServer { req -> … }` (records requests), `startTestApp(server, signedIn(user))`, and `awaitText` / `click` / `clickDescription` / `type` / `back`, which wait for their node and click on the UI thread (navigation must run there). `AppSmokeTest` covers the shell; copy a feature's UI test for your flows. Screenshot galleries extend `ScreenshotGallery`.
 
 ## Platform notes
 
