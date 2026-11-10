@@ -66,7 +66,7 @@ Composable screen ── koinViewModel() ──▶ ViewModel ──▶ ApiClient
                                                      TokenStore ◀── SessionManager (StateFlow<SessionState>)
 ```
 
-- **DI: Koin 4.** Core singletons (`coreModule` in `di/Koin.kt`): `ServerConfig`, `TokenStore`, `HttpClient`, `ApiClient`, `SessionManager`, `ChatSocket`, `UserMessages`, `ExternalLinks`, `InboxBadge`, `AppEnvironment`, plus the platform `PlatformUrlLauncher`. Each feature registers its view models in its own module (`browseModule`, `listingModule`, …), which is already listed in `featureModules`.
+- **DI: Koin 4.** Core singletons (`coreModule` in `di/Koin.kt`): `ServerConfig`, `TokenStore`, `HttpClient`, `ApiClient`, `SessionManager`, `ChatSocket`, `UserMessages`, `ExternalLinks`, `AppEnvironment`, plus the platform `PlatformUrlLauncher`. Each feature registers its view models in its own module (`browseModule`, `listingModule`, …), which is already listed in `featureModules`.
 - **View models:** `androidx.lifecycle.ViewModel` (multiplatform), scoped to the navigation back-stack entry by `koinViewModel()`. Expose immutable state as `StateFlow` and take actions as plain functions.
 - **Route arguments → view model:** pass the route object.
   ```kotlin
@@ -91,7 +91,7 @@ Composable screen ── koinViewModel() ──▶ ViewModel ──▶ ApiClient
 | Form | Immutable `XxxState(fields…, fieldErrors: Map<String,String>, formError: String?, submitting)`. Validate locally with `Validate.*` + `fieldErrorsOf(...)`, then call the API and map failures with `e.toFormErrors(codeToField)`. Show errors with `AppTextField(error = state.fieldErrors["title"])` and `InlineError(state.formError)`. Flag a field as soon as the user leaves it with `Modifier.onFocusLost(vm::checkTitle)` (skip empty fields). Pass `loading = state.submitting` to the submit button and return early from `submit()` while submitting (double taps). See `feature/auth/AuthViewModels.kt`. |
 | One-off event (navigate after save, open URL) | `val events = EventQueue<MyEvent>()`, `events.send(...)` in the VM, `CollectEvents(vm.events.flow) { … }` in the screen. |
 | Snackbar / toast | Inject `UserMessages`: `messages.show("Listing deleted")`, `messages.show("Removed", "Undo") { … }` or `messages.showError(e)` / `showError("Couldn't save", "Retry") { … }` (errors get an alert icon, stay longer and can be closed). It survives navigation. Keep the text short and plain. |
-| Inbox tab badge | `InboxBadge` (Koin single, `navigation/`): the shell counts unread messages (first page of `GET /conversations`) at start, on resume and when the user lands on a tab root. Chat code that knows better can call `inboxBadge.set(total)` or `inboxBadge.refresh(force = true)` (e.g. after marking a conversation read). |
+| Inbox tab badge | `UnreadConversations` (Koin single, `feature/chat/`): the shell collects `count` (conversations with unread messages) for the Inbox tab; it follows the chat socket while collected and re-syncs on resume. |
 | Scroll to top when the current tab is tapped again | `OnTabReselected(TopLevelTab.Browse) { gridState.animateScrollToItem(0) }` in the tab's root screen. |
 
 ## Calling the API
@@ -122,7 +122,7 @@ Auth calls (`register / verifyEmail / resendCode / login / logout`) are used thr
 
 ## Navigation
 
-Type-safe navigation-compose (2.9). Routes are `@Serializable` objects/classes in each feature's `XxxRoutes.kt`. Each feature registers them in `fun NavGraphBuilder.xxxGraph(nav: NavController)` (in `XxxGraph.kt`), which `navigation/AppNavigation.kt` calls. Signed-out and signed-in sides are separate NavHosts behind an auth gate, so signing out discards the signed-in back stack. The bottom bar shows only on the four tab roots; Inbox carries the unread badge (`InboxBadge`), and tapping the current tab again emits on `LocalTabReselected` (`OnTabReselected`). Use `nav.navigateToTab(TopLevelTab.Inbox)` to jump to a tab.
+Type-safe navigation-compose (2.9). Routes are `@Serializable` objects/classes in each feature's `XxxRoutes.kt`. Each feature registers them in `fun NavGraphBuilder.xxxGraph(nav: NavController)` (in `XxxGraph.kt`), which `navigation/AppNavigation.kt` calls. Signed-out and signed-in sides are separate NavHosts behind an auth gate, so signing out discards the signed-in back stack. The bottom bar shows only on the four tab roots; Inbox carries the unread badge (, and tapping the current tab again emits on `LocalTabReselected` (`OnTabReselected`). Use `nav.navigateToTab(TopLevelTab.Inbox)` to jump to a tab.
 
 | Route | Args | Owner | Screen file | Notes |
 |---|---|---|---|---|

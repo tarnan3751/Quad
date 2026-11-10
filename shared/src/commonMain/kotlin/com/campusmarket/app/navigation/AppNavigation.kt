@@ -58,6 +58,7 @@ import com.campusmarket.app.feature.auth.WelcomeRoute
 import com.campusmarket.app.feature.auth.authGraph
 import com.campusmarket.app.feature.browse.BrowseRoute
 import com.campusmarket.app.feature.browse.browseGraph
+import com.campusmarket.app.feature.chat.UnreadConversations
 import com.campusmarket.app.feature.chat.InboxRoute
 import com.campusmarket.app.feature.chat.chatGraph
 import com.campusmarket.app.feature.listing.SellRoute
@@ -178,7 +179,7 @@ private fun SignedInShell(snackbar: SnackbarHostState) {
     val destination = backStackEntry?.destination
     val currentTab = TopLevelTab.entries.firstOrNull { destination.isOn(it.routeClass) }
     val onTabRoot = destination?.isTabRoot() == true
-    val unread = rememberInboxUnread(destination)
+    val unread = rememberInboxUnread()
     val reselections = remember { MutableSharedFlow<TopLevelTab>(extraBufferCapacity = 1) }
 
     Scaffold(
@@ -225,31 +226,16 @@ private fun SignedInShell(snackbar: SnackbarHostState) {
     }
 }
 
-/**
- * The Inbox badge count, kept fresh by [InboxBadge]: counted when the shell starts, when the app returns to the
- * foreground, and straight away when the user comes back to a tab root (from a conversation, say). Switching
- * between tab roots only re-counts if the last count is a while old.
- */
+/** Conversations with unread messages, for the Inbox tab badge. [UnreadConversations] keeps it live while collected. */
 @Composable
-private fun rememberInboxUnread(destination: NavDestination?): Int {
-    val badge: InboxBadge = koinInject()
-    val unread by badge.count.collectAsStateWithLifecycle()
-    DisposableEffect(badge) {
-        badge.refresh(force = true)
-        onDispose { badge.clear() }
-    }
-    LifecycleResumeEffect(badge) {
-        badge.refresh()
+private fun rememberInboxUnread(): Int {
+    val unread: UnreadConversations = koinInject()
+    val count by unread.count.collectAsStateWithLifecycle()
+    LifecycleResumeEffect(unread) {
+        unread.refresh()
         onPauseOrDispose { }
     }
-    var wasOnTabRoot by remember { mutableStateOf(true) }
-    LaunchedEffect(destination?.id) {
-        if (destination == null) return@LaunchedEffect
-        val onTabRoot = destination.isTabRoot()
-        if (onTabRoot) badge.refresh(force = !wasOnTabRoot)
-        wasOnTabRoot = onTabRoot
-    }
-    return unread
+    return count
 }
 
 private fun NavDestination?.isOn(routeClass: KClass<*>): Boolean =
