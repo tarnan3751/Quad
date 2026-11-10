@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Golden Hour: warm white background, berry accent (see ui/theme/Theme.kt). -->
+    <color name="quad_background">#FFF8F3</color>
+    <color name="quad_accent">#D6305C</color>
+</resources>

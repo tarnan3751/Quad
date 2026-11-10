@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12+ system splash: the adaptive launcher icon (Golden Hour tile) on the app background, so the
+         splash hands over to the first Compose frame without a colour jump. -->
+    <style name="Theme.Quad" parent="Base.Theme.Quad">
+        <item name="android:windowSplashScreenBackground">@color/quad_background</item>
+    </style>
+</resources>

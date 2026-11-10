@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Golden Hour "after dark". -->
+    <color name="quad_background">#1D0F18</color>
+    <color name="quad_accent">#FF9166</color>
+</resources>

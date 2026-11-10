@@ -53,8 +53,13 @@
 		<key>UIApplicationSupportsMultipleScenes</key>
 		<false/>
 	</dict>
+	<!-- Launch screen: the app background (warm white / after dark, from the asset catalog), so launch hands over
+	     to the first frame without a white or black flash. -->
 	<key>UILaunchScreen</key>
-	<dict/>
+	<dict>
+		<key>UIColorName</key>
+		<string>LaunchBackground</string>
+	</dict>
 	<!-- The status bar style is set app-wide from Kotlin (StatusBarIcons, e.g. dark icons over the Welcome hero):
 	     the SwiftUI host never asks the Compose view controller for preferredStatusBarStyle. The default style still
 	     follows the system light/dark mode. -->
