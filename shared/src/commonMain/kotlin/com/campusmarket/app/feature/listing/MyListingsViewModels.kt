@@ -51,6 +51,7 @@ val MyListingsFilters: List<ListingStatus?> = listOf(null, ListingStatus.ACTIVE,
 class MyListingsViewModel(
     private val api: ApiClient,
     private val sync: ListingSync,
+    messages: UserMessages,
 ) : ViewModel() {
     private val _filter = MutableStateFlow<ListingStatus?>(null)
     val filter: StateFlow<ListingStatus?> = _filter.asStateFlow()
@@ -60,6 +61,7 @@ class MyListingsViewModel(
     }
 
     init {
+        listings.onRefreshError = messages::showError // a failed pull-to-refresh keeps the list, but says why
         listings.refresh()
         viewModelScope.launch {
             sync.changes.collect { change ->
@@ -73,6 +75,13 @@ class MyListingsViewModel(
                 }
             }
         }
+    }
+
+    private var resumedBefore = false
+
+    /** Called on every resume: coming back refreshes, since an order may have reserved or sold a listing meanwhile. */
+    fun onResume() {
+        if (resumedBefore) listings.refresh() else resumedBefore = true
     }
 
     fun setFilter(status: ListingStatus?) {

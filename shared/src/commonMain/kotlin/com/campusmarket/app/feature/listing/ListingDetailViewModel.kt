@@ -23,6 +23,7 @@ data class ListingDetailUi(
     val refreshing: Boolean = false,
     val confirmingDelete: Boolean = false,
     val deleting: Boolean = false,
+    val unblocking: Boolean = false,
 )
 
 sealed interface ListingDetailEvent {
@@ -30,9 +31,12 @@ sealed interface ListingDetailEvent {
     data object Deleted : ListingDetailEvent
 }
 
-/** What the viewer may do with a listing, from its status and ownership (mirrors the server's rules). */
-val ListingDetail.canBuy: Boolean get() = !isMine && status == ListingStatus.ACTIVE
-val ListingDetail.canMessage: Boolean get() = !isMine && (status == ListingStatus.ACTIVE || status == ListingStatus.RESERVED)
+/** A block (by either side) stands between the viewer and the seller: the server refuses messages and orders. */
+val ListingDetail.isBlocked: Boolean get() = !isMine && (blocked || seller.blockedByMe)
+
+/** What the viewer may do with a listing, from its status, ownership and blocks (mirrors the server's rules). */
+val ListingDetail.canBuy: Boolean get() = !isMine && !isBlocked && status == ListingStatus.ACTIVE
+val ListingDetail.canMessage: Boolean get() = !isMine && !isBlocked && (status == ListingStatus.ACTIVE || status == ListingStatus.RESERVED)
 val ListingDetail.canEdit: Boolean get() = isMine && status == ListingStatus.ACTIVE
 val ListingDetail.canDelete: Boolean get() = isMine && (status == ListingStatus.ACTIVE || status == ListingStatus.REMOVED)
 
@@ -114,6 +118,26 @@ class ListingDetailViewModel(
                 if (e.status == 409) refresh()
             } finally {
                 _ui.update { it.copy(deleting = false, confirmingDelete = false) }
+            }
+        }
+    }
+
+    /** "Unblock" on a listing whose seller I blocked: lifts the block and reloads, so Buy / Message come back. */
+    fun unblockSeller() {
+        val current = (_listing.value as? UiState.Content)?.value ?: return
+        if (!current.seller.blockedByMe || _ui.value.unblocking) return
+        _ui.update { it.copy(unblocking = true) }
+        viewModelScope.launch {
+            try {
+                api.unblockUser(current.seller.id)
+                messages.show("Unblocked ${current.seller.displayName}")
+                load(_listing, keepContent = true) { api.listing(listingId) }.join()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: ApiError) {
+                messages.showError(e)
+            } finally {
+                _ui.update { it.copy(unblocking = false) }
             }
         }
     }

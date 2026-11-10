@@ -37,6 +37,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -60,8 +61,11 @@ class ListingEditorViewModelTest {
         return Env(h, messages, ListingSync(h.api, messages, backgroundScope))
     }
 
-    /** Fake `POST /photos`: photo "id-<file name>"; the first attempt for [failFirst] fails. Uploads run in parallel. */
-    private class PhotoServer(private val failFirst: String? = null) {
+    /**
+     * Fake `POST /photos`: photo "id-<file name>"; the first attempt for [failFirst] fails, with a 503 or, when [refuse],
+     * a 400 naming the file. Uploads run in parallel.
+     */
+    private class PhotoServer(private val failFirst: String? = null, private val refuse: Boolean = false) {
         private val lock = Mutex()
         private val attempts = mutableMapOf<String, Int>()
 
@@ -70,8 +74,10 @@ class ListingEditorViewModelTest {
         suspend fun MockRequestHandleScope.respond(req: HttpRequestData): HttpResponseData {
             val name = req.uploadedFileName().removeSuffix(".jpg")
             val attempt = lock.withLock { (attempts[name] ?: 0).plus(1).also { attempts[name] = it } }
-            return if (name == failFirst && attempt == 1) {
+            return if (name == failFirst && attempt == 1 && refuse) {
                 respondError(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION, "Bad photo", mapOf("file" to "That file isn't a supported image"))
+            } else if (name == failFirst && attempt == 1) {
+                respondError(HttpStatusCode.ServiceUnavailable, ErrorCodes.INTERNAL, "Upload failed")
             } else {
                 respondJson(Photo.serializer(), Photo("id-$name", "http://test.local/uploads/$name.jpg"), HttpStatusCode.Created)
             }
@@ -192,7 +198,8 @@ class ListingEditorViewModelTest {
 
         val settled = vm.form.awaitValue { s -> !s.uploading }
         val failed = settled.photos.single { it.status == UploadStatus.Failed }
-        assertEquals("That file isn't a supported image", failed.error)
+        assertEquals("Upload failed", failed.error)
+        assertTrue(failed.retryable)
         assertNull(failed.photoId)
 
         vm.fillValidFields()
@@ -205,6 +212,49 @@ class ListingEditorViewModelTest {
         assertEquals(listOf("id-a", "id-b"), retried.photos.map { it.photoId })
         assertEquals(2, server.attempts("b"))
         assertNull(retried.fieldErrors["photoIds"])
+    }
+
+    @Test
+    fun aPhotoTheServerRefusesIsNotOfferedForRetry() = runTest {
+        val server = PhotoServer(failFirst = "b", refuse = true)
+        val e = env { req -> if (req.url.encodedPath == ApiRoutes.PHOTOS) photos(req, server) else respondError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND) }
+        val vm = SellViewModel(e.h.api, e.messages, e.sync)
+        vm.addPhotos(listOf(image("a"), image("b")))
+
+        val failed = vm.form.awaitValue { s -> !s.uploading }.photos.single { it.status == UploadStatus.Failed }
+        assertEquals("That file isn't a supported image", failed.error)
+        assertTrue(failed.rejected)
+        assertFalse(failed.retryable)
+        vm.retryUpload(failed.key) // ignored: sending the same file again can't help
+        runCurrent()
+        assertEquals(1, server.attempts("b"))
+    }
+
+    @Test
+    fun leavingAsksFirstOnlyWhenSomethingWouldBeLost() = runTest {
+        val e = env { req ->
+            if (req.method == HttpMethod.Get) respondJson(ListingDetail.serializer(), detail(id = "l1", isMine = true))
+            else respondError(HttpStatusCode.InternalServerError, ErrorCodes.INTERNAL)
+        }
+        val sell = SellViewModel(e.h.api, e.messages, e.sync)
+        assertFalse(sell.hasUnsavedChanges)
+        sell.onTitle("Desk lamp")
+        assertTrue(sell.hasUnsavedChanges)
+        sell.clearForm()
+        assertFalse(sell.hasUnsavedChanges)
+
+        val edit = EditListingViewModel(EditListingRoute("l1"), e.h.api, e.messages, e.sync)
+        assertFalse(edit.hasUnsavedChanges, "nothing loaded yet")
+        edit.original.awaitValue { it is UiState.Content }
+        assertFalse(edit.hasUnsavedChanges, "the prefilled form is the listing")
+        edit.onPrice("65.00")
+        assertFalse(edit.hasUnsavedChanges, "same amount, typed differently")
+        edit.onTitle("Campbell Biology, 12th edition")
+        assertTrue(edit.hasUnsavedChanges)
+        edit.onTitle("Campbell Biology ")
+        assertFalse(edit.hasUnsavedChanges, "surrounding spaces aren't a change")
+        edit.makeCover(edit.form.value.photos[1].key)
+        assertTrue(edit.hasUnsavedChanges, "photo order is a change")
     }
 
     @Test

@@ -217,6 +217,11 @@ data class ListingDetail(
     val isMine: Boolean = false,
     val createdAt: Long,
     val updatedAt: Long,
+    /**
+     * The viewer and the seller have blocked each other, in either direction: messaging and buying are refused
+     * (403 `BLOCKED`). `seller.blockedByMe` tells whether the viewer did it. Always false on your own listing.
+     */
+    val blocked: Boolean = false,
 )
 
 @Serializable

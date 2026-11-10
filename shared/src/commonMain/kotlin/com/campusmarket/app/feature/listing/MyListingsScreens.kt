@@ -1,19 +1,25 @@
 package com.campusmarket.app.feature.listing
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.FavoriteBorder
-import androidx.compose.material.icons.filled.ShoppingCart
-import com.campusmarket.app.ui.components.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -23,21 +29,27 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.campusmarket.app.navigation.TopLevelTab
 import com.campusmarket.app.navigation.navigateToTab
 import com.campusmarket.app.ui.components.AppTopBar
 import com.campusmarket.app.ui.components.EmptyState
-import com.campusmarket.app.ui.components.ListingCard
-import com.campusmarket.app.ui.components.ListingRow
+import com.campusmarket.app.ui.components.FilterChip
+import com.campusmarket.app.ui.components.ListingStatusChip
 import com.campusmarket.app.ui.components.PagedLazyColumn
-import com.campusmarket.app.ui.components.PagedLazyGrid
+import com.campusmarket.app.ui.components.PriceText
 import com.campusmarket.app.ui.label
 import com.campusmarket.app.ui.theme.Spacing
 import com.campusmarket.core.ListingStatus
+import com.campusmarket.core.ListingSummary
 import org.koin.compose.viewmodel.koinViewModel
 
 /** `api.myFavorites` in a grid; un-favoriting removes the tile (Undo in the snackbar). */
@@ -45,22 +57,23 @@ import org.koin.compose.viewmodel.koinViewModel
 fun FavoritesScreen(nav: NavController) {
     val vm = koinViewModel<FavoritesViewModel>()
     Scaffold(topBar = { AppTopBar("Favorites", onBack = { nav.popBackStack() }) }) { padding ->
-        PagedLazyGrid(
+        PagedListingGrid(
             paginator = vm.favorites,
-            key = { it.id },
             modifier = Modifier.padding(padding),
-            contentPadding = PaddingValues(Spacing.screen),
+            contentPadding = PaddingValues(start = Spacing.screen, end = Spacing.screen, top = Spacing.sm, bottom = Spacing.lg),
+            endOfList = null,
             empty = {
                 EmptyState(
                     "No favorites yet",
-                    message = "Tap the heart on a listing to keep it here.",
+                    modifier = Modifier.fillMaxWidth(),
+                    message = "Tap the heart on anything you like and it'll wait for you here.",
                     icon = Icons.Filled.FavoriteBorder,
                     actionLabel = "Browse listings",
                     onAction = { nav.navigateToTab(TopLevelTab.Browse) },
                 )
             },
         ) { listing ->
-            ListingCard(
+            ListingTile(
                 listing = listing,
                 onClick = { nav.navigate(ListingDetailRoute(listing.id)) },
                 onToggleFavorite = { vm.unfavorite(listing) },
@@ -74,6 +87,11 @@ fun FavoritesScreen(nav: NavController) {
 fun MyListingsScreen(nav: NavController) {
     val vm = koinViewModel<MyListingsViewModel>()
     val filter by vm.filter.collectAsStateWithLifecycle()
+    val paged by vm.listings.state.collectAsStateWithLifecycle()
+    LifecycleResumeEffect(vm) {
+        vm.onResume()
+        onPauseOrDispose { }
+    }
     Scaffold(
         topBar = {
             AppTopBar(
@@ -101,32 +119,90 @@ fun MyListingsScreen(nav: NavController) {
                     )
                 }
             }
-            // Fresh scroll position per filter.
-            val listState = rememberSaveable(filter, saver = LazyListState.Saver) { LazyListState() }
-            PagedLazyColumn(
-                paginator = vm.listings,
-                key = { it.id },
-                state = listState,
-                empty = {
-                    if (filter == null) {
-                        EmptyState(
-                            "You haven't listed anything yet",
-                            message = "Turn the stuff you don't need into cash from students nearby.",
-                            icon = Icons.Filled.ShoppingCart,
-                            actionLabel = "Sell something",
-                            onAction = { nav.navigateToTab(TopLevelTab.Sell) },
-                        )
-                    } else {
-                        EmptyState(emptyTitle(filter ?: ListingStatus.ACTIVE), icon = Icons.Filled.ShoppingCart)
-                    }
-                },
-            ) { listing ->
-                ListingRow(
-                    listing = listing,
-                    onClick = { nav.navigate(ListingDetailRoute(listing.id)) },
-                    supporting = listedLabel(listing.createdAt),
+            if (!paged.loaded && paged.error == null) {
+                RowSkeletons()
+            } else {
+                // Fresh scroll position per filter.
+                val listState = rememberSaveable(filter, saver = LazyListState.Saver) { LazyListState() }
+                PagedLazyColumn(
+                    paginator = vm.listings,
+                    key = { it.id },
+                    state = listState,
+                    empty = {
+                        if (filter == null) {
+                            EmptyState(
+                                "You haven't listed anything yet",
+                                message = "Turn the stuff you don't need into cash from students nearby.",
+                                icon = ListingIcons.Box,
+                                actionLabel = "Sell something",
+                                onAction = { nav.navigateToTab(TopLevelTab.Sell) },
+                            )
+                        } else {
+                            EmptyState(emptyTitle(filter ?: ListingStatus.ACTIVE), icon = ListingIcons.Box)
+                        }
+                    },
+                ) { listing ->
+                    MyListingRow(listing, onClick = { nav.navigate(ListingDetailRoute(listing.id)) })
+                    HorizontalDivider(Modifier.padding(start = 96.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MyListingRow(listing: ListingSummary, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = Spacing.screen, vertical = Spacing.md),
+        horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ListingImage(
+            listing.thumbnailUrl,
+            contentDescription = null,
+            modifier = Modifier.size(68.dp).clip(MaterialTheme.shapes.small),
+            iconSize = 24.dp,
+        )
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                listing.title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            PriceText(listing.priceCents, currency = listing.currency, style = MaterialTheme.typography.bodyLarge)
+            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm), verticalAlignment = Alignment.CenterVertically) {
+                ListingStatusChip(listing.status)
+                Text(
+                    listedLabel(listing.createdAt),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
-                HorizontalDivider(Modifier.padding(start = 88.dp), color = MaterialTheme.colorScheme.outlineVariant)
+            }
+        }
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun RowSkeletons() {
+    val block = MaterialTheme.colorScheme.surfaceContainerHighest
+    LazyColumn(Modifier.fillMaxSize(), userScrollEnabled = false) {
+        items(6) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = Spacing.screen, vertical = Spacing.md),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Pulse(Modifier.size(68.dp).clip(MaterialTheme.shapes.small), block)
+                Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                    Pulse(Modifier.width(200.dp).height(14.dp).clip(RoundedCornerShape(4.dp)), block)
+                    Pulse(Modifier.width(64.dp).height(14.dp).clip(RoundedCornerShape(4.dp)), block)
+                    Pulse(Modifier.width(120.dp).height(12.dp).clip(RoundedCornerShape(4.dp)), block)
+                }
             }
         }
     }

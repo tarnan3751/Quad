@@ -1,11 +1,13 @@
 package com.campusmarket.app.feature.listing
 
-import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -18,9 +20,6 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -41,7 +40,6 @@ import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import com.campusmarket.app.ui.components.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -58,9 +56,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
@@ -75,10 +78,9 @@ import com.campusmarket.app.ui.components.AppTopBar
 import com.campusmarket.app.ui.components.CollectEvents
 import com.campusmarket.app.ui.components.ConfirmDialog
 import com.campusmarket.app.ui.components.EmptyState
+import com.campusmarket.app.ui.components.FilterChip
 import com.campusmarket.app.ui.components.InlineError
-import com.campusmarket.app.ui.components.PriceField
 import com.campusmarket.app.ui.components.PrimaryButton
-import com.campusmarket.app.ui.components.RemoteImage
 import com.campusmarket.app.ui.components.UiStateContent
 import com.campusmarket.app.ui.theme.Spacing
 import com.campusmarket.core.Limits
@@ -88,11 +90,13 @@ import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
 
 /** Sell tab: create a listing. Photos upload as they're picked; posting opens the new listing. */
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun SellScreen(nav: NavController) {
     val vm = koinViewModel<SellViewModel>()
     val form by vm.form.collectAsStateWithLifecycle()
     var confirmClear by rememberSaveable { mutableStateOf(false) }
+    var confirmLeave by rememberSaveable { mutableStateOf(false) }
     val scroll = rememberScrollState()
 
     CollectEvents(vm.events.flow) { event ->
@@ -102,6 +106,8 @@ fun SellScreen(nav: NavController) {
             nav.navigate(ListingDetailRoute(event.listingId))
         }
     }
+    // Back on the Sell tab leaves it (and its form) for good: ask first if there's something to lose.
+    BackHandler(enabled = vm.hasUnsavedChanges) { confirmLeave = true }
 
     Scaffold(
         topBar = {
@@ -119,8 +125,9 @@ fun SellScreen(nav: NavController) {
         ListingForm(
             form = form,
             vm = vm,
-            intro = "Students on your campus will see it right away. Buyers pay in the app and you hand the item over in person.",
+            intro = "Students on your campus see it right away. Buyers pay in the app and you hand the item over in person.",
             submitLabel = "Post listing",
+            submittingLabel = "Posting…",
             modifier = Modifier.padding(padding),
             scroll = scroll,
         )
@@ -139,20 +146,40 @@ fun SellScreen(nav: NavController) {
             onDismiss = { confirmClear = false },
         )
     }
+    if (confirmLeave) {
+        ConfirmDialog(
+            title = "Discard this listing?",
+            message = "You haven't posted it yet. Your photos and details will be lost.",
+            confirmLabel = "Discard",
+            dismissLabel = "Keep editing",
+            destructive = true,
+            onConfirm = {
+                confirmLeave = false
+                vm.clearForm()
+                nav.popBackStack()
+            },
+            onDismiss = { confirmLeave = false },
+        )
+    }
 }
 
-/** Edit an ACTIVE listing of mine (`api.updateListing`); prefilled from the listing. */
+/** Edit an ACTIVE listing of mine (`api.updateListing`); prefilled from the listing. Asks before discarding edits. */
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun EditListingScreen(route: EditListingRoute, nav: NavController) {
     val vm = koinViewModel<EditListingViewModel> { parametersOf(route) }
     val original by vm.original.collectAsStateWithLifecycle()
     val form by vm.form.collectAsStateWithLifecycle()
+    var confirmDiscard by rememberSaveable { mutableStateOf(false) }
+    val unsaved = remember(form, original) { vm.hasUnsavedChanges }
 
     CollectEvents(vm.events.flow) { event ->
         if (event is ListingEditorEvent.Saved) nav.popBackStack()
     }
+    val leave = { if (unsaved) confirmDiscard = true else nav.popBackStack() }
+    BackHandler(enabled = unsaved) { confirmDiscard = true }
 
-    Scaffold(topBar = { AppTopBar("Edit listing", onBack = { nav.popBackStack() }) }) { padding ->
+    Scaffold(topBar = { AppTopBar("Edit listing", onBack = { leave() }) }) { padding ->
         UiStateContent(original, onRetry = vm::reload, modifier = Modifier.fillMaxSize().padding(padding)) { listing ->
             val blocked = listing.editBlockedReason()
             if (blocked != null) {
@@ -164,21 +191,46 @@ fun EditListingScreen(route: EditListingRoute, nav: NavController) {
                     onAction = { nav.popBackStack() },
                 )
             } else {
-                ListingForm(form = form, vm = vm, intro = null, submitLabel = "Save changes", modifier = Modifier.padding(padding))
+                ListingForm(
+                    form = form,
+                    vm = vm,
+                    intro = null,
+                    submitLabel = "Save changes",
+                    submittingLabel = "Saving…",
+                    modifier = Modifier.padding(padding),
+                )
             }
         }
+    }
+
+    if (confirmDiscard) {
+        ConfirmDialog(
+            title = "Discard your changes?",
+            message = "The listing stays as it was.",
+            confirmLabel = "Discard",
+            dismissLabel = "Keep editing",
+            destructive = true,
+            onConfirm = {
+                confirmDiscard = false
+                nav.popBackStack()
+            },
+            onDismiss = { confirmDiscard = false },
+        )
     }
 }
 
 // ---------------------------------------------------------------------------------------------------- form
 
-@OptIn(ExperimentalLayoutApi::class)
+/** Field keys in screen order (also the order errors are brought into view). */
+private val FieldOrder = listOf("photoIds", "title", "priceCents", "category", "condition", "description", "pickupLocation")
+
 @Composable
 private fun ListingForm(
     form: ListingFormState,
     vm: ListingFormViewModel,
     intro: String?,
     submitLabel: String,
+    submittingLabel: String,
     modifier: Modifier = Modifier,
     scroll: ScrollState = rememberScrollState(),
 ) {
@@ -187,13 +239,22 @@ private fun ListingForm(
         onError = { vm.onPickFailed() },
         onPicked = vm::addPhotos,
     )
+    // Where each field sits in the scrolling column, to bring the first error into view after a rejected submit.
+    val positions = remember { mutableMapOf<String, Int>() }
+    LaunchedEffect(form.rejectedSubmits) {
+        if (form.rejectedSubmits == 0) return@LaunchedEffect
+        val first = FieldOrder.firstOrNull { it in form.fieldErrors } ?: return@LaunchedEffect
+        positions[first]?.let { y -> scroll.animateScrollTo((y - 48).coerceAtLeast(0)) }
+    }
+    fun Modifier.field(key: String) = onGloballyPositioned { positions[key] = it.positionInParent().y.toInt() }
+
     Box(
         modifier.fillMaxSize().imePadding().verticalScroll(scroll),
         contentAlignment = Alignment.TopCenter,
     ) {
         Column(
             Modifier.fillMaxWidth().widthIn(max = 640.dp).padding(horizontal = Spacing.screen, vertical = Spacing.md),
-            verticalArrangement = Arrangement.spacedBy(Spacing.md),
+            verticalArrangement = Arrangement.spacedBy(Spacing.lg),
         ) {
             if (intro != null) {
                 Text(intro, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -205,29 +266,34 @@ private fun ListingForm(
                 onRemove = vm::removePhoto,
                 onMove = vm::movePhoto,
                 onMakeCover = vm::makeCover,
+                modifier = Modifier.field("photoIds"),
             )
             AppTextField(
                 value = form.title,
                 onValueChange = vm::onTitle,
                 label = "Title",
+                modifier = Modifier.field("title"),
                 error = form.fieldErrors["title"],
                 placeholder = "e.g. Calculus textbook, 8th edition",
                 maxLength = Limits.TITLE_MAX,
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Next),
             )
-            PriceField(
+            PriceInput(
                 value = form.price,
                 onValueChange = vm::onPrice,
+                modifier = Modifier.field("priceCents"),
                 error = form.fieldErrors["priceCents"],
-                supportingText = "${Format.price(Limits.PRICE_MIN_CENTS)} to ${Format.price(Limits.PRICE_MAX_CENTS)}",
+                supportingText = "${Format.price(Limits.PRICE_MIN_CENTS)} to ${Format.price(Limits.PRICE_MAX_CENTS)}. Buyers pay in the app.",
             )
             ChoiceSection(
                 title = "Category",
                 options = ListingCategory.entries,
                 selected = form.category,
                 label = { it.label },
+                icon = { it.icon },
                 error = form.fieldErrors["category"],
                 onSelect = vm::onCategory,
+                modifier = Modifier.field("category"),
             )
             ChoiceSection(
                 title = "Condition",
@@ -236,13 +302,16 @@ private fun ListingForm(
                 label = { it.label },
                 error = form.fieldErrors["condition"],
                 onSelect = vm::onCondition,
+                hint = form.condition?.hint ?: "How worn is it? Being upfront avoids awkward handoffs.",
+                modifier = Modifier.field("condition"),
             )
             AppTextField(
                 value = form.description,
                 onValueChange = vm::onDescription,
-                label = "Description",
+                label = "Description (optional)",
+                modifier = Modifier.field("description"),
                 error = form.fieldErrors["description"],
-                supportingText = "Optional. Edition, size, defects, what's included.",
+                supportingText = "Edition, size, defects, what's included.",
                 singleLine = false,
                 minLines = 4,
                 maxLength = Limits.DESCRIPTION_MAX,
@@ -251,16 +320,27 @@ private fun ListingForm(
             AppTextField(
                 value = form.pickupLocation,
                 onValueChange = vm::onPickupLocation,
-                label = "Pickup location",
+                label = "Pickup spot (optional)",
+                modifier = Modifier.field("pickupLocation"),
                 error = form.fieldErrors["pickupLocation"],
                 placeholder = "e.g. Library steps, North Hall lobby",
-                supportingText = "Optional. Somewhere public on campus.",
+                supportingText = "Somewhere public on campus.",
                 maxLength = Limits.PICKUP_MAX,
                 leadingIcon = { Icon(Icons.Filled.LocationOn, contentDescription = null) },
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
             )
             InlineError(form.formError, Modifier.fillMaxWidth())
-            PrimaryButton(submitLabel, onClick = vm::submit, loading = form.submitting, modifier = Modifier.fillMaxWidth())
+            val uploading = form.uploadingCount
+            PrimaryButton(
+                text = when {
+                    form.submitting -> submittingLabel
+                    uploading > 0 -> if (uploading == 1) "Uploading 1 photo…" else "Uploading $uploading photos…"
+                    else -> submitLabel
+                },
+                onClick = vm::submit,
+                loading = form.submitting || uploading > 0,
+                modifier = Modifier.fillMaxWidth(),
+            )
             Spacer(Modifier.height(Spacing.lg))
         }
     }
@@ -275,8 +355,11 @@ private fun <T> ChoiceSection(
     label: (T) -> String,
     error: String?,
     onSelect: (T) -> Unit,
+    modifier: Modifier = Modifier,
+    icon: ((T) -> ImageVector)? = null,
+    hint: String? = null,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
         Text(title, style = MaterialTheme.typography.titleSmall, color = if (error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
             options.forEach { option ->
@@ -285,18 +368,28 @@ private fun <T> ChoiceSection(
                     selected = isSelected,
                     onClick = { onSelect(option) },
                     label = { Text(label(option)) },
-                    leadingIcon = if (isSelected) {
-                        { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize)) }
-                    } else null,
+                    leadingIcon = when {
+                        isSelected -> {
+                            { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize)) }
+                        }
+                        icon != null -> {
+                            { Icon(icon(option), contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize)) }
+                        }
+                        else -> null
+                    },
                 )
             }
         }
-        if (error != null) Text(error, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+        when {
+            error != null -> Text(error, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            hint != null -> Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }
 
 // ---------------------------------------------------------------------------------------------------- photos
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun PhotosSection(
     form: ListingFormState,
@@ -305,9 +398,10 @@ private fun PhotosSection(
     onRemove: (String) -> Unit,
     onMove: (String, Int) -> Unit,
     onMakeCover: (String) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val error = form.fieldErrors["photoIds"]
-    Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 "Photos",
@@ -316,72 +410,94 @@ private fun PhotosSection(
                 modifier = Modifier.weight(1f),
             )
             Text(
-                "${form.photos.size}/${Limits.PHOTOS_MAX}",
+                "${form.photos.size} of ${Limits.PHOTOS_MAX}",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        // When photos are added, bring the first new one into view (otherwise the row stays anchored on "Add more").
-        val rowState = rememberLazyListState()
-        var previousCount by remember { mutableStateOf(form.photos.size) }
-        LaunchedEffect(form.photos.size) {
-            if (form.photos.size > previousCount) rowState.animateScrollToItem(previousCount)
-            previousCount = form.photos.size
-        }
-        LazyRow(state = rowState, horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-            itemsIndexed(form.photos, key = { _, item -> item.key }) { index, item ->
-                PhotoTile(
-                    item = item,
-                    index = index,
-                    count = form.photos.size,
-                    onRetry = { onRetry(item.key) },
-                    onRemove = { onRemove(item.key) },
-                    onMove = { to -> onMove(item.key, to) },
-                    onMakeCover = { onMakeCover(item.key) },
-                    modifier = Modifier.animateItem(),
-                )
-            }
-            if (form.photosRemaining > 0) {
-                item(key = "__add") { AddPhotoTile(empty = form.photos.isEmpty(), onClick = onAdd) }
+        if (form.photos.isEmpty()) {
+            EmptyPhotosTile(onAdd, isError = error != null)
+        } else {
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                val columns = if (maxWidth < 480.dp) 4 else 5
+                val gap = Spacing.sm
+                val tile = (maxWidth - gap * (columns - 1)) / columns
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(gap), verticalArrangement = Arrangement.spacedBy(gap)) {
+                    form.photos.forEachIndexed { index, item ->
+                        PhotoTile(
+                            item = item,
+                            index = index,
+                            count = form.photos.size,
+                            onRetry = { onRetry(item.key) },
+                            onRemove = { onRemove(item.key) },
+                            onMove = { to -> onMove(item.key, to) },
+                            onMakeCover = { onMakeCover(item.key) },
+                            modifier = Modifier.size(tile),
+                        )
+                    }
+                    if (form.photosRemaining > 0) AddPhotoTile(onAdd, Modifier.size(tile))
+                }
             }
         }
         val failed = form.photos.firstOrNull { it.status == UploadStatus.Failed }
         val help = when {
             error != null -> error
             failed != null -> "A photo didn't upload: ${failed.error ?: "unknown error"}. " +
-                if (failed.retryable) "Tap it to retry." else "Remove it and pick another."
-            form.photos.size > 1 -> "The first photo is the cover. Tap a photo to reorder or remove it."
-            else -> "Add up to ${Limits.PHOTOS_MAX} photos. Good light and a plain background sell faster."
+                if (failed.retryable) "Tap it to try again." else "Remove it and pick another."
+            form.photos.size > 1 -> "The first photo is the cover. Tap a photo to move it or make it the cover."
+            form.photos.size == 1 -> "This is your cover photo. Add a few more angles: listings with several photos sell faster."
+            else -> null
         }
+        if (help != null) {
+            Text(
+                help,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (error != null || failed != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun EmptyPhotosTile(onClick: () -> Unit, isError: Boolean) {
+    val outline = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outlineVariant
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .height(148.dp)
+            .clip(MaterialTheme.shapes.medium)
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+            .border(BorderStroke(1.5.dp, outline), MaterialTheme.shapes.medium)
+            .clickable(onClickLabel = "Add photos", onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        IconBadge(ListingIcons.Camera, MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.onPrimaryContainer, size = 52.dp)
+        Spacer(Modifier.height(Spacing.sm))
+        Text("Add photos", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
         Text(
-            help,
+            "Up to ${Limits.PHOTOS_MAX}. Good light and a plain background sell faster.",
             style = MaterialTheme.typography.bodySmall,
-            color = if (error != null || failed != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = Spacing.lg),
         )
     }
 }
 
-private val TileSize = 104.dp
-
 @Composable
-private fun AddPhotoTile(empty: Boolean, onClick: () -> Unit) {
+private fun AddPhotoTile(onClick: () -> Unit, modifier: Modifier) {
     Column(
-        Modifier
-            .size(TileSize)
-            .clip(MaterialTheme.shapes.medium)
+        modifier
+            .clip(MaterialTheme.shapes.small)
             .background(MaterialTheme.colorScheme.surfaceContainerLow)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.medium)
-            .clickable(onClick = onClick),
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.small)
+            .clickable(onClickLabel = "Add more photos", onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
         Icon(Icons.Filled.Add, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-        Text(
-            if (empty) "Add photos" else "Add more",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.primary,
-            textAlign = TextAlign.Center,
-        )
+        Text("Add", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
     }
 }
 
@@ -397,19 +513,21 @@ private fun PhotoTile(
     modifier: Modifier = Modifier,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
-    val description = "Photo ${index + 1}" + when (item.status) {
+    val description = "Photo ${index + 1} of $count" + when (item.status) {
         UploadStatus.Uploading -> ", uploading"
         UploadStatus.Failed -> ", upload failed"
         UploadStatus.Uploaded -> if (index == 0) ", cover" else ""
     }
-    Box(modifier.size(TileSize)) {
+    Box(modifier) {
         Box(
             Modifier
                 .fillMaxSize()
-                .clip(MaterialTheme.shapes.medium)
-                .clickable(onClickLabel = description) { if (item.retryable) onRetry() else menuOpen = true },
+                .clip(MaterialTheme.shapes.small)
+                .clickable(onClickLabel = if (item.retryable) "Retry upload" else "Photo options") {
+                    if (item.retryable) onRetry() else menuOpen = true
+                },
         ) {
-            PhotoPreview(item, Modifier.fillMaxSize())
+            PhotoPreview(item, description, Modifier.fillMaxSize())
             when (item.status) {
                 UploadStatus.Uploading -> Box(
                     Modifier.fillMaxSize().background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.45f)),
@@ -419,16 +537,16 @@ private fun PhotoTile(
                     if (progress != null && progress > 0f) {
                         CircularProgressIndicator(
                             progress = { progress },
-                            modifier = Modifier.size(32.dp),
+                            modifier = Modifier.size(28.dp),
                             color = MaterialTheme.colorScheme.inverseOnSurface,
                             strokeWidth = 3.dp,
                         )
                     } else {
-                        CircularProgressIndicator(Modifier.size(32.dp), color = MaterialTheme.colorScheme.inverseOnSurface, strokeWidth = 3.dp)
+                        CircularProgressIndicator(Modifier.size(28.dp), color = MaterialTheme.colorScheme.inverseOnSurface, strokeWidth = 3.dp)
                     }
                 }
                 UploadStatus.Failed -> Column(
-                    Modifier.fillMaxSize().background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.9f)),
+                    Modifier.fillMaxSize().background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.92f)),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
                 ) {
@@ -438,7 +556,11 @@ private fun PhotoTile(
                         tint = MaterialTheme.colorScheme.onErrorContainer,
                     )
                     Text(
-                        if (item.retryable) "Retry" else "Too large",
+                        when {
+                            item.retryable -> "Retry"
+                            item.rejected -> "Can't use"
+                            else -> "Too large"
+                        },
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onErrorContainer,
                     )
@@ -456,13 +578,12 @@ private fun PhotoTile(
                 }
             }
         }
-        Surface(
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
-            modifier = Modifier.align(Alignment.TopEnd).padding(4.dp).size(28.dp),
-        ) {
-            IconButton(onClick = onRemove) {
-                Icon(Icons.Filled.Close, contentDescription = "Remove photo ${index + 1}", modifier = Modifier.size(16.dp))
+        // 48 dp touch target over the corner; the visible button is the small circle inside it.
+        IconButton(onClick = onRemove, modifier = Modifier.align(Alignment.TopEnd).size(48.dp)) {
+            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.92f), shadowElevation = 1.dp, modifier = Modifier.size(24.dp)) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(Icons.Filled.Close, contentDescription = "Remove photo ${index + 1}", modifier = Modifier.size(14.dp))
+                }
             }
         }
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
@@ -477,14 +598,14 @@ private fun PhotoTile(
                     onClick = { act(onMakeCover) },
                 )
                 DropdownMenuItem(
-                    text = { Text("Move left") },
+                    text = { Text("Move earlier") },
                     leadingIcon = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = null) },
                     onClick = { act { onMove(index - 1) } },
                 )
             }
             if (index < count - 1) {
                 DropdownMenuItem(
-                    text = { Text("Move right") },
+                    text = { Text("Move later") },
                     leadingIcon = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) },
                     onClick = { act { onMove(index + 1) } },
                 )
@@ -500,13 +621,13 @@ private fun PhotoTile(
 
 /** The local pick while it uploads (no round trip), the server copy otherwise. */
 @Composable
-private fun PhotoPreview(item: PhotoItem, modifier: Modifier) {
+private fun PhotoPreview(item: PhotoItem, description: String, modifier: Modifier) {
     val local = item.local
     if (local != null) {
         Box(modifier.background(MaterialTheme.colorScheme.surfaceContainerHigh)) {
-            AsyncImage(model = local.bytes, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            AsyncImage(model = local.bytes, contentDescription = description, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         }
     } else {
-        RemoteImage(item.url, contentDescription = null, modifier = modifier)
+        ListingImage(item.url, contentDescription = description, modifier = modifier, iconSize = 24.dp)
     }
 }

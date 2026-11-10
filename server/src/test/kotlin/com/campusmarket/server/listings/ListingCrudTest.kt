@@ -13,7 +13,9 @@ import com.campusmarket.core.UserRole
 import com.campusmarket.server.apiTest
 import com.campusmarket.server.auth
 import com.campusmarket.server.json
+import com.campusmarket.server.TestEnv
 import com.campusmarket.server.queryOne
+import com.campusmarket.server.update
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.patch
@@ -159,6 +161,25 @@ class ListingCrudTest {
 
         client.get(ApiRoutes.listing("not-a-uuid")) { auth(neighbour) }.expectError(HttpStatusCode.NotFound)
         client.get(ApiRoutes.listing(UUID.randomUUID().toString())) { auth(neighbour) }.expectError(HttpStatusCode.NotFound)
+    }
+
+    @Test
+    fun detailSaysWhenABlockStandsBetweenViewerAndSeller() = apiTest { env ->
+        val seller = env.user("seller")
+        val viewer = env.user("viewer")
+        val id = env.listing(seller).toString()
+        suspend fun detail(user: TestEnv.TestUser) = client.get(ApiRoutes.listing(id)) { auth(user) }.expect<ListingDetail>()
+
+        assertFalse(detail(viewer).blocked)
+        env.db.tx { c -> c.update("INSERT INTO blocks (blocker_id, blocked_id) VALUES (?, ?)", seller.id, viewer.id) }
+        detail(viewer).let { assertTrue(it.blocked); assertFalse(it.seller.blockedByMe) }
+        assertFalse(detail(seller).blocked) // never on your own listing
+
+        env.db.tx { c ->
+            c.update("DELETE FROM blocks")
+            c.update("INSERT INTO blocks (blocker_id, blocked_id) VALUES (?, ?)", viewer.id, seller.id)
+        }
+        detail(viewer).let { assertTrue(it.blocked); assertTrue(it.seller.blockedByMe) }
     }
 
     @Test

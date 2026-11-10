@@ -79,6 +79,98 @@ class BrowseViewModelTest {
     private fun Harness.listingRequests() = requestsTo(ApiRoutes.LISTINGS)
 
     @Test
+    fun submittedSearchesAreRememberedNewestFirst() = runTest {
+        val (h, vm, _) = browse()
+        vm.listings.state.awaitValue { it.loaded }
+
+        vm.onSearchTextChange("calc")
+        vm.submitSearch()
+        runCurrent()
+        vm.searchFor("lamp")
+        runCurrent()
+        vm.searchFor("Calc ") // same search, different case and spacing: moves to the top
+        runCurrent()
+        assertEquals(listOf("Calc", "lamp"), vm.recentSearches.value)
+        assertEquals("Calc", vm.state.value.query.q)
+        vm.listings.state.awaitValue { it.loaded }
+        assertEquals("Calc", h.listingRequests().last().url.parameters["q"])
+
+        vm.removeRecentSearch("lamp")
+        assertEquals(listOf("Calc"), vm.recentSearches.value)
+        vm.clearRecentSearches()
+        assertTrue(vm.recentSearches.value.isEmpty())
+    }
+
+    @Test
+    fun openingAResultRemembersTheSearchButTypingAloneDoesNot() = runTest {
+        val (_, vm, _) = browse()
+        vm.onSearchTextChange("ca")
+        advanceTimeBy(BrowseViewModel.SEARCH_DEBOUNCE_MS + 1)
+        runCurrent()
+        assertTrue(vm.recentSearches.value.isEmpty())
+        vm.onListingOpened()
+        assertEquals(listOf("ca"), vm.recentSearches.value)
+    }
+
+    @Test
+    fun recentSearchesAreCappedAndSurviveARestart() {
+        var stored: String? = null
+        val recents = RecentSearches({ stored }, { stored = it })
+        (1..10).forEach { recents.add("search $it") }
+        recents.add("x") // too short to be worth keeping
+        assertEquals(RecentSearches.MAX, recents.items.value.size)
+        assertEquals("search 10", recents.items.value.first())
+        assertEquals(recents.items.value, RecentSearches({ stored }, { stored = it }).items.value)
+        recents.clear()
+        assertNull(stored)
+    }
+
+    @Test
+    fun sortMenuRestartsPagingAndKeepsTheDefaultAsNoSort() = runTest {
+        val (h, vm, _) = browse()
+        vm.listings.state.awaitValue { it.loaded }
+
+        vm.selectSort(ListingSort.PRICE_DESC)
+        runCurrent()
+        vm.listings.state.awaitValue { it.loaded }
+        assertEquals("PRICE_DESC", h.listingRequests().last().url.parameters["sort"])
+        assertEquals(0, vm.state.value.filters.filterCount, "a sort isn't a filter")
+
+        vm.selectSort(ListingSort.NEWEST) // the default without a search
+        runCurrent()
+        assertNull(vm.state.value.filters.sort)
+        vm.listings.state.awaitValue { it.loaded }
+        assertNull(h.listingRequests().last().url.parameters["sort"])
+    }
+
+    @Test
+    fun priceShortcutSetsAMaximumAndTogglesOff() = runTest {
+        val (_, vm, _) = browse()
+        vm.openFilters()
+        vm.onDraftMinPrice("5")
+        vm.onDraftPriceCap(2500)
+        assertEquals("", vm.state.value.filterDraft!!.minPrice)
+        assertEquals("25", vm.state.value.filterDraft!!.maxPrice)
+        vm.onDraftPriceCap(2500)
+        assertEquals("", vm.state.value.filterDraft!!.maxPrice)
+        assertTrue(vm.state.value.filterDraft!!.isDefault)
+    }
+
+    @Test
+    fun noResultsCategorySuggestionReplacesTheSearch() = runTest {
+        val (h, vm, _) = browse()
+        vm.searchFor("zzqxv")
+        runCurrent()
+        vm.browseCategory(ListingCategory.ELECTRONICS)
+        runCurrent()
+        assertEquals("", vm.state.value.searchText)
+        assertNull(vm.state.value.query.q)
+        assertEquals(ListingCategory.ELECTRONICS, vm.state.value.filters.category)
+        vm.listings.state.awaitValue { it.loaded }
+        assertEquals("ELECTRONICS", h.listingRequests().last().url.parameters["category"])
+    }
+
+    @Test
     fun loadsFirstPageAndCategoryCounts() = runTest {
         val (h, vm, _) = browse()
 
@@ -245,7 +337,8 @@ class BrowseViewModelTest {
         assertEquals("4999", params["maxPrice"])
         assertEquals("PRICE_ASC", params["sort"])
         assertNull(params["cursor"], "paging restarts when filters change")
-        assertEquals(3, vm.state.value.filters.sheetCount)
+        // Conditions and price are filters (the badge count); the sort has its own menu and doesn't count.
+        assertEquals(2, vm.state.value.filters.filterCount)
         assertNull(vm.state.value.filterDraft)
 
         // Removing a single filter from its chip.
@@ -253,7 +346,7 @@ class BrowseViewModelTest {
         runCurrent()
         vm.listings.state.awaitValue { it.loaded }
         assertNull(h.listingRequests().last().url.parameters["minPrice"])
-        assertEquals(2, vm.state.value.filters.sheetCount)
+        assertEquals(1, vm.state.value.filters.filterCount)
     }
 
     @Test

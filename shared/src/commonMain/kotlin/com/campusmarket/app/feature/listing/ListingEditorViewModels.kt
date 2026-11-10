@@ -52,9 +52,12 @@ data class PhotoItem(
     /** 0..1 while uploading, once the upload has started and its size is known. */
     val progress: Float? = null,
     val error: String? = null,
+    /** The server refused the file itself (unsupported or corrupt): sending it again won't help. */
+    val rejected: Boolean = false,
 ) {
-    /** A failed upload can be retried unless the file itself is over the server's size limit. */
-    val retryable: Boolean get() = status == UploadStatus.Failed && local != null && local.bytes.size <= Limits.PHOTO_MAX_BYTES
+    /** A failed upload can be retried unless the file is over the size limit or was refused as a file. */
+    val retryable: Boolean
+        get() = status == UploadStatus.Failed && local != null && !rejected && local.bytes.size <= Limits.PHOTO_MAX_BYTES
 }
 
 data class ListingFormState(
@@ -70,9 +73,12 @@ data class ListingFormState(
     val fieldErrors: Map<String, String> = emptyMap(),
     val formError: String? = null,
     val submitting: Boolean = false,
+    /** Counts submits rejected by local validation, so the screen can bring the first error into view each time. */
+    val rejectedSubmits: Int = 0,
 ) {
     val photosRemaining: Int get() = (Limits.PHOTOS_MAX - photos.size).coerceAtLeast(0)
     val uploading: Boolean get() = photos.any { it.status == UploadStatus.Uploading }
+    val uploadingCount: Int get() = photos.count { it.status == UploadStatus.Uploading }
 
     /** True once the user has entered anything (Sell offers "Clear"). */
     val isBlank: Boolean
@@ -180,7 +186,9 @@ abstract class ListingFormViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: ApiError) {
-                updatePhoto(key) { it.copy(status = UploadStatus.Failed, progress = null, error = e.field("file") ?: e.message) }
+                // 400/413 name the file as the problem; network errors, 5xx and rate limits are worth a retry.
+                val rejected = e.status == 400 || e.status == 413
+                updatePhoto(key) { it.copy(status = UploadStatus.Failed, progress = null, error = e.field("file") ?: e.message, rejected = rejected) }
             }
         }
         uploadJobs[key] = job
@@ -210,7 +218,7 @@ abstract class ListingFormViewModel(
         if (s.submitting) return
         val errors = validate(s)
         if (errors.isNotEmpty()) {
-            _form.update { it.copy(fieldErrors = errors, formError = "Check the highlighted fields.") }
+            _form.update { it.copy(fieldErrors = errors, formError = "Check the highlighted fields.", rejectedSubmits = it.rejectedSubmits + 1) }
             return
         }
         val valid = ValidForm(
@@ -241,6 +249,9 @@ abstract class ListingFormViewModel(
 
     /** Sends [form] to the server and reports success (event + message). Throws [ApiError]. */
     protected abstract suspend fun save(form: ValidForm)
+
+    /** Whether leaving now would throw away something the user entered (asks before discarding). */
+    open val hasUnsavedChanges: Boolean get() = !_form.value.isBlank && !_form.value.submitting
 
     protected fun validate(s: ListingFormState): Map<String, String> = fieldErrorsOf(
         "photoIds" to when {
@@ -333,6 +344,17 @@ class EditListingViewModel(
             pickupLocation = listing.pickupLocation,
         )
     }
+
+    override val hasUnsavedChanges: Boolean
+        get() {
+            val before = (_original.value as? UiState.Content)?.value ?: return false
+            val f = _form.value
+            if (f.submitting) return false
+            return f.title.trim() != before.title || f.description.trim() != before.description ||
+                f.category != before.category || f.condition != before.condition ||
+                Format.parsePriceCents(f.price) != before.priceCents || f.pickupLocation.trim() != before.pickupLocation ||
+                f.photos.map { it.photoId } != before.photos.map { it.id }
+        }
 
     override suspend fun save(form: ValidForm) {
         val before = (_original.value as? UiState.Content)?.value ?: return

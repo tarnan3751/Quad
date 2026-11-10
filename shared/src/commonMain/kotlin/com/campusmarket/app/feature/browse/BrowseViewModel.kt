@@ -38,8 +38,11 @@ data class BrowseFilters(
 ) {
     val hasPrice: Boolean get() = minPriceCents != null || maxPriceCents != null
 
-    /** Filters set in the sheet (shown as a badge on the filter button; the category has its own chip row). */
-    val sheetCount: Int get() = listOf(conditions.isNotEmpty(), hasPrice, sort != null).count { it }
+    /**
+     * Active filters from the sheet (the badge on the filter button and the removable chips). The category has its own
+     * row and the sort its own menu, so neither counts.
+     */
+    val filterCount: Int get() = listOf(conditions.isNotEmpty(), hasPrice).count { it }
 }
 
 /** Editable copy of the sheet filters while the filter sheet is open. Prices stay as typed text until applied. */
@@ -59,6 +62,9 @@ data class FilterDraft(
 
     /** The option shown as selected (the default one when [sort] is null). */
     val selectedSort: ListingSort get() = sort ?: defaultSort(searching)
+
+    /** Nothing to reset. */
+    val isDefault: Boolean get() = conditions.isEmpty() && minPrice.isBlank() && maxPrice.isBlank() && sort == null
 }
 
 data class BrowseState(
@@ -84,6 +90,7 @@ class BrowseViewModel(
     private val api: ApiClient,
     private val sync: ListingSync,
     messages: UserMessages,
+    private val recents: RecentSearches = RecentSearches.inMemory(),
 ) : ViewModel() {
     private val _state = MutableStateFlow(BrowseState())
     val state: StateFlow<BrowseState> = _state.asStateFlow()
@@ -96,6 +103,9 @@ class BrowseViewModel(
     val listings = Paginator(viewModelScope, key = { it.id }) { cursor, limit ->
         api.listings(_state.value.query, cursor, limit)
     }
+
+    /** Recent searches on this device, newest first. */
+    val recentSearches: StateFlow<List<String>> = recents.items
 
     private var searchJob: Job? = null
 
@@ -131,13 +141,30 @@ class BrowseViewModel(
         }
     }
 
-    /** IME "search": apply now instead of waiting for the debounce. */
-    fun submitSearch() = applyQuery()
+    /** IME "search": apply now instead of waiting for the debounce, and remember the search. */
+    fun submitSearch() {
+        applyQuery()
+        _state.value.query.q?.let(recents::add)
+    }
+
+    /** Runs a recent search (or a suggestion) right away. */
+    fun searchFor(text: String) {
+        _state.update { it.copy(searchText = text) }
+        submitSearch()
+    }
 
     fun clearSearch() {
         _state.update { it.copy(searchText = "") }
         applyQuery()
     }
+
+    /** Opening a result is the clearest sign the search was useful: keep it in the recent searches. */
+    fun onListingOpened() {
+        _state.value.query.q?.let(recents::add)
+    }
+
+    fun removeRecentSearch(text: String) = recents.remove(text)
+    fun clearRecentSearches() = recents.clear()
 
     // ------------------------------------------------------------------------------------------------ filters
 
@@ -147,9 +174,20 @@ class BrowseViewModel(
         applyQuery(_state.value.filters.copy(category = if (category == current) null else category))
     }
 
+    /** The sort menu above the grid. Picking the default sort stores null (see [selectDraftSort]). */
+    fun selectSort(sort: ListingSort) {
+        val searching = _state.value.query.q != null
+        applyQuery(_state.value.filters.copy(sort = if (sort == defaultSort(searching)) null else sort))
+    }
+
+    /** "No results" suggestion: drop the search text and show a whole category instead. */
+    fun browseCategory(category: ListingCategory) {
+        _state.update { it.copy(searchText = "") }
+        applyQuery(BrowseFilters(category = category))
+    }
+
     fun removeConditions() = applyQuery(_state.value.filters.copy(conditions = emptySet()))
     fun removePrice() = applyQuery(_state.value.filters.copy(minPriceCents = null, maxPriceCents = null))
-    fun removeSort() = applyQuery(_state.value.filters.copy(sort = null))
 
     /** Clears search text and every filter. */
     fun clearAll() {
@@ -180,6 +218,13 @@ class BrowseViewModel(
 
     fun onDraftMinPrice(text: String) = editDraft { copy(minPrice = text, fieldErrors = fieldErrors - "minPrice") }
     fun onDraftMaxPrice(text: String) = editDraft { copy(maxPrice = text, fieldErrors = fieldErrors - "maxPrice") }
+
+    /** "Under $25" shortcut: no minimum, that maximum (tapping the selected one clears it). */
+    fun onDraftPriceCap(maxCents: Int) = editDraft {
+        val text = Format.priceInput(maxCents)
+        if (minPrice.isBlank() && maxPrice == text) copy(maxPrice = "", fieldErrors = emptyMap())
+        else copy(minPrice = "", maxPrice = text, fieldErrors = emptyMap())
+    }
 
     /** Picking the default sort stores null so it keeps following the default (e.g. best match once you search). */
     fun selectDraftSort(sort: ListingSort) = editDraft { copy(sort = if (sort == defaultSort(searching)) null else sort) }

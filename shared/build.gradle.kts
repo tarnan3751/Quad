@@ -103,6 +103,7 @@ kotlin {
             implementation(libs.compose.foundation)
             implementation(libs.compose.material3)
             implementation(libs.compose.ui)
+            implementation(libs.compose.ui.backhandler)
             implementation(libs.compose.components.resources)
             implementation(libs.compose.uiToolingPreview)
 
@@ -110,7 +111,6 @@ kotlin {
             implementation(libs.androidx.lifecycle.runtimeCompose)
             implementation(libs.compose.material.icons.core)
             // Already in the graph via navigation-compose; declared so screens can intercept system back.
-            implementation(libs.compose.ui.backhandler)
 
             implementation(libs.ktor.client.core)
             implementation(libs.ktor.client.content.negotiation)
