@@ -39,6 +39,9 @@ Decisions made while implementing the server that go beyond `CONTRACT.md`. Clien
 - A cursor is only valid with the sort/filters that produced it: restart from page 1 whenever query, filters or sort change.
 - `/me/listings?status=ACTIVE,SOLD` uses the same list format.
 - Edit/delete someone else's listing → 403; editing a non-ACTIVE listing → 409; deleting RESERVED/SOLD → 409.
+- `ListingDetail.blocked` is true when the viewer and the seller have blocked each other in either direction (so messaging
+  and buying would answer 403 `BLOCKED`); `seller.blockedByMe` says whether the viewer did it. Show an unavailable state
+  instead of Buy / Message. Always false on your own listing.
 
 ## Chat
 - Cursors are opaque; messages come newest-first; conversations ordered by last activity.

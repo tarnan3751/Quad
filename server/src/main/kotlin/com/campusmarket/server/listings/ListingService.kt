@@ -14,6 +14,7 @@ import com.campusmarket.server.UserThrottle
 import com.campusmarket.server.conflict
 import com.campusmarket.server.forbidden
 import com.campusmarket.server.intOrNull
+import com.campusmarket.server.isBlockedEitherWay
 import com.campusmarket.server.loadUserPublic
 import com.campusmarket.server.millis
 import com.campusmarket.server.notFound
@@ -118,6 +119,7 @@ internal fun Connection.renderDetail(config: AppConfig, row: ListingRow, viewerI
         isMine = row.sellerId == viewerId,
         createdAt = row.createdAt,
         updatedAt = row.updatedAt,
+        blocked = row.sellerId != viewerId && isBlockedEitherWay(viewerId, row.sellerId),
     )
 }
 

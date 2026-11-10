@@ -82,7 +82,7 @@ Passwords: bcrypt (`at.favre.lib:bcrypt`, cost 12; cost 4 is fine in tests). Rat
 |---|---|---|
 | 🔒 POST `/listings` | `CreateListingRequest` → `ListingDetail` | Validate with `Limits`. Photos must be owned by caller. Status ACTIVE. |
 | 🔒 GET `/listings` | → `Page<ListingSummary>` | Query: `q` (full-text on the `search` tsvector, prefix-match the last term; fall back to ILIKE for very short queries), `category`, `condition` (comma-separated allowed), `minPrice`, `maxPrice` (cents), `sort` (`ListingSort`; default NEWEST, or RELEVANCE when `q` is present), `cursor`, `limit`. Only ACTIVE listings on the caller's campus, excluding sellers the caller has blocked. Keyset pagination. |
-| 🔒 GET `/listings/{id}` | → `ListingDetail` | Same campus. ACTIVE/RESERVED/SOLD visible to everyone on campus; REMOVED/DELETED only to the seller and moderators (else 404). |
+| 🔒 GET `/listings/{id}` | → `ListingDetail` | Same campus. ACTIVE/RESERVED/SOLD visible to everyone on campus; REMOVED/DELETED only to the seller and moderators (else 404). `blocked` = a block exists between viewer and seller (either direction). |
 | 🔒 PATCH `/listings/{id}` | `UpdateListingRequest` → `ListingDetail` | Seller only; only while ACTIVE. |
 | 🔒 DELETE `/listings/{id}` | → `OkResponse` | Seller only; sets DELETED. 409 if RESERVED/SOLD. |
 | 🔒 POST / DELETE `/listings/{id}/favorite` | → `OkResponse` | Idempotent. |
