@@ -52,6 +52,7 @@ import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.toRoute
 import com.campusmarket.app.data.SessionManager
 import com.campusmarket.app.data.SessionState
 import com.campusmarket.app.feature.auth.WelcomeRoute
@@ -294,7 +295,14 @@ private fun DeepLinkHandler(nav: NavController) {
     LaunchedEffect(pending) {
         val link = pending ?: return@LaunchedEffect
         when (link) {
-            is DeepLink.OrderDetail -> nav.navigate(OrderDetailRoute(link.orderId)) { launchSingleTop = true }
+            is DeepLink.OrderDetail -> {
+                // Back from Stripe: the order is usually already on top, so reuse that screen. A different order gets
+                // its own screen (reusing the top one would keep the previous order's scroll position and back stack).
+                val top = nav.currentBackStackEntry
+                val alreadyOpen = top?.destination?.hasRoute(OrderDetailRoute::class) == true &&
+                    top.toRoute<OrderDetailRoute>().orderId == link.orderId
+                nav.navigate(OrderDetailRoute(link.orderId)) { launchSingleTop = alreadyOpen }
+            }
             DeepLink.Payouts -> nav.navigate(PayoutsRoute) { launchSingleTop = true }
         }
         DeepLinks.consume(link)
