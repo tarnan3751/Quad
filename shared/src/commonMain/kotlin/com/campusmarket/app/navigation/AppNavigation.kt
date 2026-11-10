@@ -34,6 +34,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -41,6 +42,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.findRootCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalDensity
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavBackStackEntry
@@ -121,6 +126,43 @@ fun OnTabReselected(tab: TopLevelTab, action: suspend () -> Unit) {
     LaunchedEffect(reselections, tab) { reselections.filter { it == tab }.collect { current() } }
 }
 
+/**
+ * How far up from the bottom of the window a screen's pinned bottom content (an action bar, the chat composer)
+ * reaches, so the shell shows snackbars above it instead of on top of it. Screens opt in with
+ * [Modifier.keepSnackbarsAbove].
+ */
+private class SnackbarClearance {
+    var bottomPx by mutableIntStateOf(0)
+        private set
+    private var owner: Any? = null
+
+    fun set(by: Any, px: Int) {
+        owner = by
+        bottomPx = px
+    }
+
+    fun release(by: Any) {
+        if (owner === by) {
+            owner = null
+            bottomPx = 0
+        }
+    }
+}
+
+private val LocalSnackbarClearance = staticCompositionLocalOf<SnackbarClearance?> { null }
+
+/** On a screen's pinned bottom bar (action bar, chat composer): the shell's snackbars appear above it, not over it. */
+@Composable
+fun Modifier.keepSnackbarsAbove(): Modifier {
+    val clearance = LocalSnackbarClearance.current ?: return this
+    val token = remember { Any() }
+    DisposableEffect(clearance, token) { onDispose { clearance.release(token) } }
+    return onGloballyPositioned { coordinates ->
+        val rootHeight = coordinates.findRootCoordinates().size.height
+        clearance.set(token, (rootHeight - coordinates.positionInRoot().y).roundToInt().coerceAtLeast(0))
+    }
+}
+
 /** Switch tabs the standard way: single top, save/restore each tab's back stack. */
 fun NavController.navigateToTab(tab: TopLevelTab) {
     navigate(tab.route) {
@@ -182,10 +224,19 @@ private fun SignedInShell(snackbar: SnackbarHostState) {
     val onTabRoot = destination?.isTabRoot() == true
     val unread = rememberInboxUnread()
     val reselections = remember { MutableSharedFlow<TopLevelTab>(extraBufferCapacity = 1) }
+    val clearance = remember { SnackbarClearance() }
 
     Scaffold(
-        // On tab roots the bottom bar already lifts the snackbar above the navigation bar; elsewhere nothing does.
-        snackbarHost = { SnackbarHost(snackbar, if (onTabRoot) Modifier else Modifier.aboveSystemBars()) { AppSnackbar(it) } },
+        // On tab roots the bottom bar already lifts the snackbar above the navigation bar; elsewhere a screen's pinned
+        // bar (see keepSnackbarsAbove) or the system bars do.
+        snackbarHost = {
+            val above = when {
+                onTabRoot -> Modifier
+                clearance.bottomPx > 0 -> Modifier.padding(bottom = with(LocalDensity.current) { clearance.bottomPx.toDp() })
+                else -> Modifier.aboveSystemBars()
+            }
+            SnackbarHost(snackbar, above) { AppSnackbar(it) }
+        },
         contentWindowInsets = WindowInsets(0),
         bottomBar = {
             if (onTabRoot) {
@@ -206,7 +257,7 @@ private fun SignedInShell(snackbar: SnackbarHostState) {
             }
         },
     ) { padding ->
-        CompositionLocalProvider(LocalTabReselected provides reselections) {
+        CompositionLocalProvider(LocalTabReselected provides reselections, LocalSnackbarClearance provides clearance) {
             NavHost(
                 nav,
                 startDestination = BrowseRoute,

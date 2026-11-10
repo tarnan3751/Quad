@@ -76,6 +76,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
+import com.campusmarket.app.navigation.keepSnackbarsAbove
 
 private const val LOAD_OLDER_THRESHOLD = 5
 
@@ -134,7 +135,9 @@ fun ConversationScreen(route: ConversationRoute, nav: NavController) {
                 Box(Modifier.weight(1f)) {
                     MessageList(vm, c, onReportMessage = { reportMessageId = it })
                 }
-                ComposerArea(vm, c, isBuyer = !mine, onUnblock = { blockDialog = true })
+                Box(Modifier.keepSnackbarsAbove()) {
+                    ComposerArea(vm, c, isBuyer = !mine, onUnblock = { blockDialog = true })
+                }
             }
         }
     }
