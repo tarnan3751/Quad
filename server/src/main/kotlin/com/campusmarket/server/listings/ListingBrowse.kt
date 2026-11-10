@@ -63,6 +63,13 @@ internal inline fun <reified E : Enum<E>> Parameters.enumSet(name: String): Set<
             ?: invalidField(name, "Unknown $name '${v.take(40)}'; expected one of ${enumValues<E>().joinToString { it.name }}")
     }
 
+/** Seller and viewer conditions of every browse query over `listings l JOIN users s`; one parameter, the viewer's id. */
+private const val VISIBLE_TO_VIEWER =
+    "$SELLER_IN_GOOD_STANDING AND NOT EXISTS (SELECT 1 FROM blocks b WHERE b.blocker_id = ? AND b.blocked_id = l.seller_id)"
+
+/** How many listings a text search reads in order, per relevance class, before turning to the text indexes. */
+private const val WALK_WINDOW = 1000
+
 /** One row of a keyset-paged listing query, before rendering. */
 private data class Hit(val id: UUID, val key: Keyset)
 
@@ -78,67 +85,109 @@ internal class ListingBrowse(private val deps: AppDeps) {
             else -> p.sort
         }
         val after = page.cursor?.let { Cursors.decode(it, sort.name) }
-
-        val sql = Sql("SELECT x.id, x.price_cents, x.created_at, x.rank FROM (SELECT l.id, l.price_cents, l.created_at, ")
-        when {
-            sort != ListingSort.RELEVANCE -> sql.add("0::real")
-            match is TextMatch.FullText -> sql.add("ts_rank(l.search, ?::tsquery)", match.tsquery)
-            match is TextMatch.Substring -> sql.add(
-                "(CASE WHEN l.title ILIKE ? ESCAPE '!' THEN 1.0 WHEN l.title ILIKE ? ESCAPE '!' THEN 0.6 ELSE 0.2 END)::real",
-                match.prefixPattern, match.containsPattern,
-            )
-        }
-        sql.add(
-            """ AS rank
-               FROM listings l JOIN users s ON s.id = l.seller_id
-               WHERE l.campus_domain = ? AND l.status = 'ACTIVE' AND $SELLER_IN_GOOD_STANDING
-                 AND NOT EXISTS (SELECT 1 FROM blocks b WHERE b.blocker_id = ? AND b.blocked_id = l.seller_id)""",
-            viewer.campusDomain, viewer.id,
-        )
-        when (match) {
-            is TextMatch.FullText -> sql.add(" AND l.search @@ ?::tsquery", match.tsquery)
-            is TextMatch.Substring -> sql.add(
-                " AND (l.title ILIKE ? ESCAPE '!' OR l.description ILIKE ? ESCAPE '!')",
-                match.containsPattern, match.containsPattern,
-            )
-            null -> Unit
-        }
-        if (p.categories.isNotEmpty()) sql.add(" AND l.category = ANY(?)", p.categories.toList())
-        if (p.conditions.isNotEmpty()) sql.add(" AND l.condition = ANY(?)", p.conditions.toList())
-        p.minPriceCents?.let { sql.add(" AND l.price_cents >= ?", it) }
-        p.maxPriceCents?.let { sql.add(" AND l.price_cents <= ?", it) }
-        sql.add(") x")
-
-        if (after != null) {
-            val ts = after.createdAt.toString()
-            when (sort) {
-                ListingSort.NEWEST -> sql.add(" WHERE (x.created_at, x.id) < (?::timestamptz, ?)", ts, after.id)
-                ListingSort.PRICE_ASC -> sql.add(
-                    " WHERE (x.price_cents > ? OR (x.price_cents = ? AND (x.created_at, x.id) < (?::timestamptz, ?)))",
-                    after.priceCents, after.priceCents, ts, after.id,
-                )
-                ListingSort.PRICE_DESC -> sql.add(" WHERE (x.price_cents, x.created_at, x.id) < (?, ?::timestamptz, ?)", after.priceCents, ts, after.id)
-                ListingSort.RELEVANCE -> sql.add(" WHERE (x.rank, x.created_at, x.id) < (?::real, ?::timestamptz, ?)", after.rank.toDouble(), ts, after.id)
-            }
-        }
-        sql.add(
-            when (sort) {
-                ListingSort.NEWEST -> " ORDER BY x.created_at DESC, x.id DESC"
-                ListingSort.PRICE_ASC -> " ORDER BY x.price_cents ASC, x.created_at DESC, x.id DESC"
-                ListingSort.PRICE_DESC -> " ORDER BY x.price_cents DESC, x.created_at DESC, x.id DESC"
-                ListingSort.RELEVANCE -> " ORDER BY x.rank DESC, x.created_at DESC, x.id DESC"
-            },
-        )
-        sql.add(" LIMIT ?", page.limit + 1)
-
-        val hits = c.queryFreshPlan(sql.toString(), *sql.paramsArray()) { rs ->
-            Hit(
-                rs.uuid("id"),
-                Keyset(sort.name, rs.instantMicros("created_at"), rs.uuid("id"), rs.getInt("price_cents"), rs.getFloat("rank")),
-            )
-        }
+        val hits = if (match == null) c.browse(viewer, p, sort, after, page.limit + 1) else c.textSearch(viewer, p, match, sort, after, page.limit + 1)
         c.render(viewer, hits, page.limit)
     }
+
+    /** The first [count] visible listings after [after] in [sort] order, no text query. */
+    private fun Connection.browse(viewer: UserPrincipal, p: SearchParams, sort: ListingSort, after: Keyset?, count: Int): List<Hit> {
+        val sql = Sql(
+            """SELECT l.id, l.price_cents, l.created_at
+               FROM listings l JOIN users s ON s.id = l.seller_id
+               WHERE l.campus_domain = ? AND l.status = 'ACTIVE' AND $VISIBLE_TO_VIEWER""",
+            viewer.campusDomain, viewer.id,
+        )
+        sql.filters(p).after(sort, after).add(" ORDER BY ${order(sort)} LIMIT ?", count)
+        return queryFreshPlan(sql.toString(), *sql.paramsArray()) { it.hit(sort, 0f) }
+    }
+
+    /**
+     * The first [count] visible listings matching [match] after [after]. With [ListingSort.RELEVANCE] the match's
+     * classes come one after the other, each newest first; otherwise all matches are one class in [sort] order.
+     *
+     * No statistic tells how many listings a given text matches, and the two ways of finding them fail in opposite
+     * cases: reading the campus in order until enough rows match is quick for a common text and reads everything for a
+     * rare one; fetching all matches through an index and sorting them is the reverse. So each class is first looked
+     * for among the next [WALK_WINDOW] listings in order, and only if that doesn't fill the page (the text is rare, at
+     * least lately) are its matches fetched through the index.
+     */
+    private fun Connection.textSearch(viewer: UserPrincipal, p: SearchParams, match: TextMatch, sort: ListingSort, after: Keyset?, count: Int): List<Hit> {
+        val ranked = sort == ListingSort.RELEVANCE
+        val order = order(if (ranked) ListingSort.NEWEST else sort)
+        val tiers = if (ranked) match.ranked(viewer.campusDomain) else listOf(match.any(viewer.campusDomain))
+        val hits = ArrayList<Hit>(count)
+        var windowIsPartOfCampus: Boolean? = null
+        for (tier in tiers) {
+            val need = count - hits.size
+            if (need <= 0) break
+            if (ranked && after != null && tier.rank > after.rank) continue
+            val start = after?.takeIf { !ranked || it.rank == tier.rank }
+
+            fun fetch(indexed: Boolean): List<Hit> {
+                val sql = Sql("SELECT l.id, l.price_cents, l.created_at FROM (SELECT l.id, l.price_cents, l.created_at, l.seller_id")
+                if (indexed) {
+                    // `|| ''` keeps the planner off the campus and status indexes: this is for the rows the text index finds
+                    sql.add(" FROM listings l WHERE l.campus_domain || '' = ? AND l.status || '' = 'ACTIVE'", viewer.campusDomain)
+                    sql.filters(p).after(sort, start).add(" AND ${tier.indexed.sql} ORDER BY $order) l", *tier.indexed.params)
+                } else {
+                    sql.add(", l.title, l.description, l.search FROM listings l WHERE l.campus_domain = ? AND l.status = 'ACTIVE'", viewer.campusDomain)
+                    sql.filters(p).after(sort, start).add(" ORDER BY $order LIMIT $WALK_WINDOW) l")
+                }
+                // the sellers are only looked up for the matches, in order, until the page is full
+                sql.add(" JOIN users s ON s.id = l.seller_id WHERE $VISIBLE_TO_VIEWER", viewer.id)
+                if (!indexed) sql.add(" AND ${tier.cheap.sql}", *tier.cheap.params)
+                sql.add(" ORDER BY $order LIMIT $need")
+                return queryFreshPlan(sql.toString(), *sql.paramsArray()) { it.hit(sort, tier.rank) }
+            }
+
+            var rows = fetch(indexed = false)
+            if (rows.size < need) {
+                // the walk stopped at the window, not at the page size; unless the window was the whole campus, it may have missed rows
+                val partial = windowIsPartOfCampus ?: windowIsPartOfCampus(viewer, p).also { windowIsPartOfCampus = it }
+                if (partial) rows = fetch(indexed = true)
+            }
+            hits += rows
+        }
+        return hits
+    }
+
+    /** False when the campus has fewer listings (passing the filters) than a walk reads, so that every walk saw them all. */
+    private fun Connection.windowIsPartOfCampus(viewer: UserPrincipal, p: SearchParams): Boolean {
+        val sql = Sql("SELECT count(*) FROM (SELECT 1 FROM listings l WHERE l.campus_domain = ? AND l.status = 'ACTIVE'", viewer.campusDomain)
+        sql.filters(p).add(" LIMIT $WALK_WINDOW) w")
+        return queryFreshPlan(sql.toString(), *sql.paramsArray()) { it.getInt(1) }.single() >= WALK_WINDOW
+    }
+
+    private fun Sql.filters(p: SearchParams): Sql {
+        if (p.categories.isNotEmpty()) add(" AND l.category = ANY(?)", p.categories.toList())
+        if (p.conditions.isNotEmpty()) add(" AND l.condition = ANY(?)", p.conditions.toList())
+        p.minPriceCents?.let { add(" AND l.price_cents >= ?", it) }
+        p.maxPriceCents?.let { add(" AND l.price_cents <= ?", it) }
+        return this
+    }
+
+    /** Keyset condition for the rows after [after] in [sort] order ([ListingSort.RELEVANCE]: within one class, newest first). */
+    private fun Sql.after(sort: ListingSort, after: Keyset?): Sql {
+        if (after == null) return this
+        val ts = after.createdAt.toString()
+        return when (sort) {
+            ListingSort.NEWEST, ListingSort.RELEVANCE -> add(" AND (l.created_at, l.id) < (?::timestamptz, ?)", ts, after.id)
+            ListingSort.PRICE_ASC -> add(
+                " AND (l.price_cents > ? OR (l.price_cents = ? AND (l.created_at, l.id) < (?::timestamptz, ?)))",
+                after.priceCents, after.priceCents, ts, after.id,
+            )
+            ListingSort.PRICE_DESC -> add(" AND (l.price_cents, l.created_at, l.id) < (?, ?::timestamptz, ?)", after.priceCents, ts, after.id)
+        }
+    }
+
+    private fun order(sort: ListingSort): String = when (sort) {
+        ListingSort.NEWEST, ListingSort.RELEVANCE -> "l.created_at DESC, l.id DESC"
+        ListingSort.PRICE_ASC -> "l.price_cents ASC, l.created_at DESC, l.id DESC"
+        ListingSort.PRICE_DESC -> "l.price_cents DESC, l.created_at DESC, l.id DESC"
+    }
+
+    private fun ResultSet.hit(sort: ListingSort, rank: Float): Hit =
+        Hit(uuid("id"), Keyset(sort.name, instantMicros("created_at"), uuid("id"), getInt("price_cents"), rank))
 
     /** GET /me/listings: the caller's own listings in any status but DELETED, newest first. */
     suspend fun mine(viewer: UserPrincipal, statuses: Set<ListingStatus>, page: PageParams): Page<ListingSummary> = deps.db.tx { c ->
