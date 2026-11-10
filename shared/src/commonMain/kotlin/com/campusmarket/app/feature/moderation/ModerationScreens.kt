@@ -1,48 +1,64 @@
 package com.campusmarket.app.feature.moderation
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.List
-import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.campusmarket.app.feature.listing.ListingDetailRoute
+import com.campusmarket.app.feature.profile.Chevron
+import com.campusmarket.app.feature.profile.Glyphs
+import com.campusmarket.app.feature.profile.MenuDivider
+import com.campusmarket.app.feature.profile.MenuGroup
+import com.campusmarket.app.feature.profile.MenuRow
+import com.campusmarket.app.feature.profile.SkeletonBlock
+import com.campusmarket.app.feature.profile.SkeletonRows
 import com.campusmarket.app.feature.profile.UserProfileRoute
+import com.campusmarket.app.feature.profile.ago
 import com.campusmarket.app.navigation.LocalCurrentUser
 import com.campusmarket.app.ui.Format
 import com.campusmarket.app.ui.components.AppTab
@@ -50,41 +66,55 @@ import com.campusmarket.app.ui.components.AppTopBar
 import com.campusmarket.app.ui.components.Avatar
 import com.campusmarket.app.ui.components.ChipTone
 import com.campusmarket.app.ui.components.CollectEvents
-import com.campusmarket.app.ui.components.DestructiveButton
 import com.campusmarket.app.ui.components.EmptyState
+import com.campusmarket.app.ui.components.ErrorState
+import com.campusmarket.app.ui.components.FilterChip
 import com.campusmarket.app.ui.components.ListingRow
 import com.campusmarket.app.ui.components.PagedLazyColumn
+import com.campusmarket.app.ui.components.RemoteImage
 import com.campusmarket.app.ui.components.ReportStatusChip
-import com.campusmarket.app.ui.components.SecondaryButton
-import com.campusmarket.app.ui.components.SectionHeader
 import com.campusmarket.app.ui.components.StatusChip
-import com.campusmarket.app.ui.components.UiStateContent
 import com.campusmarket.app.ui.components.UserRow
 import com.campusmarket.app.ui.label
+import com.campusmarket.app.ui.state.UiState
 import com.campusmarket.app.ui.theme.Spacing
 import com.campusmarket.core.ListingStatus
 import com.campusmarket.core.ModerationAction
 import com.campusmarket.core.ModerationLogEntry
 import com.campusmarket.core.Report
-import com.campusmarket.core.ReportReason
 import com.campusmarket.core.ReportStatus
 import com.campusmarket.core.ReportTargetType
 import com.campusmarket.core.UserRole
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
+import kotlin.time.Clock
+import kotlin.time.Instant
 
 // ---------------------------------------------------------------------------------------------------- queue
 
-/** Reports by status (Open / Resolved / Dismissed), tap for the detail; app bar action opens the moderation log. */
+/**
+ * Reports by status (Open / Resolved / Dismissed) and kind (listings, accounts, messages); tap for the detail. The app
+ * bar links to disputes, the moderation log and (admins) staff.
+ */
 @Composable
 fun ModerationQueueScreen(nav: NavController) {
-    ModeratorGate("Moderation", nav) { QueueContent(nav) }
+    ModeratorGate("Reports", nav) { QueueContent(nav) }
 }
+
+private val TypeFilters = listOf(
+    null to "All",
+    ReportTargetType.LISTING to "Listings",
+    ReportTargetType.USER to "Accounts",
+    ReportTargetType.MESSAGE to "Messages",
+)
 
 @Composable
 private fun QueueContent(nav: NavController) {
     val vm = koinViewModel<ModerationQueueViewModel>()
     val status by vm.status.collectAsStateWithLifecycle()
+    val type by vm.type.collectAsStateWithLifecycle()
 
     // Coming back from a report that was just resolved: reload. The flag lives in the view model: this composable
     // leaves the composition while the detail is open, so a `remember`ed one would always look like the first resume.
@@ -96,78 +126,146 @@ private fun QueueContent(nav: NavController) {
     Scaffold(
         topBar = {
             AppTopBar(
-                "Moderation",
+                "Reports",
                 onBack = { nav.popBackStack() },
-                actions = {
-                    if (LocalCurrentUser.current.role == UserRole.ADMIN) {
-                        IconButton(onClick = { nav.navigate(StaffRoute) }) {
-                            Icon(Icons.Default.Person, contentDescription = "Staff")
-                        }
-                    }
-                    IconButton(onClick = { nav.navigate(DisputesRoute) }) {
-                        Icon(Icons.Default.Warning, contentDescription = "Disputes")
-                    }
-                    IconButton(onClick = { nav.navigate(ModerationLogRoute) }) {
-                        Icon(Icons.Default.List, contentDescription = "Moderation log")
-                    }
-                },
+                actions = { ModerationToolLinks(nav, current = ModerationQueueRoute) },
             )
         },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
-            TabRow(selectedTabIndex = ReportStatus.entries.indexOf(status)) {
+            TabRow(selectedTabIndex = ReportStatus.entries.indexOf(status), containerColor = MaterialTheme.colorScheme.surface) {
                 ReportStatus.entries.forEach { s ->
                     AppTab(selected = s == status, onClick = { vm.select(s) }, text = s.label)
                 }
             }
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = Spacing.screen, vertical = Spacing.sm),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+            ) {
+                TypeFilters.forEach { (t, label) ->
+                    FilterChip(selected = type == t, onClick = { vm.selectType(t) }, label = { Text(label) })
+                }
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             PagedLazyColumn(
                 vm.reports,
                 key = { it.id },
-                empty = {
-                    when (status) {
-                        ReportStatus.OPEN -> EmptyState("The queue is clear", message = "No open reports right now.", icon = Icons.Default.CheckCircle)
-                        ReportStatus.RESOLVED -> EmptyState("Nothing resolved yet")
-                        ReportStatus.DISMISSED -> EmptyState("Nothing dismissed yet")
-                    }
-                },
+                empty = { QueueEmpty(status, type) },
             ) { report ->
                 ReportRow(report, onClick = { nav.navigate(ReportDetailRoute(report.id)) })
-                HorizontalDivider()
+                HorizontalDivider(Modifier.padding(start = Spacing.screen + 52.dp + Spacing.md), color = MaterialTheme.colorScheme.outlineVariant)
             }
         }
     }
 }
 
+/** App-bar shortcuts between the moderation screens, labelled for screen readers. */
+@Composable
+internal fun ModerationToolLinks(nav: NavController, current: Any) {
+    if (current != ModerationQueueRoute) {
+        IconButton(onClick = { nav.navigate(ModerationQueueRoute) { launchSingleTop = true } }) { Icon(Glyphs.Flag, contentDescription = "Reports") }
+    }
+    if (current != DisputesRoute) {
+        IconButton(onClick = { nav.navigate(DisputesRoute) { launchSingleTop = true } }) { Icon(Glyphs.Gavel, contentDescription = "Disputes") }
+    }
+    if (current != ModerationLogRoute) {
+        IconButton(onClick = { nav.navigate(ModerationLogRoute) { launchSingleTop = true } }) { Icon(Glyphs.History, contentDescription = "Moderation log") }
+    }
+    if (current != StaffRoute && LocalCurrentUser.current.role == UserRole.ADMIN) {
+        IconButton(onClick = { nav.navigate(StaffRoute) { launchSingleTop = true } }) { Icon(Glyphs.Group, contentDescription = "Staff") }
+    }
+}
+
+@Composable
+private fun QueueEmpty(status: ReportStatus, type: ReportTargetType?) {
+    val kind = when (type) {
+        null -> ""
+        ReportTargetType.LISTING -> "listing "
+        ReportTargetType.USER -> "account "
+        ReportTargetType.MESSAGE -> "message "
+        ReportTargetType.ORDER -> "order "
+    }
+    when (status) {
+        ReportStatus.OPEN -> EmptyState(
+            if (type == null) "The queue is clear" else "No open ${kind}reports",
+            message = "New reports from students land here, oldest first.",
+            icon = Icons.Default.CheckCircle,
+        )
+        ReportStatus.RESOLVED -> EmptyState("No resolved ${kind}reports yet", message = "Reports closed with a warning, removal or suspension show up here.", icon = Glyphs.History)
+        ReportStatus.DISMISSED -> EmptyState("No dismissed ${kind}reports yet", message = "Reports closed without action show up here.", icon = Glyphs.History)
+    }
+}
+
+/** Leading picture of a queue row: the listing's photo, the account's avatar, or a message bubble. */
+@Composable
+private fun ReportThumb(report: Report) {
+    val listing = report.targetListing
+    val user = report.targetUser
+    when {
+        report.targetType == ReportTargetType.LISTING && listing != null ->
+            RemoteImage(listing.thumbnailUrl, contentDescription = null, modifier = Modifier.size(52.dp).clip(MaterialTheme.shapes.small))
+        report.targetType == ReportTargetType.USER && user != null -> Avatar(user.avatarUrl, user.displayName, size = 52.dp)
+        else -> Box(
+            Modifier.size(52.dp).background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(14.dp)),
+            contentAlignment = Alignment.Center,
+        ) { Icon(report.targetType.glyph, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer) }
+    }
+}
+
+/** What it is · by whom · why · how old, at a glance. */
 @Composable
 private fun ReportRow(report: Report, onClick: () -> Unit) {
-    ListItem(
-        modifier = Modifier.clickable(onClick = onClick),
-        colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
-        overlineContent = {
-            Text("${report.targetType.label} · ${report.reason.label}", maxLines = 1, overflow = TextOverflow.Ellipsis)
-        },
-        headlineContent = {
-            Text(
-                report.targetSummary.ifBlank { "(no summary)" },
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                fontWeight = FontWeight.Medium,
-            )
-        },
-        supportingContent = {
-            val tail = if (report.status == ReportStatus.OPEN) Format.relativeTime(report.createdAt)
-            else listOfNotNull(report.resolutionAction?.label, report.resolvedAt?.let(Format::relativeTime)).joinToString(" · ")
-            Text("Reported by ${report.reporter.displayName} · $tail", maxLines = 1, overflow = TextOverflow.Ellipsis)
-        },
-        trailingContent = {
-            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
-                if (report.status != ReportStatus.OPEN) ReportStatusChip(report.status)
-                if (report.openReportsAgainstTargetUser > 1) {
-                    StatusChip("${report.openReportsAgainstTargetUser} open", ChipTone.Warning)
+    val scheme = MaterialTheme.colorScheme
+    val owner = report.targetUser?.displayName
+    val what = when (report.targetType) {
+        ReportTargetType.LISTING -> if (owner != null) "Listing by $owner" else "Listing"
+        ReportTargetType.USER -> "Account on ${report.targetUser?.campusDomain ?: "campus"}"
+        ReportTargetType.MESSAGE -> if (owner != null) "Message from $owner" else "Message"
+        ReportTargetType.ORDER -> "Order"
+    }
+    val headline = report.targetSummary.ifBlank { "(no summary)" }.let { if (report.targetType == ReportTargetType.MESSAGE) "“$it”" else it }
+    Row(
+        Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onClick).padding(horizontal = Spacing.screen, vertical = Spacing.md),
+        horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+    ) {
+        ReportThumb(report)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    report.reason.label,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = scheme.primary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                AgeLabel(if (report.status == ReportStatus.OPEN) report.createdAt else report.resolvedAt ?: report.createdAt, waiting = report.status == ReportStatus.OPEN)
+            }
+            Text(headline, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold), maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text("$what · reported by ${report.reporter.displayName}", style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            val closedBy = report.resolvedBy?.displayName
+            if (report.status != ReportStatus.OPEN || report.openReportsAgainstTargetUser > 1) {
+                Row(Modifier.padding(top = Spacing.xs), horizontalArrangement = Arrangement.spacedBy(Spacing.xs), verticalAlignment = Alignment.CenterVertically) {
+                    if (report.status != ReportStatus.OPEN) {
+                        report.resolutionAction?.let { ActionChip(it) } ?: ReportStatusChip(report.status)
+                        if (closedBy != null) Text("by $closedBy", style = MaterialTheme.typography.labelMedium, color = scheme.onSurfaceVariant, maxLines = 1)
+                    }
+                    if (report.status == ReportStatus.OPEN && report.openReportsAgainstTargetUser > 1) {
+                        StatusChip("${report.openReportsAgainstTargetUser} open on ${owner ?: "this user"}", ChipTone.Warning)
+                    }
                 }
             }
-        },
-    )
+        }
+    }
+}
+
+/** "9h" for a fresh report; anything waiting a day or more is flagged so the oldest get picked up first. */
+@Composable
+private fun AgeLabel(epochMillis: Long, waiting: Boolean) {
+    val age = Format.relativeTime(epochMillis)
+    val overADay = Clock.System.now().toEpochMilliseconds() - epochMillis >= 24 * 3_600_000L
+    if (waiting && overADay) StatusChip("Waiting $age", ChipTone.Warning)
+    else Text(age, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 // ---------------------------------------------------------------------------------------------------- detail
@@ -175,9 +273,10 @@ private fun ReportRow(report: Report, onClick: () -> Unit) {
 private enum class ModDialog { Dismiss, RemoveListing, Warn, Suspend, DirectSuspend, Unsuspend, DirectRemove, Restore }
 
 /**
- * One report: reporter, reason, details, target summary / listing / user (with their open-report count), and the
- * actions: Dismiss, Remove listing, Warn user, Suspend user (resolve the report); plus direct tools (lift suspension,
- * restore listing) that work even after the report is closed. Every action is confirmed and takes an optional note.
+ * One report: why and by whom, the reported content in context (listing, account, or message with its listing), the
+ * user responsible with their open-report count, and the decision split into "no violation" (dismiss, warn) and
+ * "take action" (remove listing, suspend). Closed reports show the outcome and follow-up tools (restore, remove,
+ * suspend, lift suspension). Every action is confirmed; suspensions pick a length, direct ones need a reason.
  */
 @Composable
 fun ReportDetailScreen(route: ReportDetailRoute, nav: NavController) {
@@ -189,239 +288,400 @@ private fun ReportDetailContent(route: ReportDetailRoute, nav: NavController) {
     val vm = koinViewModel<ReportDetailViewModel> { parametersOf(route) }
     val state by vm.report.collectAsStateWithLifecycle()
     val action by vm.runner.state.collectAsStateWithLifecycle()
+    val refreshing by vm.refreshing.collectAsStateWithLifecycle()
     var dialog by remember { mutableStateOf<ModDialog?>(null) }
+    var menuOpen by remember { mutableStateOf(false) }
     CollectEvents(vm.actionDone.flow) { dialog = null }
+    val open: (ModDialog) -> Unit = { vm.runner.clearError(); dialog = it }
+    val loaded = (state as? UiState.Content)?.value
 
-    Scaffold(topBar = { AppTopBar("Report", onBack = { nav.popBackStack() }) }) { padding ->
-        UiStateContent(state, onRetry = vm::reload, modifier = Modifier.fillMaxSize().padding(padding)) { report ->
-            Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(bottom = Spacing.xl)) {
-                ReportBody(report, nav, onOpenDialog = { vm.runner.clearError(); dialog = it })
+    Scaffold(
+        topBar = {
+            AppTopBar(
+                loaded?.let { "${it.targetType.label} report" } ?: "Report",
+                onBack = { nav.popBackStack() },
+                actions = {
+                    if (loaded != null && loaded.status == ReportStatus.OPEN && (loaded.targetUser != null || loaded.targetListing?.status == ListingStatus.REMOVED)) {
+                        Box {
+                            IconButton(onClick = { menuOpen = true }) { Icon(Icons.Default.MoreVert, contentDescription = "More tools") }
+                            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                                if (loaded.targetListing?.status == ListingStatus.REMOVED) {
+                                    DropdownMenuItem(
+                                        text = { Text("Restore listing…") },
+                                        leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) },
+                                        onClick = { menuOpen = false; open(ModDialog.Restore) },
+                                    )
+                                }
+                                if (loaded.targetUser != null) {
+                                    DropdownMenuItem(
+                                        text = { Text("Lift suspension…") },
+                                        leadingIcon = { Icon(Glyphs.Undo, contentDescription = null) },
+                                        onClick = { menuOpen = false; open(ModDialog.Unsuspend) },
+                                    )
+                                }
+                            }
+                        }
+                    }
+                },
+            )
+        },
+    ) { padding ->
+        when (val s = state) {
+            UiState.Loading -> DetailSkeleton(Modifier.padding(padding))
+            is UiState.Error -> ErrorState(s.error, Modifier.fillMaxSize().padding(padding), onRetry = vm::reload)
+            is UiState.Content -> PullToRefreshBox(refreshing, onRefresh = vm::pullRefresh, modifier = Modifier.fillMaxSize().padding(padding)) {
+                Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = Spacing.xxl)) {
+                    ReportBody(s.value, nav, onOpenDialog = open)
+                }
             }
-            val listing = report.targetListing
-            val targetUser = report.targetUser
-            val name = targetUser?.displayName ?: "this user"
-            when (dialog) {
-                null -> Unit
-                ModDialog.Dismiss -> ModerationActionDialog(
-                    title = "Dismiss this report?",
-                    message = "No violation found. The reporter's report is closed and nothing happens to the content.",
-                    confirmLabel = "Dismiss",
-                    destructive = false,
-                    submitting = action.submitting,
-                    error = action.error,
-                    onDismiss = { dialog = null },
-                    onConfirm = { note, _ -> vm.resolve(ModerationAction.DISMISS, note) },
-                )
-                ModDialog.RemoveListing -> ModerationActionDialog(
-                    title = "Remove this listing?",
-                    message = "The listing is taken down and the seller can no longer sell it. Other open reports on it are resolved too.",
-                    confirmLabel = "Remove listing",
-                    submitting = action.submitting,
-                    error = action.error,
-                    onDismiss = { dialog = null },
-                    onConfirm = { note, _ -> vm.resolve(ModerationAction.REMOVE_LISTING, note) },
-                )
-                ModDialog.Warn -> ModerationActionDialog(
-                    title = "Warn $name?",
-                    message = "Records a warning in the moderation log and closes the report. The user keeps full access.",
-                    confirmLabel = "Warn user",
-                    destructive = false,
-                    submitting = action.submitting,
-                    error = action.error,
-                    onDismiss = { dialog = null },
-                    onConfirm = { note, _ -> vm.resolve(ModerationAction.WARN_USER, note) },
-                )
-                ModDialog.Suspend -> ModerationActionDialog(
-                    title = "Suspend $name?",
-                    message = "They are signed out everywhere and can't sign in until the suspension ends. Other open reports on them are resolved too.",
-                    confirmLabel = "Suspend user",
-                    showDuration = true,
-                    submitting = action.submitting,
-                    error = action.error,
-                    onDismiss = { dialog = null },
-                    onConfirm = { note, days -> vm.resolve(ModerationAction.SUSPEND_USER, note, days) },
-                )
-                ModDialog.DirectSuspend -> ModerationActionDialog(
-                    title = "Suspend $name?",
-                    message = "They are signed out everywhere and can't sign in until the suspension ends.",
-                    confirmLabel = "Suspend user",
-                    noteLabel = "Reason (required, shown in the log)",
-                    noteRequired = true,
-                    showDuration = true,
-                    submitting = action.submitting,
-                    error = action.error,
-                    onDismiss = { dialog = null },
-                    onConfirm = { note, days -> targetUser?.let { vm.suspendUser(it.id, note, days) } },
-                )
-                ModDialog.Unsuspend -> ModerationActionDialog(
-                    title = "Lift suspension for $name?",
-                    message = "They will be able to sign in again.",
-                    confirmLabel = "Lift suspension",
-                    destructive = false,
-                    submitting = action.submitting,
-                    error = action.error,
-                    onDismiss = { dialog = null },
-                    onConfirm = { note, _ -> targetUser?.let { vm.unsuspendUser(it.id, note) } },
-                )
-                ModDialog.DirectRemove -> ModerationActionDialog(
-                    title = "Remove this listing?",
-                    message = "The listing is taken down. Listings that are reserved or sold can't be removed.",
-                    confirmLabel = "Remove listing",
-                    submitting = action.submitting,
-                    error = action.error,
-                    onDismiss = { dialog = null },
-                    onConfirm = { note, _ -> listing?.let { vm.removeListing(it.id, note) } },
-                )
-                ModDialog.Restore -> ModerationActionDialog(
-                    title = "Restore this listing?",
-                    message = "The listing becomes active and visible on campus again.",
-                    confirmLabel = "Restore listing",
-                    destructive = false,
-                    submitting = action.submitting,
-                    error = action.error,
-                    onDismiss = { dialog = null },
-                    onConfirm = { note, _ -> listing?.let { vm.restoreListing(it.id, note) } },
-                )
+        }
+    }
+
+    val report = loaded ?: return
+    val listing = report.targetListing
+    val targetUser = report.targetUser
+    val name = targetUser?.displayName ?: "this user"
+    when (dialog) {
+        null -> Unit
+        ModDialog.Dismiss -> ModerationActionDialog(
+            title = "Dismiss this report?",
+            message = "No guideline was broken. The report closes, along with other open reports on this ${report.targetType.noun}, and nothing changes for $name.",
+            confirmLabel = "Dismiss report",
+            destructive = false,
+            submitting = action.submitting,
+            error = action.error,
+            onDismiss = { dialog = null },
+            onConfirm = { note, _ -> vm.resolve(ModerationAction.DISMISS, note) },
+        )
+        ModDialog.RemoveListing -> ModerationActionDialog(
+            title = "Remove this listing?",
+            message = "It's taken off Quad for everyone and $name can't sell it. Other open reports on it close too. You can restore it later.",
+            confirmLabel = "Remove listing",
+            submitting = action.submitting,
+            error = action.error,
+            onDismiss = { dialog = null },
+            onConfirm = { note, _ -> vm.resolve(ModerationAction.REMOVE_LISTING, note) },
+        )
+        ModDialog.Warn -> ModerationActionDialog(
+            title = "Warn $name?",
+            message = "The warning is recorded in the moderation log and the report closes. $name keeps full access.",
+            confirmLabel = "Warn user",
+            destructive = false,
+            submitting = action.submitting,
+            error = action.error,
+            onDismiss = { dialog = null },
+            onConfirm = { note, _ -> vm.resolve(ModerationAction.WARN_USER, note) },
+        )
+        ModDialog.Suspend -> ModerationActionDialog(
+            title = "Suspend $name?",
+            message = "$name is signed out on every device and can't sign in until the suspension ends; they're only told " +
+                "it was a guideline violation. Other open reports on them close too.",
+            confirmLabel = "Suspend user",
+            showDuration = true,
+            submitting = action.submitting,
+            error = action.error,
+            onDismiss = { dialog = null },
+            onConfirm = { note, days -> vm.resolve(ModerationAction.SUSPEND_USER, note, days) },
+        )
+        ModDialog.DirectSuspend -> ModerationActionDialog(
+            title = "Suspend $name?",
+            message = "$name is signed out on every device and can't sign in until the suspension ends. This report stays as it is.",
+            confirmLabel = "Suspend user",
+            noteLabel = "Reason (required, staff only)",
+            noteRequired = true,
+            showDuration = true,
+            submitting = action.submitting,
+            error = action.error,
+            onDismiss = { dialog = null },
+            onConfirm = { note, days -> targetUser?.let { vm.suspendUser(it.id, note, days) } },
+        )
+        ModDialog.Unsuspend -> ModerationActionDialog(
+            title = "Lift $name's suspension?",
+            message = "If $name is suspended, they can sign in again straight away. Nothing changes for an account that isn't suspended.",
+            confirmLabel = "Lift suspension",
+            destructive = false,
+            submitting = action.submitting,
+            error = action.error,
+            onDismiss = { dialog = null },
+            onConfirm = { note, _ -> targetUser?.let { vm.unsuspendUser(it.id, note) } },
+        )
+        ModDialog.DirectRemove -> ModerationActionDialog(
+            title = "Remove this listing?",
+            message = "It's taken off Quad for everyone. Listings that are reserved or sold can't be removed.",
+            confirmLabel = "Remove listing",
+            submitting = action.submitting,
+            error = action.error,
+            onDismiss = { dialog = null },
+            onConfirm = { note, _ -> listing?.let { vm.removeListing(it.id, note) } },
+        )
+        ModDialog.Restore -> ModerationActionDialog(
+            title = "Restore this listing?",
+            message = "It becomes active again and everyone on its campus can see and buy it.",
+            confirmLabel = "Restore listing",
+            destructive = false,
+            submitting = action.submitting,
+            error = action.error,
+            onDismiss = { dialog = null },
+            onConfirm = { note, _ -> listing?.let { vm.restoreListing(it.id, note) } },
+        )
+    }
+}
+
+private val ReportTargetType.noun: String
+    get() = when (this) {
+        ReportTargetType.LISTING -> "listing"
+        ReportTargetType.USER -> "account"
+        ReportTargetType.MESSAGE -> "message"
+        ReportTargetType.ORDER -> "order"
+    }
+
+@Composable
+private fun ReportBody(report: Report, nav: NavController, onOpenDialog: (ModDialog) -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    val open = report.status == ReportStatus.OPEN
+    val listing = report.targetListing
+    val targetUser = report.targetUser
+    val name = targetUser?.displayName ?: "the user"
+
+    // Why, and who said so.
+    Surface(
+        shape = MaterialTheme.shapes.medium,
+        color = scheme.surfaceContainerLow,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.screen).padding(top = Spacing.md),
+    ) {
+        Column(Modifier.padding(Spacing.lg), verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.md), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(40.dp).background(scheme.primaryContainer, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+                    Icon(Glyphs.Flag, contentDescription = null, tint = scheme.onPrimaryContainer, modifier = Modifier.size(20.dp))
+                }
+                Column(Modifier.weight(1f)) {
+                    Text(report.reason.label, style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "${report.targetType.label} report · ${ago(report.createdAt)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = scheme.onSurfaceVariant,
+                    )
+                }
+                ReportStatusChip(report.status)
+            }
+            QuoteBlock(report.details, "The reporter didn't add any details.")
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(role = Role.Button) { nav.navigate(UserProfileRoute(report.reporter.id)) },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+            ) {
+                Avatar(report.reporter.avatarUrl, report.reporter.displayName, size = 28.dp)
+                Column(Modifier.weight(1f)) {
+                    Text("Reported by ${report.reporter.displayName}", style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(Format.dateTime(report.createdAt), style = MaterialTheme.typography.labelSmall, color = scheme.onSurfaceVariant)
+                }
+                Chevron()
+            }
+        }
+    }
+
+    // What was reported, in context.
+    ModHeading("Reported ${report.targetType.noun}")
+    ContentCard {
+        when (report.targetType) {
+            ReportTargetType.LISTING ->
+                if (listing != null) ListingRow(listing, onClick = { nav.navigate(ListingDetailRoute(listing.id)) })
+                else MissingTarget(report.targetSummary, "This listing is no longer available.")
+            ReportTargetType.USER ->
+                if (targetUser != null) UserRow(targetUser, onClick = { nav.navigate(UserProfileRoute(targetUser.id)) }, trailing = { Chevron() })
+                else MissingTarget(report.targetSummary, "This account no longer exists.")
+            ReportTargetType.MESSAGE -> Column(Modifier.padding(vertical = Spacing.md)) {
+                Row(Modifier.padding(horizontal = Spacing.lg), horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                    Avatar(targetUser?.avatarUrl, targetUser?.displayName ?: "?", size = 32.dp)
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+                        Text(targetUser?.displayName ?: "Unknown sender", style = MaterialTheme.typography.labelLarge, color = scheme.onSurfaceVariant)
+                        Surface(
+                            shape = RoundedCornerShape(topStart = 4.dp, topEnd = 18.dp, bottomEnd = 18.dp, bottomStart = 18.dp),
+                            color = scheme.surfaceContainerHighest,
+                        ) {
+                            Text(report.targetSummary.ifBlank { "(empty message)" }, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.sm))
+                        }
+                    }
+                }
+                if (listing != null) {
+                    Text(
+                        "In a chat about",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = scheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = Spacing.lg, top = Spacing.md),
+                    )
+                    ListingRow(listing, onClick = { nav.navigate(ListingDetailRoute(listing.id)) })
+                }
+            }
+            ReportTargetType.ORDER -> MissingTarget(report.targetSummary, "Orders aren't reported; see Disputes.")
+        }
+    }
+
+    // Who is responsible (for a reported account, that's the card above).
+    if (targetUser != null) {
+        if (report.targetType != ReportTargetType.USER) {
+            ModHeading(if (report.targetType == ReportTargetType.LISTING) "Seller" else "Sender")
+            ContentCard {
+                UserRow(targetUser, onClick = { nav.navigate(UserProfileRoute(targetUser.id)) }, supporting = targetUser.campusDomain, trailing = { Chevron() })
+            }
+        }
+        val count = report.openReportsAgainstTargetUser
+        StatusChip(
+            when (count) {
+                0 -> "No other open reports against $name"
+                1 -> "1 open report against this user"
+                else -> "$count open reports against this user"
+            },
+            if (count > 1) ChipTone.Warning else ChipTone.Neutral,
+            Modifier.padding(start = Spacing.screen, top = Spacing.sm),
+        )
+    }
+
+    if (open) {
+        val actions = resolveActionsFor(report)
+        ModHeading("Decide")
+        Text(
+            "Your decision closes every open report on this ${report.targetType.noun}. Notes stay internal.",
+            style = MaterialTheme.typography.bodySmall,
+            color = scheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = Spacing.screen + Spacing.xs),
+        )
+        MenuGroup("No violation, or a first warning") {
+            MenuRow(Icons.Default.CheckCircle, "Dismiss (no violation)", "The report closes. Nothing changes for $name.", onClick = { onOpenDialog(ModDialog.Dismiss) })
+            if (ModerationAction.WARN_USER in actions) {
+                MenuDivider()
+                MenuRow(Icons.Default.Warning, "Warn user", "Recorded in the log. $name keeps full access.", onClick = { onOpenDialog(ModDialog.Warn) })
+            }
+        }
+        if (ModerationAction.REMOVE_LISTING in actions || ModerationAction.SUSPEND_USER in actions) {
+            MenuGroup("Take action") {
+                if (ModerationAction.REMOVE_LISTING in actions) {
+                    val removable = listing == null || canRemoveListing(listing.status)
+                    MenuRow(
+                        Icons.Default.Delete,
+                        "Remove listing",
+                        if (removable) "Taken off Quad for everyone. You can restore it later."
+                        else "Can't be removed while it's ${listing?.status?.label?.lowercase()}.",
+                        onClick = if (removable) ({ onOpenDialog(ModDialog.RemoveListing) }) else null,
+                        destructive = removable,
+                    )
+                }
+                if (ModerationAction.SUSPEND_USER in actions) {
+                    if (ModerationAction.REMOVE_LISTING in actions) MenuDivider()
+                    MenuRow(Glyphs.Gavel, "Suspend user", "$name is signed out everywhere until it ends.", onClick = { onOpenDialog(ModDialog.Suspend) }, destructive = true)
+                }
+            }
+        }
+    } else {
+        ModHeading("Outcome")
+        ContentCard {
+            Column(Modifier.padding(Spacing.lg), verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm), verticalAlignment = Alignment.CenterVertically) {
+                    report.resolutionAction?.let { ActionChip(it) } ?: ReportStatusChip(report.status)
+                    val by = listOfNotNull(report.resolvedBy?.displayName?.let { "by $it" }, report.resolvedAt?.let(Format::dateTime))
+                    if (by.isNotEmpty()) Text(by.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant)
+                }
+                QuoteBlock(report.resolutionNote, "No note was left.")
+            }
+        }
+
+        // Follow-up tools, independent of this (closed) report.
+        val showRestore = listing != null && canRestoreListing(listing.status)
+        val showRemove = listing != null && canRemoveListing(listing.status)
+        if (showRestore || showRemove || targetUser != null) {
+            MenuGroup("Follow up") {
+                val rows = buildList<@Composable () -> Unit> {
+                    if (showRestore) add { MenuRow(Icons.Default.Refresh, "Restore listing", "Make it active and visible again", onClick = { onOpenDialog(ModDialog.Restore) }) }
+                    if (showRemove) add { MenuRow(Icons.Default.Delete, "Remove listing", "Take it off Quad", onClick = { onOpenDialog(ModDialog.DirectRemove) }, destructive = true) }
+                    if (targetUser != null) {
+                        add { MenuRow(Glyphs.Undo, "Lift suspension", "If $name is suspended, let them sign in again", onClick = { onOpenDialog(ModDialog.Unsuspend) }) }
+                        add { MenuRow(Glyphs.Gavel, "Suspend user", "Needs a reason; this report stays closed", onClick = { onOpenDialog(ModDialog.DirectSuspend) }, destructive = true) }
+                    }
+                }
+                rows.forEachIndexed { i, row ->
+                    if (i > 0) MenuDivider()
+                    row()
+                }
             }
         }
     }
 }
 
 @Composable
-private fun ReportBody(report: Report, nav: NavController, onOpenDialog: (ModDialog) -> Unit) {
-    val open = report.status == ReportStatus.OPEN
-
-    Row(
-        Modifier.fillMaxWidth().padding(horizontal = Spacing.screen, vertical = Spacing.lg),
-        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-        verticalAlignment = Alignment.CenterVertically,
+private fun ContentCard(content: @Composable () -> Unit) {
+    Surface(
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.screen),
     ) {
-        ReportStatusChip(report.status)
-        StatusChip(report.targetType.label, ChipTone.Neutral)
-        Spacer(Modifier.weight(1f))
-        Text(Format.dateTime(report.createdAt), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Column(Modifier.padding(vertical = Spacing.xs)) { content() }
     }
+}
 
-    SectionHeader("Report")
-    Column(Modifier.padding(horizontal = Spacing.screen), verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
-        Text(report.reason.label, style = MaterialTheme.typography.titleMedium)
-        if (report.details.isBlank()) {
-            Text("No details provided.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        } else {
-            Text(report.details, style = MaterialTheme.typography.bodyMedium)
-        }
+@Composable
+private fun MissingTarget(summary: String, note: String) {
+    Column(Modifier.padding(Spacing.lg), verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+        if (summary.isNotBlank()) Text(summary, style = MaterialTheme.typography.bodyLarge)
+        Text(note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
-    Text(
-        "Reported by",
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(start = Spacing.screen, top = Spacing.md),
-    )
-    UserRow(report.reporter, onClick = { nav.navigate(UserProfileRoute(report.reporter.id)) }, supporting = report.reporter.campusDomain)
+}
 
-    SectionHeader("Reported ${report.targetType.label.lowercase()}")
-    Card(
-        Modifier.fillMaxWidth().padding(horizontal = Spacing.screen),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-    ) {
-        Text(
-            report.targetSummary.ifBlank { "(no summary)" },
-            style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.padding(Spacing.lg),
-        )
-    }
-    val listing = report.targetListing
-    if (listing != null) {
-        Spacer(Modifier.height(Spacing.sm))
-        ListingRow(listing, onClick = { nav.navigate(ListingDetailRoute(listing.id)) })
-    }
-
-    val targetUser = report.targetUser
-    if (targetUser != null) {
-        SectionHeader("Responsible user")
-        UserRow(targetUser, onClick = { nav.navigate(UserProfileRoute(targetUser.id)) }, supporting = targetUser.campusDomain)
-        Row(Modifier.padding(horizontal = Spacing.screen, vertical = Spacing.xs), verticalAlignment = Alignment.CenterVertically) {
-            val count = report.openReportsAgainstTargetUser
-            StatusChip(
-                if (count == 1) "1 open report against this user" else "$count open reports against this user",
-                if (count > 1) ChipTone.Warning else ChipTone.Neutral,
-            )
-        }
-    }
-
-    if (!open) {
-        SectionHeader("Resolution")
-        Column(Modifier.padding(horizontal = Spacing.screen), verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
-            Text(report.resolutionAction?.label ?: report.status.label, style = MaterialTheme.typography.titleMedium)
-            val by = listOfNotNull(report.resolvedBy?.displayName?.let { "by $it" }, report.resolvedAt?.let { Format.dateTime(it) })
-            if (by.isNotEmpty()) {
-                Text(by.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            if (!report.resolutionNote.isNullOrBlank()) Text(report.resolutionNote!!, style = MaterialTheme.typography.bodyMedium)
-        }
-    }
-
-    val actions = resolveActionsFor(report)
-    if (actions.isNotEmpty()) {
-        SectionHeader("Resolve")
-        Column(Modifier.padding(horizontal = Spacing.screen), verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-            if (ModerationAction.DISMISS in actions) {
-                SecondaryButton("Dismiss (no violation)", onClick = { onOpenDialog(ModDialog.Dismiss) }, modifier = Modifier.fillMaxWidth())
-            }
-            if (ModerationAction.WARN_USER in actions) {
-                SecondaryButton("Warn user", onClick = { onOpenDialog(ModDialog.Warn) }, modifier = Modifier.fillMaxWidth())
-            }
-            if (ModerationAction.REMOVE_LISTING in actions) {
-                val removable = listing == null || canRemoveListing(listing.status)
-                DestructiveButton("Remove listing", onClick = { onOpenDialog(ModDialog.RemoveListing) }, modifier = Modifier.fillMaxWidth(), enabled = removable)
-                if (!removable) {
-                    Text(
-                        "This listing is ${listing?.status?.label?.lowercase()} and can't be removed.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-            if (ModerationAction.SUSPEND_USER in actions) {
-                DestructiveButton("Suspend user", onClick = { onOpenDialog(ModDialog.Suspend) }, modifier = Modifier.fillMaxWidth())
-            }
-        }
-    }
-
-    // Direct tools (not tied to resolving this report).
-    val showDirectSuspend = !open && targetUser != null
-    val showUnsuspend = targetUser != null
-    val showDirectRemove = !open && listing != null && canRemoveListing(listing.status)
-    val showRestore = listing != null && canRestoreListing(listing.status)
-    if (showDirectSuspend || showUnsuspend || showDirectRemove || showRestore) {
-        SectionHeader("Other tools")
-        Column(Modifier.padding(horizontal = Spacing.screen)) {
-            if (showRestore) TextButton(onClick = { onOpenDialog(ModDialog.Restore) }) { Text("Restore listing") }
-            if (showDirectRemove) TextButton(onClick = { onOpenDialog(ModDialog.DirectRemove) }) { Text("Remove listing") }
-            if (showUnsuspend) TextButton(onClick = { onOpenDialog(ModDialog.Unsuspend) }) { Text("Lift user's suspension") }
-            if (showDirectSuspend) TextButton(onClick = { onOpenDialog(ModDialog.DirectSuspend) }) { Text("Suspend user") }
-        }
+/** First-load stand-in for a report or dispute: a header card and two content cards. */
+@Composable
+internal fun DetailSkeleton(modifier: Modifier = Modifier) {
+    Column(modifier.fillMaxWidth().padding(Spacing.screen), verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
+        SkeletonBlock(Modifier.fillMaxWidth().height(150.dp), MaterialTheme.shapes.medium)
+        SkeletonBlock(Modifier.width(120.dp).height(14.dp))
+        SkeletonBlock(Modifier.fillMaxWidth().height(72.dp), MaterialTheme.shapes.medium)
+        SkeletonBlock(Modifier.width(120.dp).height(14.dp))
+        SkeletonBlock(Modifier.fillMaxWidth().height(72.dp), MaterialTheme.shapes.medium)
     }
 }
 
 // ---------------------------------------------------------------------------------------------------- log
 
-/** `api.moderationLog()`, newest first. Rows open the related report, listing or user. */
+/** `api.moderationLog()`, newest first, grouped by day: who did what to which kind of thing, when, and their note. */
 @Composable
 fun ModerationLogScreen(nav: NavController) {
     ModeratorGate("Moderation log", nav) {
         val vm = koinViewModel<ModerationLogViewModel>()
-        Scaffold(topBar = { AppTopBar("Moderation log", onBack = { nav.popBackStack() }) }) { padding ->
+        val paged by vm.entries.state.collectAsStateWithLifecycle()
+        Scaffold(
+            topBar = {
+                AppTopBar("Moderation log", onBack = { nav.popBackStack() }, actions = { ModerationToolLinks(nav, current = ModerationLogRoute) })
+            },
+        ) { padding ->
             PagedLazyColumn(
                 vm.entries,
                 key = { it.id },
                 modifier = Modifier.padding(padding),
-                empty = { EmptyState("No moderation actions yet") },
+                empty = { EmptyState("No moderation actions yet", message = "Every decision on a report, dispute or staff role is recorded here.", icon = Glyphs.History) },
             ) { entry ->
+                val index = paged.items.indexOfFirst { it.id == entry.id }
+                val day = dayLabel(entry.createdAt)
+                if (index <= 0 || dayLabel(paged.items[index - 1].createdAt) != day) {
+                    Text(
+                        day,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.fillMaxWidth().padding(start = Spacing.screen, top = Spacing.lg, bottom = Spacing.xs),
+                    )
+                }
                 LogRow(entry, onClick = logTarget(entry, nav))
-                HorizontalDivider()
             }
         }
+    }
+}
+
+/** "Today", "Yesterday", or a date. */
+private fun dayLabel(epochMillis: Long): String {
+    val tz = TimeZone.currentSystemDefault()
+    val day = Instant.fromEpochMilliseconds(epochMillis).toLocalDateTime(tz).date
+    val today = Clock.System.now().toLocalDateTime(tz).date
+    return when (today.toEpochDays() - day.toEpochDays()) {
+        0L -> "Today"
+        1L -> "Yesterday"
+        else -> Format.date(epochMillis)
     }
 }
 
@@ -434,17 +694,38 @@ private fun logTarget(entry: ModerationLogEntry, nav: NavController): () -> Unit
     }
 }
 
+private val ModerationLogEntry.targetText: String
+    get() = when {
+        reportId != null -> "from a ${targetType.noun} report"
+        targetType == ReportTargetType.ORDER -> "on a disputed order"
+        targetType == ReportTargetType.USER -> "on an account"
+        else -> "on a ${targetType.noun}"
+    }
+
 @Composable
 private fun LogRow(entry: ModerationLogEntry, onClick: () -> Unit) {
-    ListItem(
-        modifier = Modifier.clickable(onClick = onClick),
-        colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
-        leadingContent = { Avatar(entry.moderator.avatarUrl, entry.moderator.displayName) },
-        overlineContent = { Text(entry.targetType.label) },
-        headlineContent = { Text("${entry.moderator.displayName}: ${entry.action.label}", maxLines = 2, overflow = TextOverflow.Ellipsis) },
-        supportingContent = if (entry.note.isNotBlank()) {
-            { Text(entry.note, maxLines = 3, overflow = TextOverflow.Ellipsis) }
-        } else null,
-        trailingContent = { Text(Format.relativeTime(entry.createdAt), style = MaterialTheme.typography.labelMedium) },
-    )
+    val scheme = MaterialTheme.colorScheme
+    Row(
+        Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onClick).padding(horizontal = Spacing.screen, vertical = Spacing.md),
+        horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+    ) {
+        Avatar(entry.moderator.avatarUrl, entry.moderator.displayName, size = 40.dp)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(entry.moderator.displayName, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                Text(timeOfDay(entry.createdAt), style = MaterialTheme.typography.labelMedium, color = scheme.onSurfaceVariant)
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                ActionChip(entry.action)
+                Text(entry.targetText, style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            if (entry.note.isNotBlank()) QuoteBlock(entry.note, "", Modifier.padding(top = Spacing.xs))
+        }
+        Chevron()
+    }
+}
+
+private fun timeOfDay(epochMillis: Long): String {
+    val d = Instant.fromEpochMilliseconds(epochMillis).toLocalDateTime(TimeZone.currentSystemDefault())
+    return "${d.hour.toString().padStart(2, '0')}:${d.minute.toString().padStart(2, '0')}"
 }

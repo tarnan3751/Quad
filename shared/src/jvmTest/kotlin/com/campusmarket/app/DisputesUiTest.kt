@@ -212,7 +212,7 @@ class DisputesUiTest {
         setContent { App() }
         awaitText("Browse")
         click("Profile")
-        click("Moderation queue")
+        click("Reports")
         awaitText("The queue is clear")
         val disputes = onAllNodesWithContentDescription("Disputes").onFirst()
         runOnUiThread { disputes.performClick() }
@@ -231,7 +231,7 @@ class DisputesUiTest {
         click("Refund buyer", last = true)
         awaitText("Required")
         assertEquals(0, requests.count { it.url.encodedPath == ApiRoutes.modDisputeResolve("o9") }, "a note is required")
-        type("Note (required, internal: shown in the moderation log)", "Seller admitted it in chat")
+        type("Reason for the decision (required)", "Seller admitted it in chat")
         click("Refund buyer", last = true)
 
         awaitGone("Refund Bea Buyer?")

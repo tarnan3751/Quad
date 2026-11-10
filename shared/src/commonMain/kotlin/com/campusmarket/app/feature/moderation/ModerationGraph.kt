@@ -21,6 +21,7 @@ fun NavGraphBuilder.moderationGraph(nav: NavController) {
 
 /** Koin definitions for this feature. */
 val moderationModule = module {
+    single { ReportedTargets() }
     viewModelOf(::ModerationQueueViewModel)
     viewModel { params -> ReportDetailViewModel(route = params.get(), api = get(), messages = get()) }
     viewModelOf(::ModerationLogViewModel)

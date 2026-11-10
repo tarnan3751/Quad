@@ -36,6 +36,20 @@ class DisputesViewModel(private val api: ApiClient, messages: UserMessages) : Vi
         disputes.onRefreshError = messages::showError
     }
 
+    private var resumedOnce = false
+
+    /**
+     * Screen resumed: the first time is the initial load; later (back from a dispute that may have been resolved)
+     * refresh. The flag lives here because the list leaves the composition while the detail is open.
+     */
+    fun onResume() {
+        if (!resumedOnce) {
+            resumedOnce = true
+            return
+        }
+        disputes.refresh()
+    }
+
     fun select(status: DisputeStatus) {
         if (_status.value == status) return
         _status.value = status
@@ -82,6 +96,14 @@ class DisputeDetailViewModel(
 
     fun refreshQuietly() {
         load(_case, keepContent = true) { api.modDispute(orderId) }
+    }
+
+    val refreshing = MutableStateFlow(false)
+
+    /** Pull-to-refresh (the buyer, the seller or another moderator may have settled it meanwhile). */
+    fun pullRefresh() {
+        refreshing.value = true
+        load(_case, keepContent = true) { api.modDispute(orderId) }.invokeOnCompletion { refreshing.value = false }
     }
 
     /** `POST /mod/disputes/{orderId}/resolve` with the (required, internal) [note]. */

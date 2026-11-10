@@ -13,6 +13,7 @@ import com.campusmarket.app.ui.state.valueOrNull
 import com.campusmarket.core.ListingStatus
 import com.campusmarket.core.ModerationAction
 import com.campusmarket.core.ModerationLogEntry
+import com.campusmarket.core.Page
 import com.campusmarket.core.Report
 import com.campusmarket.core.ReportStatus
 import com.campusmarket.core.ReportTargetType
@@ -28,8 +29,29 @@ class ModerationQueueViewModel(private val api: ApiClient, messages: UserMessage
     private val _status = MutableStateFlow(ReportStatus.OPEN)
     val status: StateFlow<ReportStatus> = _status.asStateFlow()
 
-    val reports = Paginator<Report>(viewModelScope, key = { it.id }) { cursor, limit ->
-        api.modReports(_status.value, cursor, limit)
+    /** null = every kind of report. The server doesn't filter by type, so pages are filtered here. */
+    private val _type = MutableStateFlow<ReportTargetType?>(null)
+    val type: StateFlow<ReportTargetType?> = _type.asStateFlow()
+
+    val reports = Paginator<Report>(viewModelScope, key = { it.id }) { cursor, limit -> fetch(cursor, limit) }
+
+    /** Skips pages with nothing of the wanted type, so a filter never shows "empty" while more reports exist. */
+    private suspend fun fetch(cursor: String?, limit: Int): Page<Report> {
+        val wanted = _type.value
+        var next = cursor
+        while (true) {
+            val page = api.modReports(_status.value, next, limit)
+            if (wanted == null) return page
+            val items = page.items.filter { it.targetType == wanted }
+            if (items.isNotEmpty() || page.nextCursor == null) return Page(items, page.nextCursor)
+            next = page.nextCursor
+        }
+    }
+
+    fun selectType(type: ReportTargetType?) {
+        if (_type.value == type) return
+        _type.value = type
+        reports.reset()
     }
 
     private var resumedOnce = false
@@ -95,6 +117,14 @@ class ReportDetailViewModel(
 
     fun refreshQuietly() {
         load(_report, keepContent = true) { api.modReport(reportId) }
+    }
+
+    val refreshing = MutableStateFlow(false)
+
+    /** Pull-to-refresh (another moderator may have acted on it meanwhile). */
+    fun pullRefresh() {
+        refreshing.value = true
+        load(_report, keepContent = true) { api.modReport(reportId) }.invokeOnCompletion { refreshing.value = false }
     }
 
     /** `POST /mod/reports/{id}/resolve`. The server also resolves other open reports on the same target. */

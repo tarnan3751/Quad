@@ -153,8 +153,9 @@ class ProfileModerationSmokeTest {
         awaitText("Maths and bikes")
         awaitText("My listings")
         awaitText("Orders")
-        // Students never see the moderation entry.
-        assertTrue(onAllNodesWithText("Moderation queue").fetchSemanticsNodes().isEmpty())
+        // Students never see the moderation entries.
+        assertTrue(onAllNodesWithText("Moderation").fetchSemanticsNodes().isEmpty())
+        assertTrue(onAllNodesWithText("Moderation log").fetchSemanticsNodes().isEmpty())
 
         click("Edit profile")
         awaitText("Display name")
@@ -226,14 +227,14 @@ class ProfileModerationSmokeTest {
 
         awaitText("Browse")
         click("Profile")
-        awaitText("Moderation queue")
-        click("Moderation queue")
+        awaitText("Moderation")
+        click("Reports")
 
         awaitText("Open")
         awaitText("Resolved")
         awaitText("Dismissed")
         awaitText("Mountain bike, barely used")
-        awaitText("Reported by Rita Reporter")
+        awaitText("reported by Rita Reporter")
         awaitText("3 open")
 
         click("Mountain bike, barely used")

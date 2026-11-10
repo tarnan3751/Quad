@@ -1,28 +1,26 @@
 package com.campusmarket.app.feature.moderation
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -31,30 +29,36 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import com.campusmarket.app.feature.profile.MenuDivider
+import com.campusmarket.app.feature.profile.MenuGroup
+import com.campusmarket.app.feature.profile.SkeletonRows
 import com.campusmarket.app.navigation.LocalCurrentUser
+import com.campusmarket.app.ui.components.AppTextField
 import com.campusmarket.app.ui.components.AppTopBar
 import com.campusmarket.app.ui.components.Avatar
 import com.campusmarket.app.ui.components.ChipTone
 import com.campusmarket.app.ui.components.CollectEvents
 import com.campusmarket.app.ui.components.EmptyState
+import com.campusmarket.app.ui.components.ErrorState
 import com.campusmarket.app.ui.components.InlineError
-import com.campusmarket.app.ui.components.SectionHeader
 import com.campusmarket.app.ui.components.StatusChip
-import com.campusmarket.app.ui.components.UiStateContent
 import com.campusmarket.app.ui.label
+import com.campusmarket.app.ui.state.UiState
 import com.campusmarket.app.ui.theme.Spacing
 import com.campusmarket.core.StaffMember
 import com.campusmarket.core.UserRole
 import org.koin.compose.viewmodel.koinViewModel
 
-/** Admin-only: staff list, user lookup, promote to moderator / demote to student (with confirmation). */
+/** Admin-only: staff list, user lookup (as you type), promote to moderator / remove moderator access (confirmed). */
 @Composable
 fun StaffScreen(nav: NavController) {
     if (LocalCurrentUser.current.role == UserRole.ADMIN) {
@@ -82,14 +86,21 @@ private fun StaffContent(nav: NavController) {
     val keyboard = LocalSoftwareKeyboardController.current
     var pending by remember { mutableStateOf<StaffMember?>(null) }
     CollectEvents(vm.actionDone.flow) { pending = null }
+    val onAction: (StaffMember) -> Unit = { vm.runner.clearError(); pending = it }
 
-    Scaffold(topBar = { AppTopBar("Staff", onBack = { nav.popBackStack() }) }) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding)) {
-            OutlinedTextField(
+    Scaffold(topBar = { AppTopBar("Staff", onBack = { nav.popBackStack() }, actions = { ModerationToolLinks(nav, current = StaffRoute) }) }) { padding ->
+        Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(bottom = Spacing.xxl)) {
+            Text(
+                "Moderators review reports and decide disputes on every campus. Admins are set in the server's configuration, so they can't be changed here.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = Spacing.screen, vertical = Spacing.md),
+            )
+            AppTextField(
                 value = query,
                 onValueChange = vm::onQuery,
-                label = { Text("Find a student by name or email") },
-                singleLine = true,
+                label = "Find someone by name or email",
+                supportingText = "At least $STAFF_SEARCH_MIN_CHARS characters, any campus",
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                 trailingIcon = {
                     if (query.isNotEmpty()) {
@@ -98,15 +109,27 @@ private fun StaffContent(nav: NavController) {
                 },
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(onSearch = { vm.runSearch(); keyboard?.hide() }),
-                modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.lg, vertical = Spacing.sm),
+                modifier = Modifier.padding(horizontal = Spacing.screen),
             )
             when (val s = search) {
-                StaffSearch.Idle -> UiStateContent(staff, onRetry = vm::reload) { members ->
-                    MemberList("Moderators and admins", members, me.id, "No staff yet", onAction = { pending = it })
+                StaffSearch.Idle -> when (val st = staff) {
+                    UiState.Loading -> SkeletonRows(rows = 3, modifier = Modifier.padding(top = Spacing.md))
+                    is UiState.Error -> ErrorState(st.error, Modifier.fillMaxWidth().padding(top = Spacing.xl), onRetry = vm::reload)
+                    is UiState.Content -> MemberGroup("Moderators and admins (${st.value.size})", st.value, me.id, onAction)
                 }
-                StaffSearch.Searching -> CircularProgressIndicator(Modifier.padding(Spacing.lg).size(28.dp))
-                is StaffSearch.Failed -> Text(s.message, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(Spacing.lg))
-                is StaffSearch.Results -> MemberList("Results", s.members, me.id, "No verified user matches \"${s.query}\"", onAction = { pending = it })
+                StaffSearch.Searching -> SkeletonRows(rows = 3, modifier = Modifier.padding(top = Spacing.md))
+                is StaffSearch.Failed -> InlineError(s.message, Modifier.fillMaxWidth().padding(Spacing.screen))
+                is StaffSearch.Results ->
+                    if (s.members.isEmpty()) {
+                        EmptyState(
+                            "No one found",
+                            Modifier.fillMaxWidth().padding(top = Spacing.xl),
+                            message = "No verified account matches \"${s.query}\". Check the spelling or try their email.",
+                            icon = Icons.Default.Search,
+                        )
+                    } else {
+                        MemberGroup(if (s.members.size == 1) "1 match" else "${s.members.size} matches", s.members, me.id, onAction)
+                    }
             }
         }
     }
@@ -116,19 +139,24 @@ private fun StaffContent(nav: NavController) {
         val promote = target == UserRole.MODERATOR
         AlertDialog(
             onDismissRequest = { if (!action.submitting) pending = null },
-            title = { Text(if (promote) "Make ${member.user.displayName} a moderator?" else "Remove moderator access?") },
+            title = { Text(if (promote) "Make ${member.user.displayName} a moderator?" else "Remove ${member.user.displayName}'s moderator access?") },
             text = {
-                Column {
+                Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
                     Text(
-                        if (promote) "${member.email} will be able to review reports, remove listings and suspend students on every campus."
-                        else "${member.user.displayName} will go back to being a regular student and lose access to the moderation tools.",
+                        if (promote) "${member.email} will be able to review reports, remove listings, suspend students and decide disputes on every campus, starting right away. You can remove it at any time."
+                        else "${member.user.displayName} goes back to being a regular student and loses the moderation tools right away. Their past decisions stay in the log.",
                     )
                     InlineError(action.error)
                 }
             },
             confirmButton = {
-                TextButton(enabled = !action.submitting, onClick = { vm.setRole(member, target) }) {
-                    Text(if (promote) "Make moderator" else "Make student")
+                TextButton(
+                    enabled = !action.submitting,
+                    onClick = { vm.setRole(member, target) },
+                    colors = if (promote) ButtonDefaults.textButtonColors() else ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                ) {
+                    if (action.submitting) CircularProgressIndicator(Modifier.padding(end = 8.dp).size(16.dp), strokeWidth = 2.dp)
+                    Text(if (promote) "Make moderator" else "Remove access")
                 }
             },
             dismissButton = { TextButton(enabled = !action.submitting, onClick = { pending = null }) { Text("Cancel") } },
@@ -137,38 +165,46 @@ private fun StaffContent(nav: NavController) {
 }
 
 @Composable
-private fun MemberList(
-    header: String,
-    members: List<StaffMember>,
-    currentUserId: String,
-    empty: String,
-    onAction: (StaffMember) -> Unit,
-) {
-    if (members.isEmpty()) {
-        EmptyState(empty, modifier = Modifier.fillMaxSize())
-        return
+private fun MemberGroup(title: String, members: List<StaffMember>, currentUserId: String, onAction: (StaffMember) -> Unit) {
+    MenuGroup(title) {
+        members.forEachIndexed { i, m ->
+            if (i > 0) MenuDivider()
+            MemberRow(m, currentUserId, onAction)
+        }
     }
-    LazyColumn(Modifier.fillMaxSize()) {
-        item { SectionHeader(header) }
-        items(members, key = { it.user.id }) { m ->
-            val canChange = canChangeRole(m, currentUserId)
-            ListItem(
-                modifier = if (canChange) Modifier.clickable { onAction(m) } else Modifier,
-                colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
-                leadingContent = { Avatar(m.user.avatarUrl, m.user.displayName) },
-                headlineContent = { Text(m.user.displayName, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                supportingContent = { Text(m.email, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                trailingContent = {
-                    if (canChange) {
-                        TextButton(onClick = { onAction(m) }) {
-                            Text(if (m.role == UserRole.MODERATOR) "Demote" else "Promote")
-                        }
-                    } else {
-                        StatusChip(if (m.user.id == currentUserId) "${m.role.label} (you)" else m.role.label, ChipTone.Info)
-                    }
-                },
+}
+
+@Composable
+private fun MemberRow(m: StaffMember, currentUserId: String, onAction: (StaffMember) -> Unit) {
+    val isMe = m.user.id == currentUserId
+    Row(
+        Modifier.fillMaxWidth().padding(start = Spacing.lg, end = Spacing.sm, top = Spacing.md, bottom = Spacing.md),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+    ) {
+        Avatar(m.user.avatarUrl, m.user.displayName, size = 40.dp)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                if (isMe) "${m.user.displayName} (you)" else m.user.displayName,
+                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
-            HorizontalDivider()
+            Text(m.email, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            StatusChip(
+                m.role.label,
+                when (m.role) {
+                    UserRole.ADMIN -> ChipTone.Info
+                    UserRole.MODERATOR -> ChipTone.Positive
+                    UserRole.USER -> ChipTone.Neutral
+                },
+                Modifier.padding(top = 2.dp),
+            )
+        }
+        if (canChangeRole(m, currentUserId)) {
+            TextButton(onClick = { onAction(m) }) {
+                Text(if (m.role == UserRole.MODERATOR) "Remove moderator" else "Make moderator")
+            }
         }
     }
 }

@@ -223,7 +223,7 @@ fun EditProfileScreen(nav: NavController) {
             }
             InlineError(state.formError, Modifier.fillMaxWidth())
             PrimaryButton(
-                if (state.dirty) "Save changes" else "No changes yet",
+                "Save changes",
                 onClick = vm::save,
                 modifier = Modifier.fillMaxWidth(),
                 enabled = state.canSave,
