@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -23,7 +22,6 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -33,11 +31,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
@@ -215,7 +213,7 @@ internal fun ModHeading(text: String, modifier: Modifier = Modifier, tone: ChipT
 
 /** Someone's own words (a report's details, a buyer's problem), set off with a bar on the left. */
 @Composable
-internal fun QuoteBlock(text: String?, emptyText: String, modifier: Modifier = Modifier) {
+internal fun QuoteBlock(text: String?, emptyText: String, modifier: Modifier = Modifier, style: TextStyle = MaterialTheme.typography.bodyLarge) {
     Row(modifier.height(IntrinsicSize.Min)) {
         Box(Modifier.width(3.dp).fillMaxHeight().background(MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(2.dp)))
         if (text.isNullOrBlank()) {
@@ -227,7 +225,7 @@ internal fun QuoteBlock(text: String?, emptyText: String, modifier: Modifier = M
                 modifier = Modifier.padding(start = Spacing.md),
             )
         } else {
-            Text(text, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(start = Spacing.md))
+            Text(text, style = style, modifier = Modifier.padding(start = Spacing.md))
         }
     }
 }

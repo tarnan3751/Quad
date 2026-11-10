@@ -353,7 +353,8 @@ class ProfileModerationStatesScreenshotTest {
         for (dark in listOf(false, true)) {
             run(dark, ProfileRoute) {
                 awaitText("Ada Okafor")
-                awaitText("Active listings")
+                // The stats card exposes one description per number ("3 Active listings"), not its texts.
+                waitUntil(timeoutMillis = 10_000) { onAllNodes(hasContentDescription("Active listings", substring = true)).fetchSemanticsNodes().isNotEmpty() }
                 shot("s01-profile-admin")
                 scrollDown(2)
                 shot("s02-profile-admin-menu")
@@ -368,6 +369,9 @@ class ProfileModerationStatesScreenshotTest {
                 shot("s05-public-ratings")
                 scrollDown(1)
                 shot("s06-public-ratings-scrolled")
+                back() // the header scrolled out of the lazy list: open the profile afresh
+                go(UserProfileRoute("sam"))
+                awaitText("Acoustic guitar")
                 click("Message")
                 awaitText("Which one are you asking about")
                 shot("s07-message-sheet")

@@ -32,7 +32,6 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
@@ -105,9 +104,7 @@ import com.campusmarket.app.ui.components.PagedLazyColumn
 import com.campusmarket.app.ui.components.PagedLazyGrid
 import com.campusmarket.app.ui.components.PrimaryButton
 import com.campusmarket.app.ui.components.RatingStars
-import com.campusmarket.app.ui.components.SecondaryButton
 import com.campusmarket.app.ui.components.ServerSettingsDialog
-import com.campusmarket.app.ui.components.UiStateContent
 import com.campusmarket.app.ui.label
 import com.campusmarket.app.ui.state.UiState
 import com.campusmarket.app.ui.state.UserMessages
@@ -511,7 +508,14 @@ private fun PublicProfileHeader(user: UserPublic, isMe: Boolean, listingCount: S
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(Spacing.xs),
     ) {
-        Avatar(user.avatarUrl, user.displayName, size = 96.dp)
+        if (user.isDeleted) {
+            // No initials on a colour for an account that no longer exists.
+            Box(Modifier.size(96.dp).background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape), contentAlignment = Alignment.Center) {
+                Icon(Icons.Default.Person, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(48.dp))
+            }
+        } else {
+            Avatar(user.avatarUrl, user.displayName, size = 96.dp)
+        }
         Text(
             user.displayName,
             style = MaterialTheme.typography.headlineSmall,

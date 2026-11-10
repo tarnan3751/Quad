@@ -58,7 +58,6 @@ import com.campusmarket.app.feature.profile.MenuDivider
 import com.campusmarket.app.feature.profile.MenuGroup
 import com.campusmarket.app.feature.profile.MenuRow
 import com.campusmarket.app.feature.profile.SkeletonBlock
-import com.campusmarket.app.feature.profile.SkeletonRows
 import com.campusmarket.app.feature.profile.UserProfileRoute
 import com.campusmarket.app.feature.profile.ago
 import com.campusmarket.app.navigation.LocalCurrentUser
@@ -576,11 +575,9 @@ private fun ReportBody(report: Report, nav: NavController, onOpenDialog: (ModDia
         ModHeading("Outcome")
         ContentCard {
             Column(Modifier.padding(Spacing.lg), verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm), verticalAlignment = Alignment.CenterVertically) {
-                    report.resolutionAction?.let { ActionChip(it) } ?: ReportStatusChip(report.status)
-                    val by = listOfNotNull(report.resolvedBy?.displayName?.let { "by $it" }, report.resolvedAt?.let(Format::dateTime))
-                    if (by.isNotEmpty()) Text(by.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant)
-                }
+                report.resolutionAction?.let { ActionChip(it) } ?: ReportStatusChip(report.status)
+                val by = listOfNotNull(report.resolvedBy?.displayName?.let { "by $it" }, report.resolvedAt?.let(Format::dateTime))
+                if (by.isNotEmpty()) Text(by.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant)
                 QuoteBlock(report.resolutionNote, "No note was left.")
             }
         }
@@ -695,11 +692,24 @@ private fun logTarget(entry: ModerationLogEntry, nav: NavController): () -> Unit
 }
 
 private val ModerationLogEntry.targetText: String
-    get() = when {
-        reportId != null -> "from a ${targetType.noun} report"
-        targetType == ReportTargetType.ORDER -> "on a disputed order"
-        targetType == ReportTargetType.USER -> "on an account"
-        else -> "on a ${targetType.noun}"
+    get() {
+        val noun = targetType.noun
+        val article = if (noun.first() in "aeiou") "an" else "a"
+        return when {
+            reportId != null -> "from $article $noun report"
+            targetType == ReportTargetType.ORDER -> "on a disputed order"
+            else -> "on $article $noun"
+        }
+    }
+
+/** The note as staff read it; role changes are logged as "USER -> MODERATOR". */
+private val ModerationLogEntry.displayNote: String
+    get() {
+        if (action != ModerationAction.CHANGE_ROLE) return note
+        val roles = note.split("->").map { it.trim() }
+        val from = roles.getOrNull(0)?.let { r -> UserRole.entries.firstOrNull { it.name == r } }
+        val to = roles.getOrNull(1)?.let { r -> UserRole.entries.firstOrNull { it.name == r } }
+        return if (from != null && to != null) "${from.label} → ${to.label}" else note
     }
 
 @Composable
@@ -719,7 +729,7 @@ private fun LogRow(entry: ModerationLogEntry, onClick: () -> Unit) {
                 ActionChip(entry.action)
                 Text(entry.targetText, style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            if (entry.note.isNotBlank()) QuoteBlock(entry.note, "", Modifier.padding(top = Spacing.xs))
+            if (entry.note.isNotBlank()) QuoteBlock(entry.displayNote, "", Modifier.padding(top = Spacing.xs), style = MaterialTheme.typography.bodyMedium)
         }
         Chevron()
     }
