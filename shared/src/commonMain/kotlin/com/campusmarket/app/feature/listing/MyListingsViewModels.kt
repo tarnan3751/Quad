@@ -28,9 +28,10 @@ class FavoritesViewModel(
                 when {
                     change is ListingChange.Favorited && !change.favorited ->
                         favorites.update { list -> list.filterNot { it.id == change.listingId } }
-                    // Newly favorited (or a failed un-favorite rolled back): reload to get it in the right place.
+                    // Newly favorited elsewhere (or a failed un-favorite rolled back): reload to get it in the right
+                    // place, once the server has it (an earlier reload would race the request and miss it).
                     change is ListingChange.Favorited && favorites.state.value.items.none { it.id == change.listingId } ->
-                        favorites.refresh()
+                        if (change.confirmed) favorites.refresh()
                     else -> favorites.update { it.applyChange(change) }
                 }
             }
@@ -38,8 +39,18 @@ class FavoritesViewModel(
     }
 
     fun unfavorite(listing: ListingSummary) {
+        val index = favorites.state.value.items.indexOfFirst { it.id == listing.id }
         if (sync.setFavorite(listing.id, false)) {
-            messages.show("Removed from favorites", actionLabel = "Undo") { sync.setFavorite(listing.id, true) }
+            messages.show("Removed from favorites", actionLabel = "Undo") { undoUnfavorite(listing, index) }
+        }
+    }
+
+    /** Puts the tile back where it was right away, instead of waiting for the server and a reload. */
+    private fun undoUnfavorite(listing: ListingSummary, index: Int) {
+        if (!sync.setFavorite(listing.id, true)) return
+        favorites.update { list ->
+            if (list.any { it.id == listing.id }) list
+            else list.toMutableList().apply { add(index.coerceIn(0, size), listing.copy(favorited = true)) }
         }
     }
 }

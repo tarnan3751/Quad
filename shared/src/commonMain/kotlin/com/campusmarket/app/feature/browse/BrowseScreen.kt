@@ -87,6 +87,7 @@ import com.campusmarket.app.feature.listing.PagedListingGrid
 import com.campusmarket.app.feature.listing.PriceInput
 import com.campusmarket.app.feature.listing.icon
 import com.campusmarket.app.navigation.LocalCurrentUser
+import com.campusmarket.app.navigation.OnTabReselected
 import com.campusmarket.app.navigation.TopLevelTab
 import com.campusmarket.app.navigation.navigateToTab
 import com.campusmarket.app.ui.Format
@@ -129,6 +130,13 @@ fun BrowseScreen(nav: NavController) {
     // A fresh grid state per query: new results start at the top. Coming back from a listing (or from recent searches)
     // restores it.
     val gridState = rememberSaveable(state.query, saver = LazyGridState.Saver) { LazyGridState() }
+    OnTabReselected(TopLevelTab.Browse) {
+        if (showRecents) {
+            recentsDismissed = true
+            keyboard?.hide()
+        }
+        gridState.animateScrollToItem(0)
+    }
 
     Scaffold(
         topBar = {

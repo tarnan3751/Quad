@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
@@ -41,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import com.campusmarket.app.navigation.OnTabReselected
 import com.campusmarket.app.navigation.TopLevelTab
 import com.campusmarket.app.navigation.navigateToTab
 import com.campusmarket.app.ui.components.AppTopBar
@@ -68,6 +70,9 @@ fun InboxScreen(nav: NavController) {
         onPauseOrDispose { }
     }
 
+    val listState = rememberLazyListState()
+    OnTabReselected(TopLevelTab.Inbox) { listState.animateScrollToItem(0) }
+
     Scaffold(topBar = { AppTopBar("Inbox") }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             ConnectionBanner(connection, onRetry = vm::retryConnection)
@@ -75,6 +80,7 @@ fun InboxScreen(nav: NavController) {
             if (!paged.loaded && paged.error == null) RowSkeletons() else PagedLazyColumn(
                 vm.conversations,
                 key = { it.id },
+                state = listState,
                 contentPadding = PaddingValues(bottom = Spacing.sm),
                 empty = {
                     EmptyState(

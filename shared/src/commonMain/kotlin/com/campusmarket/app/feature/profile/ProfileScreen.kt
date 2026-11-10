@@ -45,6 +45,8 @@ import com.campusmarket.app.feature.moderation.StaffRoute
 import com.campusmarket.app.feature.orders.OrdersRoute
 import com.campusmarket.app.feature.orders.PayoutsRoute
 import com.campusmarket.app.navigation.LocalCurrentUser
+import com.campusmarket.app.navigation.OnTabReselected
+import com.campusmarket.app.navigation.TopLevelTab
 import com.campusmarket.app.platform.ExternalLinks
 import com.campusmarket.app.ui.Format
 import com.campusmarket.app.ui.components.AppTopBar
@@ -77,6 +79,8 @@ fun ProfileScreen(nav: NavController) {
         vm.refresh()
         onPauseOrDispose {}
     }
+    val scroll = rememberScrollState()
+    OnTabReselected(TopLevelTab.Profile) { scroll.animateScrollTo(0) }
 
     Scaffold(
         topBar = {
@@ -95,7 +99,7 @@ fun ProfileScreen(nav: NavController) {
             onRefresh = { vm.refresh(pulled = true) },
             modifier = Modifier.fillMaxSize().padding(padding),
         ) {
-            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = Spacing.xl)) {
+            Column(Modifier.fillMaxSize().verticalScroll(scroll).padding(bottom = Spacing.xl)) {
                 OwnProfileHeader(
                     user,
                     onEdit = { nav.navigate(EditProfileRoute) },

@@ -247,4 +247,31 @@ class ListingDetailAndListsViewModelTest {
         assertEquals("Undo", message.actionLabel)
         awaitCondition { h.requests.any { it.url.encodedPath == ApiRoutes.listingFavorite("f1") && it.method == HttpMethod.Delete } }
     }
+
+    @Test
+    fun undoPutsTheTileBackInPlaceWithoutWaitingForTheServer() = runTest {
+        val h = Harness { req ->
+            when (req.url.encodedPath) {
+                ApiRoutes.MY_FAVORITES -> respondJson(pageSerializer, Page(listOf(summary("f1", favorited = true), summary("f2", favorited = true)), null))
+                else -> respondJson(OkResponse.serializer(), OkResponse())
+            }
+        }
+        val messages = UserMessages()
+        val vm = FavoritesViewModel(h.api, ListingSync(h.api, messages, backgroundScope), messages)
+        vm.favorites.state.awaitValue { it.loaded }
+
+        vm.unfavorite(vm.favorites.state.value.items.first())
+        val message = messages.messages.awaitValue()
+        awaitCondition { h.requests.any { it.url.encodedPath == ApiRoutes.listingFavorite("f1") && it.method == HttpMethod.Delete } }
+        runCurrent()
+        val favoritesLoads = h.requests.count { it.url.encodedPath == ApiRoutes.MY_FAVORITES }
+
+        message.onAction!!.invoke()
+        vm.favorites.state.awaitValue { s -> s.items.map { it.id } == listOf("f1", "f2") }
+        assertTrue(vm.favorites.state.value.items.first().favorited)
+        awaitCondition { h.requests.any { it.url.encodedPath == ApiRoutes.listingFavorite("f1") && it.method == HttpMethod.Post } }
+        runCurrent()
+        // Already back in the list, so the server's confirmation doesn't trigger a reload.
+        assertEquals(favoritesLoads, h.requests.count { it.url.encodedPath == ApiRoutes.MY_FAVORITES })
+    }
 }

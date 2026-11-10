@@ -19,7 +19,11 @@ import kotlinx.coroutines.launch
 sealed interface ListingChange {
     val listingId: String
 
-    data class Favorited(override val listingId: String, val favorited: Boolean) : ListingChange
+    /**
+     * [confirmed]: the server's state (sent again once the call succeeds, or with the old value on a rollback). Lists
+     * that reload from the server wait for it; an earlier reload would race the request.
+     */
+    data class Favorited(override val listingId: String, val favorited: Boolean, val confirmed: Boolean = false) : ListingChange
 
     /** Created or edited: the server's fresh copy. */
     data class Saved(val listing: ListingDetail, val created: Boolean) : ListingChange {
@@ -66,10 +70,11 @@ class ListingSync(
         scope.launch {
             try {
                 api.setFavorite(listingId, favorited)
+                publish(ListingChange.Favorited(listingId, favorited, confirmed = true))
             } catch (e: CancellationException) {
                 throw e
             } catch (e: ApiError) {
-                publish(ListingChange.Favorited(listingId, !favorited))
+                publish(ListingChange.Favorited(listingId, !favorited, confirmed = true))
                 messages.show(if (favorited) "Couldn't save to favorites. ${e.message}" else "Couldn't remove from favorites. ${e.message}")
             } finally {
                 inFlight.update { it - listingId }
