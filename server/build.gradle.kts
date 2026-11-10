@@ -24,7 +24,7 @@ dependencies {
     implementation(libs.ktor.server.websockets)
     implementation(libs.ktor.server.status.pages)
     implementation(libs.ktor.server.call.logging)
-    implementation(libs.ktor.server.cors)
+    implementation(libs.ktor.server.compression)
     implementation(libs.ktor.server.rate.limit)
     implementation(libs.logback)
     implementation(libs.postgres)
@@ -40,9 +40,17 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
 }
 
+// The demo seed's photos are dev-only: `:server:seed`, `:server:run` and the tests read them from the resources
+// directory, but the jar that the distribution and the Docker image ship leaves them out.
+tasks.jar {
+    exclude("seed/photos/**")
+}
+
 tasks.test {
     useJUnitPlatform()
     environment("BCRYPT_COST", "4")
+    // tests that need the photo variant backfill run it directly
+    environment("PHOTO_VARIANT_BACKFILL", "false")
     testLogging { events("failed"); showStandardStreams = false; exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL }
 }
 

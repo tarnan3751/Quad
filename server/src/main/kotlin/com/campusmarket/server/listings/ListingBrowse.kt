@@ -8,11 +8,14 @@ import com.campusmarket.core.ListingStatus
 import com.campusmarket.core.ListingSummary
 import com.campusmarket.core.Page
 import com.campusmarket.server.AppDeps
+import com.campusmarket.server.PageParams
+import com.campusmarket.server.Sql
 import com.campusmarket.server.UserPrincipal
 import com.campusmarket.server.invalidField
 import com.campusmarket.server.loadListingSummaries
 import com.campusmarket.server.notFound
 import com.campusmarket.server.query
+import com.campusmarket.server.queryFreshPlan
 import com.campusmarket.server.queryOne
 import com.campusmarket.server.uuid
 import io.ktor.http.Parameters
@@ -128,7 +131,7 @@ internal class ListingBrowse(private val deps: AppDeps) {
         )
         sql.add(" LIMIT ?", page.limit + 1)
 
-        val hits = c.query(sql.toString(), *sql.paramsArray()) { rs ->
+        val hits = c.queryFreshPlan(sql.toString(), *sql.paramsArray()) { rs ->
             Hit(
                 rs.uuid("id"),
                 Keyset(sort.name, rs.instantMicros("created_at"), rs.uuid("id"), rs.getInt("price_cents"), rs.getFloat("rank")),
@@ -167,7 +170,7 @@ internal class ListingBrowse(private val deps: AppDeps) {
         )
         after?.let { sql.add(" AND (f.created_at, f.listing_id) < (?::timestamptz, ?)", it.createdAt.toString(), it.id) }
         sql.add(" ORDER BY f.created_at DESC, f.listing_id DESC LIMIT ?", page.limit + 1)
-        val hits = c.query(sql.toString(), *sql.paramsArray()) { rs ->
+        val hits = c.query(sql) { rs ->
             val id = rs.uuid("listing_id")
             Hit(id, Keyset(ordering, rs.instantMicros("created_at"), id))
         }
@@ -193,7 +196,7 @@ internal class ListingBrowse(private val deps: AppDeps) {
             sql.add(" AND (l.created_at, l.id) < (?::timestamptz, ?)", it.createdAt.toString(), it.id)
         }
         sql.add(" ORDER BY l.created_at DESC, l.id DESC LIMIT ?", page.limit + 1)
-        val hits = query(sql.toString(), *sql.paramsArray()) { rs ->
+        val hits = query(sql) { rs ->
             val id = rs.uuid("id")
             Hit(id, Keyset(ordering, rs.instantMicros("created_at"), id))
         }

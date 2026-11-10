@@ -1,6 +1,7 @@
 package com.campusmarket.server.chat
 
 import com.campusmarket.core.ChatEvent
+import com.campusmarket.server.KeysetCursor
 import kotlinx.coroutines.runBlocking
 import java.util.UUID
 import kotlin.test.Test

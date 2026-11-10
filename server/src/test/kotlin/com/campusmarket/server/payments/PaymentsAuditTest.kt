@@ -3,7 +3,6 @@ package com.campusmarket.server.payments
 import com.campusmarket.core.ApiRoutes
 import com.campusmarket.core.CreateRatingRequest
 import com.campusmarket.core.ErrorCodes
-import com.campusmarket.core.ErrorResponse
 import com.campusmarket.core.ListingStatus
 import com.campusmarket.core.Order
 import com.campusmarket.core.OrderStatus
@@ -17,7 +16,6 @@ import com.campusmarket.server.queryOne
 import io.ktor.client.call.body
 import io.ktor.client.request.get
 import io.ktor.client.request.post
-import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.async
@@ -30,17 +28,13 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.hours
+import com.campusmarket.server.assertApiError
 
 class PaymentsAuditTest {
     /** Wall-clock wait (independent of any virtual test time) while a request runs concurrently. */
     private suspend fun realSleep(ms: Long) = withContext(Dispatchers.IO) { Thread.sleep(ms) }
 
     private fun limits(l: UserRateLimits) = TestEnv.config.copy(userRateLimits = l)
-
-    private suspend fun HttpResponse.assertError(status: HttpStatusCode, code: String) {
-        assertEquals(status, this.status, bodyAsText())
-        assertEquals(code, body<ErrorResponse>().code)
-    }
 
     private fun PaymentsScope.liveOrders(listingId: UUID): Int = env.db.txBlocking { c ->
         c.queryOne("SELECT count(*) FROM orders WHERE listing_id = ? AND status IN ('PENDING_PAYMENT', 'PAID', 'DISPUTED')", listingId) { it.getInt(1) }!!
@@ -54,7 +48,7 @@ class PaymentsAuditTest {
         buyOk(buyer, env.listing(seller))
         buyOk(buyer, env.listing(seller))
         val fourth = env.listing(seller)
-        buy(buyer, fourth).assertError(HttpStatusCode.TooManyRequests, ErrorCodes.RATE_LIMITED)
+        buy(buyer, fourth).assertApiError(HttpStatusCode.TooManyRequests, ErrorCodes.RATE_LIMITED)
         assertEquals(ListingStatus.ACTIVE, listingStatus(fourth))
 
         // paying or cancelling one frees a slot
@@ -72,7 +66,7 @@ class PaymentsAuditTest {
         val a = buyOk(buyer, env.listing(seller))
         client.post(ApiRoutes.orderCancel(a.id)) { auth(buyer) }
         buyOk(buyer, env.listing(seller))
-        buy(buyer, env.listing(seller)).assertError(HttpStatusCode.TooManyRequests, ErrorCodes.RATE_LIMITED)
+        buy(buyer, env.listing(seller)).assertApiError(HttpStatusCode.TooManyRequests, ErrorCodes.RATE_LIMITED)
     }
 
     @Test

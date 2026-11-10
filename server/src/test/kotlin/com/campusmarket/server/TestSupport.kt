@@ -19,6 +19,11 @@ import io.ktor.server.testing.testApplication
 import java.nio.file.Files
 import java.sql.DriverManager
 import java.util.UUID
+import com.campusmarket.core.ErrorResponse
+import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.HttpStatusCode
+import kotlin.test.assertEquals
 
 /**
  * Integration-test harness. Each test JVM gets its own throwaway database on the docker-compose
@@ -157,4 +162,11 @@ fun HttpRequestBuilder.auth(user: TestEnv.TestUser) = bearerAuth(user.token)
 inline fun <reified T> HttpRequestBuilder.json(body: T) {
     contentType(ContentType.Application.Json)
     setBody(body)
+}
+
+/** Asserts an API error: [status] and `ErrorResponse.code` [code] (the body is shown when either differs). */
+suspend fun HttpResponse.assertApiError(status: HttpStatusCode, code: String): ErrorResponse {
+    val text = bodyAsText()
+    assertEquals(status, this.status, text)
+    return ApiJson.decodeFromString(ErrorResponse.serializer(), text).also { assertEquals(code, it.code, text) }
 }

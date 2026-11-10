@@ -13,7 +13,6 @@ import com.campusmarket.server.auth.bioError
 import com.campusmarket.server.auth.displayNameError
 import com.campusmarket.server.auth.normalizeBio
 import com.campusmarket.server.auth.normalizeDisplayName
-import com.campusmarket.server.auth.receiveBody
 import com.campusmarket.server.auth.throwIfInvalid
 import com.campusmarket.server.badRequest
 import com.campusmarket.server.invalidField
@@ -21,6 +20,7 @@ import com.campusmarket.server.loadUserPrivate
 import com.campusmarket.server.loadUserPublic
 import com.campusmarket.server.loadUsersPublic
 import com.campusmarket.server.notFound
+import com.campusmarket.server.receiveBody
 import com.campusmarket.server.query
 import com.campusmarket.server.queryOne
 import com.campusmarket.server.toUuidOrNull

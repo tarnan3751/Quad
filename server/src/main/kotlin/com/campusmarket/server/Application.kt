@@ -12,6 +12,7 @@ import com.campusmarket.server.payments.paymentRoutes
 import com.campusmarket.server.photos.photoRoutes
 import com.campusmarket.server.users.userRoutes
 import com.campusmarket.core.ErrorCodes
+import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
@@ -21,6 +22,13 @@ import io.ktor.server.application.install
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
 import io.ktor.server.plugins.calllogging.CallLogging
+import io.ktor.server.plugins.compression.Compression
+import io.ktor.server.plugins.compression.CompressionConfig
+import io.ktor.server.plugins.compression.ConditionsHolderBuilder
+import io.ktor.server.plugins.compression.deflate
+import io.ktor.server.plugins.compression.gzip
+import io.ktor.server.plugins.compression.matchContentType
+import io.ktor.server.plugins.compression.minimumSize
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.request.contentLength
 import io.ktor.server.request.path
@@ -61,9 +69,15 @@ private val RequestSizeGuard = createApplicationPlugin("RequestSizeGuard") {
     }
 }
 
+/** JSON and HTML worth compressing; images are compressed already. */
+private fun ConditionsHolderBuilder.textOnly() {
+    matchContentType(ContentType.Application.Json, ContentType.Text.Html)
+    minimumSize(1024)
+}
+
 fun main() {
     val config = AppConfig.fromEnv()
-    val db = Db.connect(config.dbUrl, config.dbUser, config.dbPassword)
+    val db = Db.connect(config.dbUrl, config.dbUser, config.dbPassword, config.dbPoolSize)
     Db.migrate(db)
     embeddedServer(Netty, port = config.port, host = "0.0.0.0") { module(AppDeps(config, db)) }.start(wait = true)
 }
@@ -74,7 +88,15 @@ fun main() {
  */
 fun Application.module(deps: AppDeps) {
     install(ContentNegotiation) { json(ApiJson) }
-    install(CallLogging)
+    install(CallLogging) {
+        // photos are most of the requests and say nothing
+        filter { call -> call.request.path().let { !it.startsWith("${ApiRoutes.UPLOADS}/") && it != ApiRoutes.HEALTH } }
+    }
+    install(Compression) {
+        mode = CompressionConfig.Mode.CompressResponse // never inflate request bodies: they are size-capped as sent
+        gzip { textOnly() }
+        deflate { textOnly() }
+    }
     install(WebSockets) {
         pingPeriod = 20.seconds
         timeout = 60.seconds

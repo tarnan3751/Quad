@@ -3,7 +3,6 @@ package com.campusmarket.server.payments
 import com.campusmarket.core.ApiRoutes
 import com.campusmarket.core.CreateOrderRequest
 import com.campusmarket.core.ErrorCodes
-import com.campusmarket.core.ErrorResponse
 import com.campusmarket.core.ListingStatus
 import com.campusmarket.core.OrderRole
 import com.campusmarket.core.OrderStatus
@@ -12,9 +11,7 @@ import com.campusmarket.server.auth
 import com.campusmarket.server.json
 import com.campusmarket.server.query
 import com.campusmarket.server.queryOne
-import io.ktor.client.call.body
 import io.ktor.client.request.post
-import io.ktor.client.statement.HttpResponse
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -27,13 +24,9 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import com.campusmarket.server.assertApiError
 
 class OrderCreationTest {
-
-    private suspend fun HttpResponse.assertError(status: HttpStatusCode, code: String) {
-        assertEquals(status, this.status)
-        assertEquals(code, body<ErrorResponse>().code)
-    }
 
     @Test
     fun createsPendingOrderReservesListingAndOpensCheckout() = paymentsTest {
@@ -93,21 +86,21 @@ class OrderCreationTest {
     @Test
     fun cannotBuyOwnListing() = paymentsTest {
         val seller = seller()
-        buy(seller, env.listing(seller)).assertError(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
+        buy(seller, env.listing(seller)).assertApiError(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
     }
 
     @Test
     fun unknownMalformedHiddenAndOtherCampusListingsAre404() = paymentsTest {
         val buyer = buyer()
         val seller = seller()
-        buy(buyer, UUID.randomUUID()).assertError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
+        buy(buyer, UUID.randomUUID()).assertApiError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
         client.post(ApiRoutes.ORDERS) { auth(buyer); json(CreateOrderRequest("not-a-uuid")) }
-            .assertError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
-        buy(buyer, env.listing(seller, status = ListingStatus.REMOVED)).assertError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
-        buy(buyer, env.listing(seller, status = ListingStatus.DELETED)).assertError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
+            .assertApiError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
+        buy(buyer, env.listing(seller, status = ListingStatus.REMOVED)).assertApiError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
+        buy(buyer, env.listing(seller, status = ListingStatus.DELETED)).assertApiError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
 
         val elsewhere = seller(domain = "other.edu")
-        buy(buyer, env.listing(elsewhere)).assertError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
+        buy(buyer, env.listing(elsewhere)).assertApiError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
         assertTrue(gateway.calls.isEmpty())
     }
 
@@ -117,11 +110,11 @@ class OrderCreationTest {
         val buyer = buyer()
         val listing = env.listing(seller)
         sql("INSERT INTO blocks (blocker_id, blocked_id) VALUES (?, ?)", seller.id, buyer.id)
-        buy(buyer, listing).assertError(HttpStatusCode.Forbidden, ErrorCodes.BLOCKED)
+        buy(buyer, listing).assertApiError(HttpStatusCode.Forbidden, ErrorCodes.BLOCKED)
 
         sql("DELETE FROM blocks")
         sql("INSERT INTO blocks (blocker_id, blocked_id) VALUES (?, ?)", buyer.id, seller.id)
-        buy(buyer, listing).assertError(HttpStatusCode.Forbidden, ErrorCodes.BLOCKED)
+        buy(buyer, listing).assertApiError(HttpStatusCode.Forbidden, ErrorCodes.BLOCKED)
         assertEquals(ListingStatus.ACTIVE, listingStatus(listing))
     }
 
@@ -129,8 +122,8 @@ class OrderCreationTest {
     fun listingMustBeActive() = paymentsTest {
         val seller = seller()
         val buyer = buyer()
-        buy(buyer, env.listing(seller, status = ListingStatus.RESERVED)).assertError(HttpStatusCode.Conflict, ErrorCodes.LISTING_UNAVAILABLE)
-        buy(buyer, env.listing(seller, status = ListingStatus.SOLD)).assertError(HttpStatusCode.Conflict, ErrorCodes.LISTING_UNAVAILABLE)
+        buy(buyer, env.listing(seller, status = ListingStatus.RESERVED)).assertApiError(HttpStatusCode.Conflict, ErrorCodes.LISTING_UNAVAILABLE)
+        buy(buyer, env.listing(seller, status = ListingStatus.SOLD)).assertApiError(HttpStatusCode.Conflict, ErrorCodes.LISTING_UNAVAILABLE)
     }
 
     @Test
@@ -138,7 +131,7 @@ class OrderCreationTest {
         val seller = seller()
         val listing = env.listing(seller)
         sql("UPDATE users SET suspended = true WHERE id = ?", seller.id)
-        buy(buyer(), listing).assertError(HttpStatusCode.Conflict, ErrorCodes.LISTING_UNAVAILABLE)
+        buy(buyer(), listing).assertApiError(HttpStatusCode.Conflict, ErrorCodes.LISTING_UNAVAILABLE)
         assertEquals(ListingStatus.ACTIVE, listingStatus(listing))
     }
 
@@ -146,7 +139,7 @@ class OrderCreationTest {
     fun sellerMustHavePayoutsEnabled() = paymentsTest {
         val seller = env.user("nopayouts")
         val listing = env.listing(seller)
-        buy(buyer(), listing).assertError(HttpStatusCode.Conflict, ErrorCodes.PAYOUTS_NOT_ENABLED)
+        buy(buyer(), listing).assertApiError(HttpStatusCode.Conflict, ErrorCodes.PAYOUTS_NOT_ENABLED)
         assertEquals(ListingStatus.ACTIVE, listingStatus(listing))
         assertEquals(0, env.db.txBlocking { c -> c.findOrderCount() })
     }
@@ -155,7 +148,7 @@ class OrderCreationTest {
     fun secondBuyerGetsListingUnavailable() = paymentsTest {
         val listing = env.listing(seller())
         buyOk(buyer(), listing)
-        buy(buyer(), listing).assertError(HttpStatusCode.Conflict, ErrorCodes.LISTING_UNAVAILABLE)
+        buy(buyer(), listing).assertApiError(HttpStatusCode.Conflict, ErrorCodes.LISTING_UNAVAILABLE)
     }
 
     @Test
@@ -165,7 +158,7 @@ class OrderCreationTest {
         val results = coroutineScope { buyers.map { b -> async { buy(b, listing) } }.awaitAll() }
 
         assertEquals(1, results.count { it.status == HttpStatusCode.OK })
-        results.filter { it.status != HttpStatusCode.OK }.forEach { it.assertError(HttpStatusCode.Conflict, ErrorCodes.LISTING_UNAVAILABLE) }
+        results.filter { it.status != HttpStatusCode.OK }.forEach { it.assertApiError(HttpStatusCode.Conflict, ErrorCodes.LISTING_UNAVAILABLE) }
         assertEquals(1, env.db.txBlocking { c -> c.findOrderCount() })
         assertEquals(ListingStatus.RESERVED, listingStatus(listing))
     }
@@ -176,7 +169,7 @@ class OrderCreationTest {
         val listing = env.listing(seller())
         buyOk(buyer(), listing)
         sql("UPDATE listings SET status = 'ACTIVE' WHERE id = ?", listing)
-        buy(buyer(), listing).assertError(HttpStatusCode.Conflict, ErrorCodes.LISTING_UNAVAILABLE)
+        buy(buyer(), listing).assertApiError(HttpStatusCode.Conflict, ErrorCodes.LISTING_UNAVAILABLE)
     }
 
     @Test
@@ -184,7 +177,7 @@ class OrderCreationTest {
         val listing = env.listing(seller())
         val buyer = buyer()
         gateway.failNext("createCheckoutSession", retryable = true)
-        buy(buyer, listing).assertError(HttpStatusCode.BadGateway, ErrorCodes.PAYMENT_FAILED)
+        buy(buyer, listing).assertApiError(HttpStatusCode.BadGateway, ErrorCodes.PAYMENT_FAILED)
 
         assertEquals(ListingStatus.ACTIVE, listingStatus(listing))
         val statuses = env.db.txBlocking { c -> c.orderStatuses() }

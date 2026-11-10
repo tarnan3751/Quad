@@ -8,13 +8,13 @@ import com.campusmarket.core.UpdateListingRequest
 import com.campusmarket.server.AUTH_JWT
 import com.campusmarket.server.AppDeps
 import com.campusmarket.server.asUuid
-import com.campusmarket.server.badRequest
+import com.campusmarket.server.pageParams
+import com.campusmarket.server.receiveBody
+import com.campusmarket.server.respondCacheableJson
 import com.campusmarket.server.user
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.auth.authenticate
-import io.ktor.server.plugins.ContentTransformationException
-import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.delete
@@ -35,7 +35,7 @@ fun Route.listingRoutes(deps: AppDeps) {
                 call.respond(browse.search(call.user, SearchParams.parse(call.request.queryParameters), call.pageParams()))
             }
             post {
-                val req = call.receiveJson<CreateListingRequest>()
+                val req = call.receiveBody<CreateListingRequest>()
                 call.respond(HttpStatusCode.Created, listings.create(call.user, req))
             }
             route("/{id}") {
@@ -44,7 +44,7 @@ fun Route.listingRoutes(deps: AppDeps) {
                 }
                 patch {
                     val id = call.listingId()
-                    val req = call.receiveJson<UpdateListingRequest>()
+                    val req = call.receiveBody<UpdateListingRequest>()
                     call.respond(listings.update(call.user, id, req))
                 }
                 delete {
@@ -76,16 +76,9 @@ fun Route.listingRoutes(deps: AppDeps) {
             call.respond(browse.bySeller(call.user, sellerId, call.pageParams()))
         }
         get(ApiRoutes.CATEGORIES) {
-            call.respond(browse.categories(call.user))
+            call.respondCacheableJson(browse.categories(call.user))
         }
     }
 }
 
 private fun ApplicationCall.listingId(): UUID = parameters["id"].asUuid("Listing")
-
-/** Like `receive<T>()`, but a missing/non-JSON Content-Type is a 400 rather than an unhandled exception (500). */
-private suspend inline fun <reified T : Any> ApplicationCall.receiveJson(): T = try {
-    receive<T>()
-} catch (_: ContentTransformationException) {
-    badRequest("Expected a JSON request body (Content-Type: application/json)")
-}

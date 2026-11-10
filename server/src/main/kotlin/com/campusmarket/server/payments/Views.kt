@@ -1,28 +1,23 @@
 package com.campusmarket.server.payments
 
-import com.campusmarket.core.Limits
 import com.campusmarket.core.Order
 import com.campusmarket.core.OrderRole
 import com.campusmarket.core.OrderStatus
 import com.campusmarket.core.Rating
 import com.campusmarket.server.AppConfig
-import com.campusmarket.server.invalidField
 import com.campusmarket.server.loadListingSummaries
 import com.campusmarket.server.loadUsersPublic
 import com.campusmarket.server.millis
 import com.campusmarket.server.query
 import com.campusmarket.server.uuid
-import io.ktor.server.application.ApplicationCall
 import java.sql.Connection
 import java.time.Instant
-import java.util.Base64
 import java.util.UUID
 import kotlin.time.Duration
 import kotlin.time.toJavaDuration
 
 /*
- * DTO assembly for orders and ratings (users and listing summaries come from the shared Readers) and the
- * keyset-pagination helpers both lists use.
+ * DTO assembly for orders and ratings (users and listing summaries come from the shared Readers).
  */
 
 /**
@@ -101,35 +96,4 @@ internal fun Connection.loadRatings(config: AppConfig, ids: List<UUID>, viewerId
             createdAt = r.createdAt,
         )
     }
-}
-
-// ---------- keyset pagination ----------
-
-/** Position after the last row of a page: (created_at, id) of that row, at full timestamp precision. */
-internal data class PageKey(val createdAt: Instant, val id: UUID) {
-    fun encode(): String =
-        Base64.getUrlEncoder().withoutPadding().encodeToString("${createdAt.epochSecond}:${createdAt.nano}:$id".toByteArray())
-
-    companion object {
-        fun decode(raw: String): PageKey? = runCatching {
-            val (sec, nano, id) = String(Base64.getUrlDecoder().decode(raw)).split(':', limit = 3)
-            PageKey(Instant.ofEpochSecond(sec.toLong(), nano.toLong()), UUID.fromString(id))
-        }.getOrNull()
-    }
-}
-
-internal data class PageRequest(val after: PageKey?, val limit: Int)
-
-internal fun ApplicationCall.pageRequest(): PageRequest {
-    val params = request.queryParameters
-    val after = params["cursor"]?.takeIf { it.isNotEmpty() }?.let { PageKey.decode(it) ?: invalidField("cursor", "Invalid cursor") }
-    val limit = params["limit"]?.let { it.toIntOrNull() ?: invalidField("limit", "limit must be a number") } ?: Limits.PAGE_DEFAULT
-    return PageRequest(after, limit.coerceIn(1, Limits.PAGE_MAX))
-}
-
-/** Runs a keyset query that fetched `limit + 1` rows of (createdAt, id) and splits off the next cursor. */
-internal fun <T> List<Pair<PageKey, T>>.toPage(limit: Int): Pair<List<T>, String?> {
-    val hasMore = size > limit
-    val page = take(limit)
-    return page.map { it.second } to (if (hasMore) page.last().first.encode() else null)
 }

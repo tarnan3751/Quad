@@ -16,17 +16,22 @@ import com.campusmarket.core.StaffMember
 import com.campusmarket.core.SuspendUserRequest
 import com.campusmarket.core.UserRole
 import com.campusmarket.server.AppDeps
+import com.campusmarket.server.KeysetCursor
+import com.campusmarket.server.PageParams
+import com.campusmarket.server.Sql
 import com.campusmarket.server.UserPrincipal
 import com.campusmarket.server.asUuid
 import com.campusmarket.server.badRequest
 import com.campusmarket.server.conflict
 import com.campusmarket.server.forbidden
 import com.campusmarket.server.invalidField
+import com.campusmarket.server.keyset
 import com.campusmarket.server.loadListingSummaries
 import com.campusmarket.server.loadUsersPublic
 import com.campusmarket.server.millis
 import com.campusmarket.server.millisOrNull
 import com.campusmarket.server.notFound
+import com.campusmarket.server.page
 import com.campusmarket.server.query
 import com.campusmarket.server.queryOne
 import com.campusmarket.server.update
@@ -37,7 +42,6 @@ import java.sql.Connection
 import java.sql.ResultSet
 import java.time.Duration
 import java.time.Instant
-import java.util.Base64
 import java.util.UUID
 
 private const val MAX_SUMMARY = 200
@@ -134,13 +138,12 @@ internal class ModerationService(private val deps: AppDeps) {
         val resolvedAt: Long?,
         val listingId: UUID?,
         val openAgainstUser: Int,
-        val micros: Long,
+        val key: KeysetCursor,
     )
 
     private val reportSelect = """
         SELECT r.id, r.reporter_id, r.target_type, r.target_id, r.target_user_id, r.reason, r.details, r.status,
                r.target_summary, r.resolved_by, r.resolution_action, r.resolution_note, r.created_at, r.resolved_at,
-               (extract(epoch from r.created_at) * 1000000)::bigint AS micros,
                CASE r.target_type WHEN 'LISTING' THEN r.target_id
                                   WHEN 'MESSAGE' THEN (SELECT cv.listing_id FROM messages m JOIN conversations cv ON cv.id = m.conversation_id WHERE m.id = r.target_id)
                END AS listing_id,
@@ -165,7 +168,7 @@ internal class ModerationService(private val deps: AppDeps) {
         resolvedAt = millisOrNull("resolved_at"),
         listingId = uuidOrNull("listing_id"),
         openAgainstUser = getInt("open_against"),
-        micros = getLong("micros"),
+        key = KeysetCursor(getTimestamp("created_at").toInstant(), uuid("id")),
     )
 
     private fun render(c: Connection, rows: List<ReportRow>): List<Report> {
@@ -194,22 +197,11 @@ internal class ModerationService(private val deps: AppDeps) {
         }
     }
 
-    fun listReports(c: Connection, status: ReportStatus, cursor: String?, limit: Int): Page<Report> {
-        val asc = status == ReportStatus.OPEN
-        val cmp = if (asc) ">" else "<"
-        val order = if (asc) "ASC" else "DESC"
-        val key = decodeCursor(cursor)
-        val rows = if (key == null) {
-            c.query("$reportSelect WHERE r.status = ? ORDER BY r.created_at $order, r.id $order LIMIT ?", status, limit + 1) { it.toReportRow() }
-        } else {
-            c.query(
-                "$reportSelect WHERE r.status = ? AND (r.created_at, r.id) $cmp (?, ?) ORDER BY r.created_at $order, r.id $order LIMIT ?",
-                status, key.first, key.second, limit + 1,
-            ) { it.toReportRow() }
-        }
-        val page = rows.take(limit)
-        val next = if (rows.size > limit) page.last().let { encodeCursor(it.micros, it.id) } else null
-        return Page(render(c, page), next)
+    fun listReports(c: Connection, status: ReportStatus, page: PageParams): Page<Report> {
+        val sql = Sql("$reportSelect WHERE r.status = ?", status)
+            .keysetPage("r.created_at", "r.id", KeysetCursor.decode(page.cursor), page.limit, ascending = status == ReportStatus.OPEN)
+        val rows = c.page(sql, page.limit, { it.key }) { it.toReportRow() }
+        return Page(render(c, rows.items), rows.nextCursor)
     }
 
     fun reportDetail(c: Connection, id: UUID): Report? =
@@ -373,26 +365,21 @@ internal class ModerationService(private val deps: AppDeps) {
 
     // ---------------------------------------------------------------- audit log
 
-    fun log(c: Connection, cursor: String?, limit: Int): Page<ModerationLogEntry> {
+    fun log(c: Connection, page: PageParams): Page<ModerationLogEntry> {
         class Row(val id: UUID, val mod: UUID, val action: ModerationAction, val type: ReportTargetType, val target: UUID,
-                  val note: String, val report: UUID?, val at: Long, val micros: Long)
-        val sel = """SELECT id, moderator_id, action, target_type, target_id, note, report_id, created_at,
-                            (extract(epoch from created_at) * 1000000)::bigint AS micros FROM moderation_actions"""
-        val map = { rs: ResultSet ->
+                  val note: String, val report: UUID?, val at: Long, val key: KeysetCursor)
+        val sql = Sql("SELECT id, created_at, moderator_id, action, target_type, target_id, note, report_id FROM moderation_actions WHERE true")
+            .keysetPage("created_at", "id", KeysetCursor.decode(page.cursor), page.limit)
+        val rows = c.page(sql, page.limit, { it.key }) { rs ->
             Row(rs.uuid("id"), rs.uuid("moderator_id"), ModerationAction.valueOf(rs.getString("action")),
                 ReportTargetType.valueOf(rs.getString("target_type")), rs.uuid("target_id"), rs.getString("note"),
-                rs.uuidOrNull("report_id"), rs.millis("created_at"), rs.getLong("micros"))
+                rs.uuidOrNull("report_id"), rs.millis("created_at"), rs.keyset())
         }
-        val key = decodeCursor(cursor)
-        val rows = if (key == null) c.query("$sel ORDER BY created_at DESC, id DESC LIMIT ?", limit + 1, map = map)
-        else c.query("$sel WHERE (created_at, id) < (?, ?) ORDER BY created_at DESC, id DESC LIMIT ?", key.first, key.second, limit + 1, map = map)
-        val page = rows.take(limit)
-        val users = c.loadUsersPublic(config, page.map { it.mod })
-        val items = page.map {
+        val users = c.loadUsersPublic(config, rows.items.map { it.mod })
+        val items = rows.items.map {
             ModerationLogEntry(it.id.toString(), users.getValue(it.mod), it.action, it.type, it.target.toString(), it.note, it.report?.toString(), it.at)
         }
-        val next = if (rows.size > limit) page.last().let { encodeCursor(it.micros, it.id) } else null
-        return Page(items, next)
+        return Page(items, rows.nextCursor)
     }
 
     // ---------------------------------------------------------------- helpers
@@ -456,19 +443,5 @@ internal class ModerationService(private val deps: AppDeps) {
             ListingStatus.REMOVED, ListingStatus.DELETED ->
                 if (!allowAlreadyGone) conflict("Listing is already ${status.name.lowercase()}")
         }
-    }
-
-    // Cursor: base64url("<created_at epoch micros>:<id>"); micros keep Postgres' full timestamp precision.
-    private fun encodeCursor(micros: Long, id: UUID): String =
-        Base64.getUrlEncoder().withoutPadding().encodeToString("$micros:$id".toByteArray())
-
-    private fun decodeCursor(cursor: String?): Pair<Instant, UUID>? {
-        if (cursor.isNullOrEmpty()) return null
-        val bad = { invalidField("cursor", "Invalid cursor") }
-        val text = runCatching { String(Base64.getUrlDecoder().decode(cursor)) }.getOrNull() ?: bad()
-        val micros = text.substringBefore(':').toLongOrNull() ?: bad()
-        val id = text.substringAfter(':', "").let { runCatching { UUID.fromString(it) }.getOrNull() } ?: bad()
-        val instant = Instant.ofEpochSecond(Math.floorDiv(micros, 1_000_000L), Math.floorMod(micros, 1_000_000L) * 1000)
-        return instant to id
     }
 }

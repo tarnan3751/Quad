@@ -75,7 +75,7 @@ Passwords: bcrypt (`at.favre.lib:bcrypt`, cost 12; cost 4 is fine in tests). Rat
 | | | |
 |---|---|---|
 | 🔒 POST `/photos` | multipart, part name `file` → `Photo` | JPEG/PNG/WebP only (sniff magic bytes, don't trust the header), ≤ `PHOTO_MAX_BYTES`. Stored via a `PhotoStorage` interface; `LocalPhotoStorage` writes to `config.uploadsDir` with a random name. Record width/height when cheaply decodable. |
-| GET `/uploads/{key}` | static file | Public, long cache headers, no directory traversal. |
+| GET `/uploads/{key}` | static file | Public, long cache headers (immutable, ETag, Last-Modified, 304s), byte ranges, no directory traversal. Originals and their server-made JPEG variants (`Photo.thumbnailUrl` / `displayUrl`, `ListingSummary.thumbnailSmallUrl`, `avatarThumbnailUrl`; see SERVER_NOTES "Photos"). |
 
 ### Listings — owner: server-listings (`server/.../listings/`)
 | | | |
@@ -195,8 +195,9 @@ order is only logged: reverse the transfer by hand).
 
 ## Config (env vars → `AppConfig`)
 
-`PORT`, `DATABASE_URL`, `DATABASE_USER`, `DATABASE_PASSWORD`, `PUBLIC_BASE_URL`, `JWT_SECRET`, `DEV_MODE`, `ALLOWED_EMAIL_SUFFIXES`, `ADMIN_EMAILS`,
+`PORT`, `DATABASE_URL`, `DATABASE_USER`, `DATABASE_PASSWORD`, `DATABASE_POOL_SIZE` (default 10), `PUBLIC_BASE_URL`, `JWT_SECRET`, `DEV_MODE`, `ALLOWED_EMAIL_SUFFIXES`, `ADMIN_EMAILS`,
 `UPLOADS_DIR`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `PLATFORM_FEE_BPS`, `APP_DEEP_LINK_BASE`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `MAIL_FROM`, `LEGAL_ENTITY_NAME`, `SUPPORT_EMAIL`.
+`PHOTO_VARIANT_BACKFILL` (default true) makes the variants of photos stored before variants existed, in the background at start.
 `AUTO_RELEASE_HOURS` (default 72, whole hours ≥ 1) is read by the payments feature (`PaymentOptions.fromEnv`); it applies
 to every waiting order (the deadline is computed at read time). The Terms (`/legal/terms`) state 72 hours: change them
 together.

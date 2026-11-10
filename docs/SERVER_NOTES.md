@@ -9,6 +9,8 @@ Decisions made while implementing the server that go beyond `CONTRACT.md`. Clien
   conversations (re-opening an existing one is free), creating reports, and creating orders. A buyer may also have at
   most **3 orders awaiting payment** at once: the 4th `POST /orders` is 429 `RATE_LIMITED` until one is paid or cancelled.
 - Request bodies (except photo uploads) must declare a `Content-Length` (else 411) of at most 1 MiB (else 413 `VALIDATION`).
+  A JSON body that can't be read (malformed, missing fields, missing or wrong `Content-Type`) is 400 `VALIDATION` on every
+  endpoint.
 - Free text: control characters are dropped from messages, rating comments and report details (instead of failing).
   Invisible formatting characters (bidi overrides, zero-width spaces, …) are stripped from listing titles, descriptions and
   pickup locations, and rejected in display names and bios (400 `VALIDATION`); emoji ZWJ sequences are fine.
@@ -33,6 +35,33 @@ Decisions made while implementing the server that go beyond `CONTRACT.md`. Clien
 ## Photos
 - Multipart part name `file`; the part **must include a filename** in Content-Disposition and the request must have a Content-Length (no chunked upload) or the server answers 411.
 - > 8 MB → 413 `VALIDATION` (`fields.file`); unsupported / corrupt → 400 (`fields.file`). JPEG/PNG/WebP only. Downscale/compress large photos client-side to JPEG before upload where practical.
+- **Variants.** Every photo also gets server-made JPEGs (upright, no metadata, transparency on white, never upscaled):
+  `Photo.thumbnailUrl` (480 px on the short side, at most 1280 px on the long side) and `Photo.displayUrl` (at most
+  1280 px on the long side). They are made during the upload (the response carries them) and, for photos stored before
+  variants existed, by a background pass at server start (`PHOTO_VARIANT_BACKFILL=false` turns it off). A variant URL
+  may equal `url` when the original is already a small upright JPEG. They are null when there is none (WebP originals:
+  the JDK can't decode WebP; corrupt or CMYK JPEGs): fall back to `url`.
+- `GET /uploads/{key}` (originals and variants): `Cache-Control: public, max-age=31536000, immutable`, strong `ETag`,
+  `Last-Modified`, 304 for `If-None-Match` / `If-Modified-Since`, single byte ranges (206; 416 when unsatisfiable;
+  `If-Range` honoured), `HEAD`.
+- **Which URL to load** (every variant field is optional: always fall back to the original):
+  - grid tiles, inbox / order / moderation rows: `ListingSummary.thumbnailSmallUrl ?: thumbnailUrl` (`thumbnailUrl` is
+    the full-size original of the first photo). `thumbnailWidth` / `thumbnailHeight` are the first photo's upright size
+    (same aspect ratio as the small variant) for reserving space.
+  - avatars: `UserPublic.avatarThumbnailUrl ?: avatarUrl` (also on `UserPrivate`); no avatar is shown above ~112 dp.
+  - listing photo pager: `Photo.displayUrl ?: url`; the zoomable full-screen viewer: `Photo.url`; the editor's photo
+    strip: `Photo.thumbnailUrl ?: url` (an upload's response already carries its variants).
+  - A browse page of 20 seed listings loads 0.91 MB of thumbnails instead of 1.93 MB of originals; phone photos
+    (2048 px, re-encoded by the app) shrink about 9x.
+
+## HTTP
+- JSON and HTML bodies of 1 KB or more are gzip/deflate-compressed when the request accepts it (OkHttp and URLSession
+  send `Accept-Encoding` and unpack transparently, so nothing to do): a page of 20 listings is ~2.8 KB on the wire instead
+  of ~11 KB. Photos and websocket frames are never compressed.
+- `GET /categories` (and the `/legal` pages) carry an `ETag`; categories are `Cache-Control: private, no-cache`, so a
+  client cache revalidates on every use and an unchanged result costs a 304 without a body. URLSession does this by
+  itself; on Android it needs an HTTP cache on the client (e.g. Ktor's `HttpCache` plugin).
+- Paging cursors stay opaque; cursors issued before this release are still accepted.
 
 ## Listings
 - `GET /listings` params: `q`; `category`, `condition` (enum names, comma-separated); `minPrice`, `maxPrice` (cents, inclusive); `sort` (`NEWEST|PRICE_ASC|PRICE_DESC|RELEVANCE`; default RELEVANCE with `q`, else NEWEST); `limit`; `cursor`.
@@ -113,7 +142,8 @@ Decisions made while implementing the server that go beyond `CONTRACT.md`. Clien
 ## Demo data (after `./gradlew :server:seed`)
 Password `password123`: `admin@state.edu` (ADMIN), `moderator@state.edu` (MODERATOR), sellers `maya@ jordan@ priya@ sofia@state.edu`, buyers `liam@ noah@ tyler@state.edu`; `dev@ ava@ ethan@ zoe@tech.edu` on the second campus.
 - 44 listings posted over the last few weeks (newest minutes ago), each with 1-3 real product photos bundled in
-  `server/src/main/resources/seed/photos/` (sources and licences in `CREDITS.md` there). A listing whose file is missing
+  `server/src/main/resources/seed/photos/` (sources and licences in `CREDITS.md` there; dev-only, so they are left out of
+  the server jar that `installDist` and the Docker image ship). A listing whose file is missing
   gets a generated placeholder and the seed names it. Eight users have illustrated avatars (shapes on Golden Hour
   gradients, never photos of people); the rest show the app's initials.
 - Orders in every state but awaiting-payment: completed (rated, some 3-4 stars), paid and awaiting handoff (sofia@ buying
@@ -124,4 +154,5 @@ Password `password123`: `admin@state.edu` (ADMIN), `moderator@state.edu` (MODERA
   all concern tyler@, who asks buyers to pay off-app.
 - Ids derive from stable keys, so re-running is a no-op (after changing listing keys, reseed with `--reset`). Seed photo
   files are named `seed-<photo id>-<content hash>.jpg`, so a replaced photo gets a new URL despite the immutable cache
-  headers; unreferenced `seed-*` files in `UPLOADS_DIR` are deleted at the end of each run (other uploads are left alone).
+  headers; the seed makes their variants too (`…-t.jpg`; the bundled photos are already display-sized). Unreferenced
+  `seed-*` files in `UPLOADS_DIR` are deleted at the end of each run (other uploads are left alone).

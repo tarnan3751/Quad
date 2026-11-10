@@ -15,9 +15,11 @@ import javax.crypto.spec.SecretKeySpec
 /**
  * bcrypt password hashing (`at.favre.lib:bcrypt`). Passwords longer than bcrypt's 72-byte input
  * limit are pre-hashed with SHA-512 instead of being silently truncated or rejected.
- * Hashing is CPU-bound, so both operations run on [Dispatchers.Default].
+ * Hashing is CPU-bound (a quarter of a second at cost 12), so both operations run on [Dispatchers.Default], on at most
+ * half of its threads: a burst of sign-ins then waits its turn instead of starving every other request of CPU.
  */
 class PasswordHasher(private val cost: Int) {
+    private val dispatcher = Dispatchers.Default.limitedParallelism(maxOf(1, Runtime.getRuntime().availableProcessors() / 2))
     private val version = BCrypt.Version.VERSION_2A
     private val longPasswords = LongPasswordStrategies.hashSha512(version)
     private val hasher = BCrypt.with(version, SecureRandom(), longPasswords)
@@ -28,10 +30,10 @@ class PasswordHasher(private val cost: Int) {
 
     data class Check(val ok: Boolean, val needsRehash: Boolean)
 
-    suspend fun hash(password: String): String = withContext(Dispatchers.Default) { hashBlocking(password) }
+    suspend fun hash(password: String): String = withContext(dispatcher) { hashBlocking(password) }
 
     /** Constant-time verification (the library compares digests in constant time). Malformed stored hashes never match. */
-    suspend fun verify(password: String, storedHash: String?): Check = withContext(Dispatchers.Default) {
+    suspend fun verify(password: String, storedHash: String?): Check = withContext(dispatcher) {
         if (storedHash == null) {
             verifier.verify(password.toCharArray(), dummyHash)
             return@withContext Check(ok = false, needsRehash = false)

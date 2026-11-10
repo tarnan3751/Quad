@@ -241,26 +241,8 @@ class AuthService(
 
     suspend fun login(req: LoginRequest): AuthResponse {
         val email = normalizeEmail(req.email)
-        throwIfInvalid(
-            buildMap {
-                if (email.isEmpty()) put("email", "Enter your email address")
-                if (req.password.isEmpty()) put("password", "Enter your password")
-            },
-        )
         val now = Instant.now()
-        // Values that can't belong to any account skip the lookup but still pay for a bcrypt check below.
-        val row = if (emailError(email) != null || req.password.length > Limits.PASSWORD_MAX) null else db.tx { c ->
-            c.queryOne(
-                """SELECT id, password_hash, email_verified, suspended, suspended_until, suspension_reason
-                   FROM users WHERE lower(email) = ? AND deleted_at IS NULL""",
-                email,
-            ) { rs ->
-                LoginRow(rs.uuid("id"), rs.getString("password_hash"), rs.getBoolean("email_verified"), rs.activeSuspension(now))
-            }
-        }
-        // Unknown emails are checked against a dummy hash so response time doesn't reveal which accounts exist.
-        val check = passwords.verify(req.password, row?.passwordHash)
-        if (row == null || !check.ok) unauthorized("Incorrect email or password", ErrorCodes.INVALID_CREDENTIALS)
+        val (row, check) = provenAccount(email, req.password, now)
         // Only now, with the password proven, is it safe to say anything about the account's state.
         if (!row.verified) forbidden("Verify your email address to sign in. We can send you a new code.", ErrorCodes.EMAIL_NOT_VERIFIED)
         if (row.suspension != null) suspended(row.suspension.reason)
@@ -277,6 +259,33 @@ class AuthService(
 
     private data class LoginRow(val id: UUID, val passwordHash: String, val verified: Boolean, val suspension: Suspension?)
 
+    /**
+     * The account [email] (normalised) and [password] prove, or 401 `INVALID_CREDENTIALS` alike for an unknown email
+     * and a wrong password: unknown emails are checked against a dummy hash, so response time doesn't reveal which
+     * accounts exist. Deleted accounts don't exist here.
+     */
+    private suspend fun provenAccount(email: String, password: String, now: Instant): Pair<LoginRow, PasswordHasher.Check> {
+        throwIfInvalid(
+            buildMap {
+                if (email.isEmpty()) put("email", "Enter your email address")
+                if (password.isEmpty()) put("password", "Enter your password")
+            },
+        )
+        // Values that can't belong to any account skip the lookup but still pay for the bcrypt check.
+        val row = if (emailError(email) != null || password.length > Limits.PASSWORD_MAX) null else db.tx { c ->
+            c.queryOne(
+                """SELECT id, password_hash, email_verified, suspended, suspended_until, suspension_reason
+                   FROM users WHERE lower(email) = ? AND deleted_at IS NULL""",
+                email,
+            ) { rs ->
+                LoginRow(rs.uuid("id"), rs.getString("password_hash"), rs.getBoolean("email_verified"), rs.activeSuspension(now))
+            }
+        }
+        val check = passwords.verify(password, row?.passwordHash)
+        if (row == null || !check.ok) unauthorized("Incorrect email or password", ErrorCodes.INVALID_CREDENTIALS)
+        return row to check
+    }
+
     // ---------------------------------------------------------------- credential-authenticated deletion
 
     /**
@@ -287,22 +296,7 @@ class AuthService(
      * before the password is proven.
      */
     suspend fun deleteAccountWithCredentials(req: DeleteAccountRequest): OkResponse {
-        val email = normalizeEmail(req.email)
-        throwIfInvalid(
-            buildMap {
-                if (email.isEmpty()) put("email", "Enter your email address")
-                if (req.password.isEmpty()) put("password", "Enter your password")
-            },
-        )
-        val row = if (emailError(email) != null || req.password.length > Limits.PASSWORD_MAX) null else db.tx { c ->
-            c.queryOne("SELECT id, password_hash, email_verified FROM users WHERE lower(email) = ? AND deleted_at IS NULL", email) { rs ->
-                Triple(rs.uuid("id"), rs.getString("password_hash"), rs.getBoolean("email_verified"))
-            }
-        }
-        // Unknown emails are checked against a dummy hash so response time doesn't reveal which accounts exist.
-        val check = passwords.verify(req.password, row?.second)
-        if (row == null || !check.ok) unauthorized("Incorrect email or password", ErrorCodes.INVALID_CREDENTIALS)
-        val (id, hash, verified) = row
+        val (id, hash, verified) = provenAccount(normalizeEmail(req.email), req.password, Instant.now()).first
         if (!verified) forbidden("Verify your email address first. We can send you a new code.", ErrorCodes.EMAIL_NOT_VERIFIED)
         db.tx { c ->
             // The password must still be the one we checked (a concurrent change would make this a stale proof).

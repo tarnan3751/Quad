@@ -10,6 +10,9 @@ import com.campusmarket.core.Order
 import com.campusmarket.core.OrderStatus
 import com.campusmarket.core.Page
 import com.campusmarket.server.AppDeps
+import com.campusmarket.server.KeysetCursor
+import com.campusmarket.server.PageParams
+import com.campusmarket.server.Sql
 import com.campusmarket.server.ApiException
 import com.campusmarket.server.UserPrincipal
 import com.campusmarket.server.UserThrottle
@@ -21,6 +24,7 @@ import com.campusmarket.server.instant
 import com.campusmarket.server.invalidField
 import com.campusmarket.server.isBlockedEitherWay
 import com.campusmarket.server.notFound
+import com.campusmarket.server.pageOfIds
 import com.campusmarket.server.query
 import com.campusmarket.server.queryOne
 import com.campusmarket.server.update
@@ -203,25 +207,14 @@ internal class OrderService(private val deps: AppDeps, private val gateway: Paym
         return render(id, user.id)
     }
 
-    suspend fun list(user: UserPrincipal, role: String?, page: PageRequest): Page<Order> {
-        val (who, whoParams) = when (role?.lowercase()) {
-            null, "" -> "(o.buyer_id = ? OR o.seller_id = ?)" to listOf(user.id, user.id)
-            "buyer" -> "o.buyer_id = ?" to listOf(user.id)
-            "seller" -> "o.seller_id = ?" to listOf(user.id)
+    suspend fun list(user: UserPrincipal, role: String?, page: PageParams): Page<Order> {
+        val sql = when (role?.lowercase()) {
+            null, "" -> Sql("SELECT o.id, o.created_at FROM orders o WHERE (o.buyer_id = ? OR o.seller_id = ?)", user.id, user.id)
+            "buyer" -> Sql("SELECT o.id, o.created_at FROM orders o WHERE o.buyer_id = ?", user.id)
+            "seller" -> Sql("SELECT o.id, o.created_at FROM orders o WHERE o.seller_id = ?", user.id)
             else -> invalidField("role", "role must be buyer or seller")
-        }
-        val after = page.after
-        val sql = buildString {
-            append("SELECT o.id, o.created_at FROM orders o WHERE ").append(who)
-            if (after != null) append(" AND (o.created_at, o.id) < (?, ?)")
-            append(" ORDER BY o.created_at DESC, o.id DESC LIMIT ?")
-        }
-        val params: List<Any> = whoParams + listOfNotNull(after?.createdAt, after?.id) + (page.limit + 1)
-        return db.tx { c ->
-            val keys = c.query(sql, *params.toTypedArray()) { rs -> PageKey(rs.instant("created_at"), rs.uuid("id")) to rs.uuid("id") }
-            val (ids, next) = keys.toPage(page.limit)
-            Page(c.loadOrders(config, ids, user.id, options.autoReleaseAfter), next)
-        }
+        }.keysetPage("o.created_at", "o.id", KeysetCursor.decode(page.cursor), page.limit)
+        return db.tx { c -> c.pageOfIds(sql, page.limit) { ids -> loadOrders(config, ids, user.id, options.autoReleaseAfter) } }
     }
 
     suspend fun render(id: UUID, viewerId: UUID): Order = db.tx { it.loadOrder(config, id, viewerId, options.autoReleaseAfter) } ?: notFound("Order")

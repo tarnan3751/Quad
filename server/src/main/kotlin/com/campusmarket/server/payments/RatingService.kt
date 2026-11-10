@@ -7,16 +7,17 @@ import com.campusmarket.core.OrderStatus
 import com.campusmarket.core.Page
 import com.campusmarket.core.Rating
 import com.campusmarket.server.AppDeps
+import com.campusmarket.server.KeysetCursor
+import com.campusmarket.server.PageParams
+import com.campusmarket.server.Sql
 import com.campusmarket.server.UserPrincipal
 import com.campusmarket.server.asUuid
 import com.campusmarket.server.conflict
-import com.campusmarket.server.instant
 import com.campusmarket.server.invalidField
 import com.campusmarket.server.notFound
-import com.campusmarket.server.query
+import com.campusmarket.server.pageOfIds
 import com.campusmarket.server.queryOne
 import com.campusmarket.server.update
-import com.campusmarket.server.uuid
 import com.campusmarket.server.withoutControlChars
 import java.util.UUID
 
@@ -48,21 +49,14 @@ internal class RatingService(private val deps: AppDeps) {
     }
 
     /** Ratings [userIdRaw] received, newest first. Same campus only. */
-    suspend fun received(user: UserPrincipal, userIdRaw: String, page: PageRequest): Page<Rating> {
+    suspend fun received(user: UserPrincipal, userIdRaw: String, page: PageParams): Page<Rating> {
         val rateeId = userIdRaw.asUuid("User")
+        val sql = Sql("SELECT r.id, r.created_at FROM ratings r WHERE r.ratee_id = ?", rateeId)
+            .keysetPage("r.created_at", "r.id", KeysetCursor.decode(page.cursor), page.limit)
         return db.tx { c ->
             val campus = c.queryOne("SELECT campus_domain FROM users WHERE id = ?", rateeId) { it.getString(1) }
             if (campus == null || campus != user.campusDomain) notFound("User")
-            val after = page.after
-            val sql = buildString {
-                append("SELECT r.id, r.created_at FROM ratings r WHERE r.ratee_id = ?")
-                if (after != null) append(" AND (r.created_at, r.id) < (?, ?)")
-                append(" ORDER BY r.created_at DESC, r.id DESC LIMIT ?")
-            }
-            val params: List<Any> = listOf<Any>(rateeId) + listOfNotNull(after?.createdAt, after?.id) + (page.limit + 1)
-            val keys = c.query(sql, *params.toTypedArray()) { rs -> PageKey(rs.instant("created_at"), rs.uuid("id")) to rs.uuid("id") }
-            val (ids, next) = keys.toPage(page.limit)
-            Page(c.loadRatings(config, ids, user.id), next)
+            c.pageOfIds(sql, page.limit) { ids -> loadRatings(config, ids, user.id) }
         }
     }
 }

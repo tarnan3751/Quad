@@ -2,7 +2,6 @@ package com.campusmarket.server.users
 
 import com.campusmarket.core.ApiRoutes
 import com.campusmarket.core.ErrorCodes
-import com.campusmarket.core.ErrorResponse
 import com.campusmarket.core.ListingStatus
 import com.campusmarket.core.OkResponse
 import com.campusmarket.core.OrderStatus
@@ -22,20 +21,15 @@ import io.ktor.client.call.body
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.post
-import io.ktor.client.statement.HttpResponse
 import io.ktor.http.HttpStatusCode
 import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
+import com.campusmarket.server.assertApiError
 
 class DeleteAccountTest {
-
-    private suspend fun HttpResponse.assertError(status: HttpStatusCode, code: String): ErrorResponse {
-        assertEquals(status, this.status)
-        return body<ErrorResponse>().also { assertEquals(code, it.code) }
-    }
 
     private fun listingStatus(id: UUID): String = TestEnv.db.txBlocking { c ->
         c.queryOne("SELECT status FROM listings WHERE id = ?", id) { it.getString(1) }!!
@@ -72,10 +66,10 @@ class DeleteAccountTest {
         assertEquals(OkResponse(), res.body<OkResponse>())
 
         // the still-unexpired access token and the refresh token are both dead
-        client.get(ApiRoutes.ME) { auth(alice) }.assertError(HttpStatusCode.Unauthorized, ErrorCodes.UNAUTHORIZED)
-        client.delete(ApiRoutes.ME) { auth(alice) }.assertError(HttpStatusCode.Unauthorized, ErrorCodes.UNAUTHORIZED)
-        client.post(ApiRoutes.REFRESH) { json(RefreshRequest(session.refreshToken)) }.assertError(HttpStatusCode.Unauthorized, ErrorCodes.UNAUTHORIZED)
-        login("alice@state.edu").assertError(HttpStatusCode.Unauthorized, ErrorCodes.INVALID_CREDENTIALS)
+        client.get(ApiRoutes.ME) { auth(alice) }.assertApiError(HttpStatusCode.Unauthorized, ErrorCodes.UNAUTHORIZED)
+        client.delete(ApiRoutes.ME) { auth(alice) }.assertApiError(HttpStatusCode.Unauthorized, ErrorCodes.UNAUTHORIZED)
+        client.post(ApiRoutes.REFRESH) { json(RefreshRequest(session.refreshToken)) }.assertApiError(HttpStatusCode.Unauthorized, ErrorCodes.UNAUTHORIZED)
+        login("alice@state.edu").assertApiError(HttpStatusCode.Unauthorized, ErrorCodes.INVALID_CREDENTIALS)
 
         val row = env.db.tx { c ->
             c.queryOne("SELECT email, display_name, bio, avatar_photo_id, deleted_at FROM users WHERE id = ?", alice.id) {
@@ -112,7 +106,7 @@ class DeleteAccountTest {
                 val b = env.user("bob")
                 val listing = env.listing(if (aliceIsBuyer) b else a, status = ListingStatus.RESERVED)
                 if (aliceIsBuyer) order(listing, a, b, status) else order(listing, b, a, status)
-                client.delete(ApiRoutes.ME) { auth(a) }.assertError(HttpStatusCode.Conflict, ErrorCodes.CONFLICT)
+                client.delete(ApiRoutes.ME) { auth(a) }.assertApiError(HttpStatusCode.Conflict, ErrorCodes.CONFLICT)
                 assertEquals(HttpStatusCode.OK, client.get(ApiRoutes.ME) { auth(a) }.status, "$status buyer=$aliceIsBuyer")
                 assertEquals("RESERVED", listingStatus(listing))
             }

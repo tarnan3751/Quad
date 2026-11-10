@@ -11,7 +11,9 @@ import com.campusmarket.server.AUTH_JWT
 import com.campusmarket.server.AppConfig
 import com.campusmarket.server.AppDeps
 import com.campusmarket.server.badRequest
-import com.campusmarket.server.invalidField
+import com.campusmarket.server.enumParam
+import com.campusmarket.server.pageParams
+import com.campusmarket.server.receiveBody
 import com.campusmarket.server.requireModerator
 import com.campusmarket.server.toUuidOrNull
 import com.campusmarket.server.user
@@ -173,17 +175,17 @@ fun Route.paymentRoutes(deps: AppDeps) {
         post(ApiRoutes.PAYOUT_ONBOARDING) { call.respond(module.payouts.onboardingLink(call.user)) }
 
         post(ApiRoutes.ORDERS) {
-            val req = call.receive<CreateOrderRequest>()
+            val req = call.receiveBody<CreateOrderRequest>()
             call.respond(module.orders.create(call.user, req.listingId))
         }
         get(ApiRoutes.ORDERS) {
-            call.respond(module.orders.list(call.user, call.request.queryParameters["role"], call.pageRequest()))
+            call.respond(module.orders.list(call.user, call.request.queryParameters["role"], call.pageParams()))
         }
         get("${ApiRoutes.ORDERS}/{id}") { call.respond(module.orders.get(call.user, call.parameters["id"].orEmpty())) }
         post("${ApiRoutes.ORDERS}/{id}/confirm") { call.respond(module.orders.confirm(call.user, call.parameters["id"].orEmpty())) }
         post("${ApiRoutes.ORDERS}/{id}/cancel") { call.respond(module.orders.cancel(call.user, call.parameters["id"].orEmpty())) }
         post("${ApiRoutes.ORDERS}/{id}/dispute") {
-            val req = call.receive<OpenDisputeRequest>()
+            val req = call.receiveBody<OpenDisputeRequest>()
             call.respond(module.orders.openDispute(call.user, call.parameters["id"].orEmpty(), req))
         }
         post("${ApiRoutes.ORDERS}/{id}/dispute/withdraw") {
@@ -193,11 +195,7 @@ fun Route.paymentRoutes(deps: AppDeps) {
         // Moderators: the dispute queue and its resolutions (money moves, so this lives with the order state machine).
         get(ApiRoutes.MOD_DISPUTES) {
             call.requireModerator()
-            val status = when (val s = call.request.queryParameters["status"]) {
-                null, "" -> DisputeStatus.OPEN
-                else -> runCatching { DisputeStatus.valueOf(s) }.getOrNull() ?: invalidField("status", "Unknown status '$s'")
-            }
-            call.respond(module.disputes.list(status, call.pageRequest()))
+            call.respond(module.disputes.list(call.enumParam("status", DisputeStatus.OPEN), call.pageParams()))
         }
         get("${ApiRoutes.MOD_DISPUTES}/{orderId}") {
             call.requireModerator()
@@ -205,16 +203,16 @@ fun Route.paymentRoutes(deps: AppDeps) {
         }
         post("${ApiRoutes.MOD_DISPUTES}/{orderId}/resolve") {
             val mod = call.requireModerator()
-            val req = call.receive<ResolveDisputeRequest>()
+            val req = call.receiveBody<ResolveDisputeRequest>()
             call.respond(module.disputes.resolve(mod, call.parameters["orderId"].orEmpty(), req))
         }
 
         post("${ApiRoutes.ORDERS}/{id}/rating") {
-            val req = call.receive<CreateRatingRequest>()
+            val req = call.receiveBody<CreateRatingRequest>()
             call.respond(module.ratings.rate(call.user, call.parameters["id"].orEmpty(), req))
         }
         get("${ApiRoutes.BASE}/users/{id}/ratings") {
-            call.respond(module.ratings.received(call.user, call.parameters["id"].orEmpty(), call.pageRequest()))
+            call.respond(module.ratings.received(call.user, call.parameters["id"].orEmpty(), call.pageParams()))
         }
     }
 }

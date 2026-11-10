@@ -1,11 +1,9 @@
 package com.campusmarket.server.payments
 
-import com.campusmarket.core.ApiJson
 import com.campusmarket.core.ApiRoutes
 import com.campusmarket.core.CreateOrderRequest
 import com.campusmarket.core.DisputeReason
 import com.campusmarket.core.DisputeResolution
-import com.campusmarket.core.ErrorResponse
 import com.campusmarket.core.ListingStatus
 import com.campusmarket.core.OpenDisputeRequest
 import com.campusmarket.core.Order
@@ -40,6 +38,7 @@ import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 import kotlin.test.assertEquals
 import kotlin.time.toJavaDuration
+import io.ktor.client.request.get
 
 /**
  * The fake gateway plus a call log, injectable failures (before or after the operation took effect — the latter
@@ -217,11 +216,11 @@ fun PaymentsScope.moderator(name: String = "mod" + UUID.randomUUID().toString().
 fun PaymentsScope.suspendUser(user: TestEnv.TestUser, until: Instant? = null) =
     sql("UPDATE users SET suspended = true, suspended_until = ?, suspension_reason = 'Violation of community guidelines' WHERE id = ?", until, user.id)
 
-suspend fun HttpResponse.assertApiError(status: HttpStatusCode, code: String): ErrorResponse {
-    val text = bodyAsText()
-    assertEquals(status, this.status, text)
-    return ApiJson.decodeFromString(ErrorResponse.serializer(), text).also { assertEquals(code, it.code, text) }
-}
+suspend fun PaymentsScope.confirm(user: TestEnv.TestUser, id: String): HttpResponse = client.post(ApiRoutes.orderConfirm(id)) { auth(user) }
+
+suspend fun PaymentsScope.cancel(user: TestEnv.TestUser, id: String): HttpResponse = client.post(ApiRoutes.orderCancel(id)) { auth(user) }
+
+suspend fun PaymentsScope.getOrder(user: TestEnv.TestUser, id: String): Order = client.get(ApiRoutes.order(id)) { auth(user) }.body()
 
 // ---------- Stripe webhook payloads ----------
 

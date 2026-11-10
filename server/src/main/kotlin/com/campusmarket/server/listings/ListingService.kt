@@ -9,12 +9,12 @@ import com.campusmarket.core.Photo
 import com.campusmarket.core.UpdateListingRequest
 import com.campusmarket.server.AppConfig
 import com.campusmarket.server.AppDeps
+import com.campusmarket.server.Sql
 import com.campusmarket.server.UserPrincipal
 import com.campusmarket.server.UserThrottle
 import com.campusmarket.server.conflict
 import com.campusmarket.server.forbidden
 import com.campusmarket.server.intOrNull
-import com.campusmarket.server.isBlockedEitherWay
 import com.campusmarket.server.loadUserPublic
 import com.campusmarket.server.millis
 import com.campusmarket.server.notFound
@@ -85,7 +85,7 @@ internal fun Connection.findListing(id: UUID, forUpdate: Boolean = false): Listi
 
 internal fun Connection.renderDetail(config: AppConfig, row: ListingRow, viewerId: UUID): ListingDetail {
     val photos = query(
-        """SELECT p.id, p.storage_key, p.width, p.height
+        """SELECT p.id, p.storage_key, p.width, p.height, p.thumb_key, p.display_key
            FROM listing_photos lp JOIN photos p ON p.id = lp.photo_id
            WHERE lp.listing_id = ? ORDER BY lp.position""",
         row.id,
@@ -95,13 +95,16 @@ internal fun Connection.renderDetail(config: AppConfig, row: ListingRow, viewerI
             url = config.photoUrl(rs.getString("storage_key")),
             width = rs.intOrNull("width"),
             height = rs.intOrNull("height"),
+            thumbnailUrl = rs.getString("thumb_key")?.let(config::photoUrl),
+            displayUrl = rs.getString("display_key")?.let(config::photoUrl),
         )
     }
     val seller = loadUserPublic(config, row.sellerId, viewerId) ?: error("Seller ${row.sellerId} of listing ${row.id} is missing")
-    val (favoriteCount, favorited) = queryOne(
-        "SELECT count(*), coalesce(bool_or(user_id = ?), false) FROM favorites WHERE listing_id = ?",
-        viewerId, row.id,
-    ) { it.getInt(1) to it.getBoolean(2) }!!
+    val (favoriteCount, favorited, sellerBlockedViewer) = queryOne(
+        """SELECT count(*), coalesce(bool_or(user_id = ?), false), EXISTS (SELECT 1 FROM blocks WHERE blocker_id = ? AND blocked_id = ?)
+           FROM favorites WHERE listing_id = ?""",
+        viewerId, row.sellerId, viewerId, row.id,
+    ) { Triple(it.getInt(1), it.getBoolean(2), it.getBoolean(3)) }!!
     return ListingDetail(
         id = row.id.toString(),
         title = row.title,
@@ -119,7 +122,7 @@ internal fun Connection.renderDetail(config: AppConfig, row: ListingRow, viewerI
         isMine = row.sellerId == viewerId,
         createdAt = row.createdAt,
         updatedAt = row.updatedAt,
-        blocked = row.sellerId != viewerId && isBlockedEitherWay(viewerId, row.sellerId),
+        blocked = row.sellerId != viewerId && (seller.blockedByMe || sellerBlockedViewer),
     )
 }
 

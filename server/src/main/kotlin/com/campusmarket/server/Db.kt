@@ -4,6 +4,7 @@ import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.postgresql.PGStatement
 import org.slf4j.LoggerFactory
 import java.net.JarURLConnection
 import java.nio.file.Files
@@ -35,6 +36,15 @@ class Db(val dataSource: DataSource) : AutoCloseable {
         }
     }
 
+    /**
+     * Runs a single read statement in autocommit mode: no transaction, so no COMMIT round trip. Only for one statement
+     * (several would each see a different snapshot).
+     */
+    fun <T> readBlocking(block: (Connection) -> T): T = dataSource.connection.use { c ->
+        c.autoCommit = true
+        block(c)
+    }
+
     override fun close() {
         (dataSource as? AutoCloseable)?.close()
     }
@@ -49,6 +59,8 @@ class Db(val dataSource: DataSource) : AutoCloseable {
                 this.password = password
                 maximumPoolSize = poolSize
                 isAutoCommit = false
+                // a request waits at most 5 s for a free connection (Hikari's default is 30 s; clients give up sooner)
+                connectionTimeout = 5_000
             }
             return Db(HikariDataSource(cfg))
         }
@@ -140,8 +152,18 @@ private fun PreparedStatement.bind(params: Array<out Any?>) {
 }
 
 /** Runs a SELECT and maps every row. Parameters: UUID, String, Int, Long, Boolean, Double, Instant, Enum (by name), Collection (as array, for `= ANY(?)`), null. */
-fun <T> Connection.query(sql: String, vararg params: Any?, map: (ResultSet) -> T): List<T> =
+fun <T> Connection.query(sql: String, vararg params: Any?, map: (ResultSet) -> T): List<T> = select(sql, params, freshPlan = false, map)
+
+/**
+ * [query] for a statement whose best plan depends on its parameter values (search terms, filters): Postgres plans it
+ * for the actual values on every call instead of settling on a generic cached plan after a few executions.
+ */
+fun <T> Connection.queryFreshPlan(sql: String, vararg params: Any?, map: (ResultSet) -> T): List<T> = select(sql, params, freshPlan = true, map)
+
+private fun <T> Connection.select(sql: String, params: Array<out Any?>, freshPlan: Boolean, map: (ResultSet) -> T): List<T> =
     prepareStatement(sql).use { ps ->
+        // never a named server-side statement: the unnamed one is planned with the bound values
+        if (freshPlan) ps.unwrap(PGStatement::class.java).prepareThreshold = 0
         ps.bind(params)
         ps.executeQuery().use { rs ->
             val out = ArrayList<T>()

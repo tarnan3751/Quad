@@ -1,15 +1,11 @@
 package com.campusmarket.server.payments
 
-import com.campusmarket.core.ApiRoutes
 import com.campusmarket.core.ErrorCodes
 import com.campusmarket.core.ListingStatus
 import com.campusmarket.core.Order
 import com.campusmarket.core.OrderStatus
-import com.campusmarket.server.TestEnv
-import com.campusmarket.server.auth
+import com.campusmarket.server.assertApiError
 import io.ktor.client.call.body
-import io.ktor.client.request.get
-import io.ktor.client.request.post
 import io.ktor.client.statement.HttpResponse
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.Dispatchers
@@ -33,10 +29,6 @@ class AutoReleaseTest {
         val clock = MutableClock()
         paymentsTest(options = PaymentOptions(expiryJobEnabled = false, autoReleaseAfter = autoRelease, clock = clock)) { block(clock) }
     }
-
-    private suspend fun PaymentsScope.confirm(user: TestEnv.TestUser, id: String) = client.post(ApiRoutes.orderConfirm(id)) { auth(user) }
-    private suspend fun PaymentsScope.cancel(user: TestEnv.TestUser, id: String) = client.post(ApiRoutes.orderCancel(id)) { auth(user) }
-    private suspend fun PaymentsScope.getOrder(user: TestEnv.TestUser, id: String) = client.get(ApiRoutes.order(id)) { auth(user) }.body<Order>()
 
     /** Wall-clock pause (the request under test runs concurrently on the engine's threads). */
     private suspend fun realSleep(ms: Long) = withContext(Dispatchers.IO) { Thread.sleep(ms) }
