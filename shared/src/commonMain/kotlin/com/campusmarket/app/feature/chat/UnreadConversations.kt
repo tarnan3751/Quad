@@ -34,7 +34,7 @@ import kotlin.concurrent.Volatile
  *
  * ```
  * val unread by koinInject<UnreadConversations>().count.collectAsStateWithLifecycle()
- * AppNavigationBarItem(..., badge = unread)   // 0 → no badge
+ * // pass `unread` to the Inbox tab's badge; 0 means no badge
  * ```
  *
  * While [count] has a collector and someone is signed in it keeps itself current: the first page of
