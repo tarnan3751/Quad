@@ -99,6 +99,7 @@ import com.campusmarket.app.ui.components.PagedListingGrid
 import com.campusmarket.app.ui.components.PrimaryButton
 import com.campusmarket.app.ui.components.QuadIcons
 import com.campusmarket.app.ui.components.SecondaryButton
+import com.campusmarket.app.ui.components.SheetKeyboardBackdropEffect
 import com.campusmarket.app.ui.components.icon
 import com.campusmarket.app.ui.components.isCompactHeight
 import com.campusmarket.app.ui.state.UiState
@@ -620,6 +621,7 @@ private fun FilterSheet(
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
+    SheetKeyboardBackdropEffect()
     val maxSheetHeight = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.height.toDp() } * 0.9f
     fun close() {
         scope.launch { sheetState.hide() }.invokeOnCompletion { onDismiss() }

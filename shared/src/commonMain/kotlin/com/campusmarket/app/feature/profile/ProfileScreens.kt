@@ -65,6 +65,7 @@ import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -112,6 +113,7 @@ import com.campusmarket.app.ui.components.SkeletonBox
 import com.campusmarket.app.ui.components.SkeletonLeading
 import com.campusmarket.app.ui.components.avatarImageUrl
 import com.campusmarket.app.ui.components.formSubmit
+import com.campusmarket.app.ui.components.ratingSpoken
 import com.campusmarket.app.ui.label
 import com.campusmarket.app.ui.rememberTimeFormat
 import com.campusmarket.app.ui.state.UiState
@@ -165,7 +167,7 @@ fun EditProfileScreen(nav: NavController) {
                         .semantics { contentDescription = if (state.hasAvatar) "Change profile photo" else "Add a profile photo" },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Avatar(state.avatarUrl, name, size = 112.dp)
+                    Avatar(state.avatarUrl, name, size = 112.dp, contentDescription = null)
                     if (state.uploadingAvatar) {
                         Box(Modifier.size(112.dp).background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.35f), CircleShape), contentAlignment = Alignment.Center) {
                             CircularProgressIndicator(Modifier.size(32.dp), strokeWidth = 3.dp, color = MaterialTheme.colorScheme.surface)
@@ -524,7 +526,7 @@ private fun PublicProfileHeader(user: UserPublic, isMe: Boolean, listingCount: S
                 Icon(Icons.Default.Person, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(48.dp))
             }
         } else {
-            Avatar(user.avatarImageUrl, user.displayName, size = 96.dp)
+            Avatar(user.avatarImageUrl, user.displayName, size = 96.dp, contentDescription = null)
         }
         Text(
             user.displayName,
@@ -644,7 +646,10 @@ private fun RatingsOverview(user: UserPublic, breakdown: RatingBreakdown) {
         modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.screen, vertical = Spacing.md),
     ) {
         Row(Modifier.padding(Spacing.lg), horizontalArrangement = Arrangement.spacedBy(Spacing.lg), verticalAlignment = Alignment.CenterVertically) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(
+                Modifier.clearAndSetSemantics { contentDescription = ratingSpoken(average, user.ratingCount) },
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
                 Text(Format.rating(average).orEmpty(), style = MaterialTheme.typography.displaySmall)
                 RatingStars(average, starSize = 14.dp)
                 Text(
@@ -659,7 +664,10 @@ private fun RatingsOverview(user: UserPublic, breakdown: RatingBreakdown) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-                        modifier = Modifier.semantics { contentDescription = "$stars stars: ${breakdown.counts[stars - 1]}" },
+                        modifier = Modifier.clearAndSetSemantics {
+                            val count = breakdown.counts[stars - 1]
+                            contentDescription = "$stars star${if (stars == 1) "" else "s"}: $count rating${if (count == 1) "" else "s"}"
+                        },
                     ) {
                         Text("$stars", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(10.dp))
                         LinearProgressIndicator(
@@ -701,7 +709,7 @@ private fun RatingRow(rating: Rating, onClickRater: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(Spacing.md),
         ) {
-            Avatar(rating.rater.avatarImageUrl, rating.rater.displayName, size = 40.dp)
+            Avatar(rating.rater.avatarImageUrl, rating.rater.displayName, size = 40.dp, contentDescription = null)
             Column(Modifier.weight(1f)) {
                 Text(rating.rater.displayName, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
@@ -792,12 +800,12 @@ fun SettingsScreen(nav: NavController) {
             MenuGroup("Privacy & safety") {
                 MenuRow(QuadIcons.Block, "Blocked users", "People who can't message you or buy from you", onClick = { nav.navigate(BlockedUsersRoute) })
                 MenuDivider()
-                MenuRow(QuadIcons.Shield, "Community guidelines", onClick = { openPage(ApiRoutes.LEGAL_GUIDELINES) }, trailing = { ExternalMark() })
+                MenuRow(QuadIcons.Shield, "Community guidelines", onClick = { openPage(ApiRoutes.LEGAL_GUIDELINES) }, trailing = { ExternalMark() }, trailingDescription = EXTERNAL_MARK_DESCRIPTION)
             }
             MenuGroup("About") {
-                MenuRow(QuadIcons.Document, "Terms of service", onClick = { openPage(ApiRoutes.LEGAL_TERMS) }, trailing = { ExternalMark() })
+                MenuRow(QuadIcons.Document, "Terms of service", onClick = { openPage(ApiRoutes.LEGAL_TERMS) }, trailing = { ExternalMark() }, trailingDescription = EXTERNAL_MARK_DESCRIPTION)
                 MenuDivider()
-                MenuRow(Icons.Default.Lock, "Privacy policy", onClick = { openPage(ApiRoutes.LEGAL_PRIVACY) }, trailing = { ExternalMark() })
+                MenuRow(Icons.Default.Lock, "Privacy policy", onClick = { openPage(ApiRoutes.LEGAL_PRIVACY) }, trailing = { ExternalMark() }, trailingDescription = EXTERNAL_MARK_DESCRIPTION)
                 MenuDivider()
                 MenuRow(Icons.Default.Info, "Quad", "Version ${BuildInfo.VERSION_NAME}")
             }
@@ -927,7 +935,7 @@ private fun BlockedRow(user: UserPublic, unblocking: Boolean, onOpen: () -> Unit
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Spacing.md),
     ) {
-        Avatar(user.avatarImageUrl, user.displayName, size = 40.dp)
+        Avatar(user.avatarImageUrl, user.displayName, size = 40.dp, contentDescription = null)
         Column(Modifier.weight(1f)) {
             Text(user.displayName, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold), maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(user.campusDomain, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

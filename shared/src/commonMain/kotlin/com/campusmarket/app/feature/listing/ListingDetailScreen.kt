@@ -62,6 +62,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -396,7 +398,7 @@ private fun DetailContent(listing: ListingDetail, onSellerClick: () -> Unit, sho
 @Composable
 private fun Section(title: String, content: @Composable () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-        Text(title, style = MaterialTheme.typography.titleMedium)
+        Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
         content()
     }
 }
@@ -430,7 +432,7 @@ private fun FactDivider() = HorizontalDivider(Modifier.padding(start = 64.dp), c
 @Composable
 private fun Fact(icon: ImageVector, label: String, value: String, supporting: String? = null, muted: Boolean = false) {
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = Spacing.md, vertical = Spacing.md),
+        Modifier.fillMaxWidth().semantics(mergeDescendants = true) { }.padding(horizontal = Spacing.md, vertical = Spacing.md),
         horizontalArrangement = Arrangement.spacedBy(Spacing.md),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -459,7 +461,7 @@ private fun SellerCard(seller: UserPublic, isMe: Boolean, onClick: () -> Unit) {
         modifier = Modifier.fillMaxWidth(),
     ) {
         Row(Modifier.padding(Spacing.md), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Spacing.md)) {
-            Avatar(seller.avatarImageUrl, seller.displayName, size = 52.dp)
+            Avatar(seller.avatarImageUrl, seller.displayName, size = 52.dp, contentDescription = null)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
                     if (isMe) "${seller.displayName} (you)" else seller.displayName,
@@ -470,7 +472,7 @@ private fun SellerCard(seller: UserPublic, isMe: Boolean, onClick: () -> Unit) {
                 RatingSummary(seller.ratingAverage, seller.ratingCount)
                 Text(rememberTimeFormat().memberSince(seller.joinedAt), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "View profile", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

@@ -127,6 +127,7 @@ fun ProfileScreen(nav: NavController) {
                         "Payouts",
                         if (user.payoutsEnabled) "Sales are paid to your bank" else "Get paid for what you sell",
                         onClick = { nav.navigate(PayoutsRoute) },
+                        trailingDescription = if (user.payoutsEnabled) "On" else "Set up",
                         trailing = {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
                                 if (user.payoutsEnabled) StatusChip("On", ChipTone.Positive) else StatusChip("Set up", ChipTone.Warning)
@@ -159,13 +160,13 @@ fun ProfileScreen(nav: NavController) {
                 MenuGroup("Safety") {
                     MenuRow(QuadIcons.Block, "Blocked users", "People who can't contact you", onClick = { nav.navigate(BlockedUsersRoute) })
                     MenuDivider()
-                    MenuRow(QuadIcons.Shield, "Community guidelines", "What's allowed on Quad", onClick = { openPage(ApiRoutes.LEGAL_GUIDELINES) }, trailing = { ExternalMark() })
+                    MenuRow(QuadIcons.Shield, "Community guidelines", "What's allowed on Quad", onClick = { openPage(ApiRoutes.LEGAL_GUIDELINES) }, trailing = { ExternalMark() }, trailingDescription = EXTERNAL_MARK_DESCRIPTION)
                 }
 
                 MenuGroup("Legal") {
-                    MenuRow(QuadIcons.Document, "Terms of service", onClick = { openPage(ApiRoutes.LEGAL_TERMS) }, trailing = { ExternalMark() })
+                    MenuRow(QuadIcons.Document, "Terms of service", onClick = { openPage(ApiRoutes.LEGAL_TERMS) }, trailing = { ExternalMark() }, trailingDescription = EXTERNAL_MARK_DESCRIPTION)
                     MenuDivider()
-                    MenuRow(Icons.Default.Lock, "Privacy policy", onClick = { openPage(ApiRoutes.LEGAL_PRIVACY) }, trailing = { ExternalMark() })
+                    MenuRow(Icons.Default.Lock, "Privacy policy", onClick = { openPage(ApiRoutes.LEGAL_PRIVACY) }, trailing = { ExternalMark() }, trailingDescription = EXTERNAL_MARK_DESCRIPTION)
                 }
 
                 MenuGroup(null) {
@@ -189,7 +190,7 @@ private fun OwnProfileHeader(user: UserPrivate, onEdit: () -> Unit, onPreview: (
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(Spacing.xs),
     ) {
-        Avatar(user.avatarImageUrl, user.displayName, size = 96.dp)
+        Avatar(user.avatarImageUrl, user.displayName, size = 96.dp, contentDescription = null)
         Text(
             user.displayName,
             style = MaterialTheme.typography.headlineSmall,

@@ -27,6 +27,7 @@ import com.campusmarket.app.back
 import com.campusmarket.app.click
 import com.campusmarket.app.clickDescription
 import com.campusmarket.app.clickNode
+import com.campusmarket.app.shows
 import com.campusmarket.app.data.InMemoryTokenStore
 import com.campusmarket.app.data.StoredSession
 import com.campusmarket.app.data.respondError
@@ -325,7 +326,7 @@ class ListingScreenshotTest : ScreenshotGallery(settleMillis = 1_600) {
 
     /** Scrolls the listing grid (the last lazy container on screen) to the tile with [title] and opens it. */
     private fun ComposeUiTest.open(title: String) {
-        list().performScrollToNode(hasText(title, substring = true))
+        list().performScrollToNode(shows(title))
         click(title, substring = true)
     }
 

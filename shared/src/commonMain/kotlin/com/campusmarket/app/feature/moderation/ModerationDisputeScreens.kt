@@ -31,6 +31,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -116,8 +119,23 @@ fun DisputesScreen(nav: NavController) {
 private fun DisputeRow(case: DisputeCase, onClick: () -> Unit) {
     val d = case.dispute
     val scheme = MaterialTheme.colorScheme
+    val times = rememberTimeFormat()
+    val spoken = buildString {
+        append(d.reason.label).append(": ").append(case.listing.title).append(", ").append(Format.price(case.amountCents, case.currency))
+        append(". ${case.buyer.displayName} bought from ${case.seller.displayName}. ")
+        if (d.status == DisputeStatus.OPEN) {
+            append("Opened ").append(times.ago(d.openedAt))
+        } else {
+            append(d.outcome?.label ?: d.status.label)
+            d.closedAt?.let { append(", ").append(times.ago(it)) }
+        }
+        if (case.sellerSuspended) append(". Seller suspended")
+        if (case.buyerSuspended) append(". Buyer suspended")
+    }
     Row(
-        Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onClick).padding(horizontal = Spacing.screen, vertical = Spacing.md),
+        Modifier.fillMaxWidth().clickable(role = Role.Button, onClickLabel = "Open dispute", onClick = onClick)
+            .clearAndSetSemantics { contentDescription = spoken }
+            .padding(horizontal = Spacing.screen, vertical = Spacing.md),
         horizontalArrangement = Arrangement.spacedBy(Spacing.md),
     ) {
         RemoteImage(case.listing.listImageUrl, contentDescription = null, modifier = Modifier.size(52.dp).clip(MaterialTheme.shapes.small))
@@ -136,10 +154,10 @@ private fun DisputeRow(case: DisputeCase, onClick: () -> Unit) {
             )
             Row(Modifier.padding(top = Spacing.xs), horizontalArrangement = Arrangement.spacedBy(Spacing.xs), verticalAlignment = Alignment.CenterVertically) {
                 if (d.status == DisputeStatus.OPEN) {
-                    Text("Opened ${rememberTimeFormat().ago(d.openedAt)}", style = MaterialTheme.typography.labelMedium, color = scheme.onSurfaceVariant)
+                    Text("Opened ${times.ago(d.openedAt)}", style = MaterialTheme.typography.labelMedium, color = scheme.onSurfaceVariant)
                 } else {
                     StatusChip(d.outcome?.label ?: d.status.label, ChipTone.Neutral)
-                    d.closedAt?.let { Text(rememberTimeFormat().ago(it), style = MaterialTheme.typography.labelMedium, color = scheme.onSurfaceVariant) }
+                    d.closedAt?.let { Text(times.ago(it), style = MaterialTheme.typography.labelMedium, color = scheme.onSurfaceVariant) }
                 }
                 if (case.sellerSuspended) StatusChip("Seller suspended", ChipTone.Negative)
                 if (case.buyerSuspended) StatusChip("Buyer suspended", ChipTone.Negative)
@@ -352,7 +370,7 @@ private fun PartyCard(role: String, user: UserPublic, suspended: Boolean, modifi
     Surface(onClick = onClick, shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = modifier) {
         Column(Modifier.padding(Spacing.md), verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
             Text(role, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Avatar(user.avatarImageUrl, user.displayName, size = 44.dp)
+            Avatar(user.avatarImageUrl, user.displayName, size = 44.dp, contentDescription = null)
             Text(user.displayName, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(user.campusDomain, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             RatingSummary(user.ratingAverage, user.ratingCount, starSize = 12.dp)
@@ -375,7 +393,7 @@ private fun DecisionCard(title: String, body: String, button: String, onClick: (
 
 @Composable
 private fun AmountRow(label: String, value: String, strong: Boolean = false) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.md)) {
+    Row(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { }, horizontalArrangement = Arrangement.spacedBy(Spacing.md)) {
         Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
         Text(value, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = if (strong) FontWeight.Bold else FontWeight.Medium))
     }
