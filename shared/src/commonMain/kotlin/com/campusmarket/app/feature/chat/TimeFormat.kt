@@ -88,6 +88,13 @@ class TimeFormat(
         return "$day at ${clock(t)}"
     }
 
+    /** [dateTime] for the middle of a sentence: "today at 2:05 PM", "tomorrow at 9:24 AM", "on Thu, Nov 12 at 9:24 AM". */
+    fun dateTimeInline(epochMillis: Long): String {
+        val s = dateTime(epochMillis)
+        val relative = s.startsWith("Today") || s.startsWith("Tomorrow") || s.startsWith("Yesterday")
+        return if (relative) s.replaceFirstChar { it.lowercaseChar() } else "on $s"
+    }
+
     /** "Nov 12" this year, "Nov 12, 2025" otherwise. */
     fun date(epochMillis: Long): String {
         val d = local(epochMillis).date
@@ -106,6 +113,17 @@ class TimeFormat(
             hours >= 3 -> "in ${plural(hours, "hour")}"
             hours > 0 -> "in ${plural(hours, "hour")}" + if (minutes in 1..59) ", $minutes min" else ""
             else -> "in ${minutes.coerceAtMost(59)} min"
+        }
+    }
+
+    /** One unit only, for tight spaces: "in 2 days", "in 5 hours", "in 12 min", "any moment now". */
+    fun countdownShort(epochMillis: Long): String {
+        val left = epochMillis - now()
+        return when {
+            left < MINUTE -> "any moment now"
+            left >= DAY -> "in ${plural(left / DAY, "day")}"
+            left >= HOUR -> "in ${plural(left / HOUR, "hour")}"
+            else -> "in ${((left + MINUTE - 1) / MINUTE).coerceAtMost(59)} min"
         }
     }
 

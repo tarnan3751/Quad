@@ -22,6 +22,7 @@ import com.campusmarket.core.OrderRole
 import com.campusmarket.core.OrderStatus
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -92,7 +93,17 @@ data class OrderDetailUi(
     val error: String? = null,
     /** User-initiated refresh in progress (pull-to-refresh indicator). */
     val refreshing: Boolean = false,
+    /** Back from Stripe Checkout with the order still unpaid: confirming the payment, or it didn't come through. */
+    val paymentCheck: PaymentCheck? = null,
 )
+
+enum class PaymentCheck {
+    /** Re-fetching the order a few times: Stripe tells the server a moment after the browser returns. */
+    Checking,
+
+    /** Still unpaid after that: the buyer probably closed checkout (or it's still open in the browser). */
+    NotReceived,
+}
 
 /** Resuming with data older than this re-fetches it (it may have changed in the browser). */
 internal val RESUME_STALE_AFTER = 2.seconds
@@ -107,7 +118,8 @@ sealed interface OrderDetailEvent {
  * Order detail and its actions (see [availableActions]). Reloads silently whenever the screen resumes with data older
  * than [RESUME_STALE_AFTER], because payment and Stripe's confirmation happen in the browser. (Not "every resume but
  * the first": after "Continue to payment" this screen is created while the browser is in front, so its first resume
- * *is* the return from Stripe.)
+ * *is* the return from Stripe.) After checkout was opened ([OrderDetailRoute.fromCheckout] or Pay), a resume with
+ * the order still unpaid checks a few times ([PaymentCheck]) before saying the payment didn't come through.
  */
 class OrderDetailViewModel(
     route: OrderDetailRoute,
@@ -119,6 +131,10 @@ class OrderDetailViewModel(
 ) : ViewModel() {
 
     val orderId: String = route.orderId
+
+    /** Checkout was opened in the browser and we haven't seen the order leave PENDING_PAYMENT since. */
+    private var awaitingCheckout = route.fromCheckout
+    private var paymentCheckJob: Job? = null
 
     private val _order = MutableStateFlow<UiState<Order>>(UiState.Loading)
     val order: StateFlow<UiState<Order>> = _order.asStateFlow()
@@ -169,8 +185,47 @@ class OrderDetailViewModel(
     }
 
     fun onResume() {
+        if (awaitingCheckout && _order.value.valueOrNull?.status != OrderStatus.CANCELLED) {
+            checkPayment()
+            return
+        }
         val fetched = fetchedAt ?: return // first load still running (or failed: the error state has Retry)
         if (fetched.elapsedNow() >= RESUME_STALE_AFTER) refresh()
+    }
+
+    /** Re-fetches until the order leaves PENDING_PAYMENT (or gives up after [PAYMENT_CHECKS] tries). */
+    private fun checkPayment() {
+        if (paymentCheckJob?.isActive == true) return
+        paymentCheckJob = viewModelScope.launch {
+            _ui.update { it.copy(paymentCheck = PaymentCheck.Checking) }
+            repeat(PAYMENT_CHECKS) { attempt ->
+                if (attempt > 0) delay(PAYMENT_CHECK_INTERVAL)
+                val before = _order.value.valueOrNull
+                val fresh = try {
+                    api.order(orderId)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: ApiError) {
+                    null
+                }
+                if (fresh != null) {
+                    fetchedAt = timeSource.markNow()
+                    _order.value = UiState.Content(fresh)
+                    if (before != null && before != fresh) updates.publish(fresh)
+                    if (fresh.status != OrderStatus.PENDING_PAYMENT) {
+                        awaitingCheckout = false
+                        _ui.update { it.copy(paymentCheck = null) }
+                        when (fresh.status) {
+                            OrderStatus.PAID -> userMessages.show("Payment received. Quad holds it until you confirm pickup.")
+                            OrderStatus.CANCELLED -> userMessages.show("Checkout expired, so this order was cancelled. You weren't charged.")
+                            else -> Unit
+                        }
+                        return@launch
+                    }
+                }
+            }
+            _ui.update { it.copy(paymentCheck = PaymentCheck.NotReceived) }
+        }
     }
 
     fun clearError() = _ui.update { it.copy(error = null) }
@@ -228,7 +283,11 @@ class OrderDetailViewModel(
             refresh()
             return
         }
-        if (!links.open(url)) {
+        if (links.open(url)) {
+            awaitingCheckout = true
+            paymentCheckJob?.cancel()
+            _ui.update { it.copy(paymentCheck = null) }
+        } else {
             _ui.update { it.copy(error = "Couldn't open your browser for payment. Please try again.") }
         }
     }
@@ -268,6 +327,8 @@ class OrderDetailViewModel(
 
     private companion object {
         const val MAX_CONVERSATION_PAGES = 5
+        const val PAYMENT_CHECKS = 5
+        val PAYMENT_CHECK_INTERVAL = 2.seconds
     }
 }
 
@@ -293,7 +354,7 @@ class RateOrderViewModel(
     private val _order = MutableStateFlow<UiState<Order>>(UiState.Loading)
     val order: StateFlow<UiState<Order>> = _order.asStateFlow()
 
-    private val _state = MutableStateFlow(RateState())
+    private val _state = MutableStateFlow(RateState(stars = route.stars.coerceIn(0, 5)))
     val state: StateFlow<RateState> = _state.asStateFlow()
 
     val done = EventQueue<Unit>()

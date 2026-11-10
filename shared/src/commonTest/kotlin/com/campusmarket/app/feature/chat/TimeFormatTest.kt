@@ -57,5 +57,16 @@ class TimeFormatTest {
         assertEquals("in 12 min", us.countdown(now + 11 * min + 30_000))
         assertEquals("any moment now", us.countdown(now + 20_000))
         assertEquals("any moment now", us.countdown(now - hour))
+        assertEquals("in 2 days", us.countdownShort(now + 52 * hour))
+        assertEquals("in 1 hour", us.countdownShort(now + hour + 20 * min))
+        assertEquals("in 12 min", us.countdownShort(now + 11 * min + 30_000))
+    }
+
+    @Test
+    fun inlineDateTimesReadInASentence() {
+        assertEquals("today at 9:24 AM", us.dateTimeInline(at(2026, 11, 10, 9, 24)))
+        assertEquals("on Thu, Nov 12 at 9:24 AM", us.dateTimeInline(at(2026, 11, 12, 9, 24)))
+        assertEquals("Nov 12", us.date(at(2026, 11, 12, 9, 24)))
+        assertEquals("Jan 2, 2027", us.date(at(2027, 1, 2, 9, 24)))
     }
 }

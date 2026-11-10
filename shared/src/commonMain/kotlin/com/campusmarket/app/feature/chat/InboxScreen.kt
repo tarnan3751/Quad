@@ -25,7 +25,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -72,12 +71,8 @@ fun InboxScreen(nav: NavController) {
     Scaffold(topBar = { AppTopBar("Inbox") }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             ConnectionBanner(connection, onRetry = vm::retryConnection)
-            if (!paged.loaded && paged.error == null) {
-                LaunchedEffect(Unit) { if (!paged.isLoading) vm.conversations.refresh() }
-                RowSkeletons()
-                return@Column
-            }
-            PagedLazyColumn(
+            // The view model starts loading on creation; skeleton rows stand in until the first page arrives.
+            if (!paged.loaded && paged.error == null) RowSkeletons() else PagedLazyColumn(
                 vm.conversations,
                 key = { it.id },
                 contentPadding = PaddingValues(bottom = Spacing.sm),

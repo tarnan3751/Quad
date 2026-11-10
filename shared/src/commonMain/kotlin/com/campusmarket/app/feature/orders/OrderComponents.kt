@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -18,10 +19,18 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -29,10 +38,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.campusmarket.app.feature.chat.TimeFormat
 import com.campusmarket.app.ui.Format
 import com.campusmarket.app.ui.components.OrderStatusChip
 import com.campusmarket.app.ui.components.PriceText
@@ -42,40 +56,66 @@ import com.campusmarket.app.ui.theme.Spacing
 import com.campusmarket.core.Order
 import com.campusmarket.core.OrderStatus
 
-/** Orders list row: listing photo, title, amount, the other party, date, status. */
+/** Orders list row: listing photo, title, the other party and date, status, what's next, amount. */
 @Composable
-internal fun OrderRow(order: Order, onClick: () -> Unit) {
+internal fun OrderRow(order: Order, times: TimeFormat, onClick: () -> Unit) {
+    val hint = order.listHint(times)
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = Spacing.screen, vertical = Spacing.md),
-        verticalAlignment = Alignment.CenterVertically,
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClickLabel = "Open order", onClick = onClick)
+            .semantics(mergeDescendants = true) { }
+            .padding(horizontal = Spacing.screen, vertical = Spacing.md),
+        verticalAlignment = Alignment.Top,
     ) {
-        RemoteImage(order.listing.thumbnailUrl, contentDescription = null, modifier = Modifier.size(56.dp).clip(MaterialTheme.shapes.small))
+        RemoteImage(order.listing.thumbnailUrl, contentDescription = null, modifier = Modifier.size(60.dp).clip(MaterialTheme.shapes.small))
         Spacer(Modifier.width(Spacing.md))
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(order.listing.title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Row(verticalAlignment = Alignment.Top) {
+                Text(
+                    order.listing.title,
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                Spacer(Modifier.width(Spacing.sm))
+                PriceText(order.amountCents, currency = order.currency, style = MaterialTheme.typography.titleSmall)
+            }
             Text(
-                (if (order.isBuyer) "From " else "To ") + order.otherParty.displayName + " · " + Format.date(order.createdAt),
+                (if (order.isBuyer) "From " else "To ") + order.otherParty.displayName + " · " + times.date(order.createdAt),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            OrderStatusChip(order.status)
+            OrderStatusChip(order.status, Modifier.padding(top = 2.dp))
+            if (hint != null) {
+                Text(
+                    hint.text,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = if (hint.mine) FontWeight.Bold else FontWeight.Medium,
+                    color = if (hint.mine) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
-        Spacer(Modifier.width(Spacing.sm))
-        PriceText(order.amountCents, currency = order.currency, style = MaterialTheme.typography.titleSmall)
     }
 }
 
-/** Tinted explanation card ("Your payment is held securely…"). */
+@Composable
+private fun toneColors(tone: InfoTone): Pair<Color, Color> = when (tone) {
+    InfoTone.Info -> MaterialTheme.colorScheme.primaryContainer to MaterialTheme.colorScheme.onPrimaryContainer
+    InfoTone.Warning -> CampusTheme.colors.warningContainer to CampusTheme.colors.onWarningContainer
+    InfoTone.Neutral -> CampusTheme.colors.neutralContainer to CampusTheme.colors.onNeutralContainer
+    InfoTone.Success -> CampusTheme.colors.successContainer to CampusTheme.colors.onSuccessContainer
+}
+
+/** Tinted explanation card ("Reporting a problem puts your payment on hold…"). */
 @Composable
 internal fun InfoCard(text: String, modifier: Modifier = Modifier, icon: ImageVector = Icons.Filled.Info, tone: InfoTone = InfoTone.Info) {
-    val (container, content) = when (tone) {
-        InfoTone.Info -> MaterialTheme.colorScheme.primaryContainer to MaterialTheme.colorScheme.onPrimaryContainer
-        InfoTone.Warning -> CampusTheme.colors.warningContainer to CampusTheme.colors.onWarningContainer
-        InfoTone.Neutral -> CampusTheme.colors.neutralContainer to CampusTheme.colors.onNeutralContainer
-        InfoTone.Success -> CampusTheme.colors.successContainer to CampusTheme.colors.onSuccessContainer
-    }
+    val (container, content) = toneColors(tone)
     Surface(color = container, contentColor = content, shape = MaterialTheme.shapes.medium, modifier = modifier.fillMaxWidth()) {
         Row(Modifier.padding(Spacing.md), verticalAlignment = Alignment.Top) {
             Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp))
@@ -85,22 +125,164 @@ internal fun InfoCard(text: String, modifier: Modifier = Modifier, icon: ImageVe
     }
 }
 
-enum class InfoTone { Info, Warning, Neutral, Success }
+/**
+ * The order's headline: what's going on, whose turn it is, any clock running (with a countdown), then [actions].
+ * [checking] replaces the headline while a return from Stripe Checkout is being confirmed.
+ */
+@Composable
+internal fun NextStepCard(
+    step: NextStep,
+    otherFirstName: String,
+    times: TimeFormat,
+    checking: PaymentCheck?,
+    modifier: Modifier = Modifier,
+    actions: @Composable ColumnScope.() -> Unit,
+) {
+    val (badgeColor, badgeContent) = toneColors(step.tone)
+    val icon = when {
+        checking == PaymentCheck.Checking -> null
+        checking == PaymentCheck.NotReceived -> Icons.Filled.Warning
+        step.tone == InfoTone.Success -> Icons.Filled.CheckCircle
+        step.tone == InfoTone.Warning && step.actor != NextActor.Me -> Icons.Filled.Lock
+        step.tone == InfoTone.Warning -> Icons.Filled.Warning
+        step.tone == InfoTone.Neutral -> Icons.Filled.Info
+        step.actor == NextActor.Me -> Icons.Filled.Person
+        else -> Icons.Filled.DateRange
+    }
+    SectionCard(modifier) {
+        Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
+            Row(verticalAlignment = Alignment.Top) {
+                Box(Modifier.size(40.dp).background(badgeColor, CircleShape), contentAlignment = Alignment.Center) {
+                    if (icon == null) {
+                        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = badgeContent)
+                    } else {
+                        Icon(icon, contentDescription = null, tint = badgeContent, modifier = Modifier.size(22.dp))
+                    }
+                }
+                Spacer(Modifier.width(Spacing.md))
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+                    val actor = when (step.actor) {
+                        NextActor.Me -> "Your turn"
+                        NextActor.Them -> "Waiting for $otherFirstName"
+                        NextActor.Quad -> "With Quad's team"
+                        NextActor.Nobody -> null
+                    }
+                    if (actor != null && checking == null) ActorPill(actor, mine = step.actor == NextActor.Me)
+                    Text(
+                        when (checking) {
+                            PaymentCheck.Checking -> "Confirming your payment…"
+                            PaymentCheck.NotReceived -> "Payment not finished yet"
+                            null -> step.title
+                        },
+                        style = MaterialTheme.typography.titleLarge,
+                        modifier = Modifier.semantics { heading() },
+                    )
+                    Text(
+                        when (checking) {
+                            PaymentCheck.Checking -> "Stripe is letting us know. This usually takes a few seconds."
+                            PaymentCheck.NotReceived ->
+                                "We haven't received your payment. If you closed checkout, continue to payment to finish. " +
+                                    "If you just paid, refresh in a moment."
+                            null -> step.body
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            val deadline = step.deadline
+            if (deadline != null && checking != PaymentCheck.Checking) {
+                DeadlineRow(deadline, times)
+            }
+            actions()
+        }
+    }
+}
 
-internal fun Order.infoTone(): InfoTone = when (status) {
-    OrderStatus.PENDING_PAYMENT, OrderStatus.DISPUTED -> InfoTone.Warning
-    OrderStatus.PAID -> InfoTone.Info
-    OrderStatus.COMPLETED -> InfoTone.Success
-    OrderStatus.CANCELLED, OrderStatus.REFUNDED -> InfoTone.Neutral
+@Composable
+private fun ActorPill(text: String, mine: Boolean) {
+    val scheme = MaterialTheme.colorScheme
+    Surface(
+        shape = CampusTheme.pill,
+        color = if (mine) scheme.primary else CampusTheme.colors.neutralContainer,
+        contentColor = if (mine) scheme.onPrimary else CampusTheme.colors.onNeutralContainer,
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
+        )
+    }
+}
+
+/** "Released to Maya automatically · in 2 days, 4 hours · Thu, Nov 12 at 9:24 AM". */
+@Composable
+private fun DeadlineRow(deadline: Deadline, times: TimeFormat) {
+    Surface(color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.6f), shape = MaterialTheme.shapes.small) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = Spacing.md, vertical = Spacing.sm),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Filled.DateRange, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(Spacing.md))
+            Column(Modifier.weight(1f)) {
+                Text(deadline.label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    "${times.countdown(deadline.at).replaceFirstChar { it.uppercaseChar() }} · ${times.dateTime(deadline.at)}",
+                    style = MaterialTheme.typography.titleSmall,
+                )
+            }
+        }
+    }
+}
+
+/** "How was trading with Jordan?" with five big stars; a tap opens the rating form with that many selected. */
+@Composable
+internal fun RatingPromptCard(name: String, onRate: (Int) -> Unit, modifier: Modifier = Modifier) {
+    SectionCard(modifier) {
+        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+            Text("How was trading with $name?", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Your rating helps other students trade with confidence.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                for (i in 1..5) {
+                    IconButton(onClick = { onRate(i) }, modifier = Modifier.size(52.dp)) {
+                        Icon(
+                            Icons.Filled.Star,
+                            contentDescription = "Rate $i star${if (i > 1) "s" else ""}",
+                            tint = CampusTheme.colors.star.copy(alpha = 0.35f),
+                            modifier = Modifier.size(38.dp),
+                        )
+                    }
+                }
+            }
+        }
+    }
 }
 
 /** Vertical status timeline with dots and connectors. */
 @Composable
-internal fun StatusTimeline(steps: List<TimelineStep>, modifier: Modifier = Modifier) {
+internal fun StatusTimeline(steps: List<TimelineStep>, times: TimeFormat, modifier: Modifier = Modifier) {
     Column(modifier) {
         steps.forEachIndexed { i, step ->
             val last = i == steps.lastIndex
-            Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
+            val stateWord = when (step.state) {
+                StepState.Done -> "done"
+                StepState.Current -> "in progress"
+                StepState.Upcoming -> "next"
+                StepState.Stopped -> "stopped"
+            }
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .height(IntrinsicSize.Min)
+                    .semantics(mergeDescendants = true) { contentDescription = "${step.title}, $stateWord" },
+            ) {
                 Column(Modifier.width(28.dp).fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally) {
                     StepDot(step.state)
                     if (!last) {
@@ -126,7 +308,7 @@ internal fun StatusTimeline(steps: List<TimelineStep>, modifier: Modifier = Modi
                             else -> MaterialTheme.colorScheme.onSurface
                         },
                     )
-                    val sub = listOfNotNull(step.at?.let(Format::dateTime), step.detail).joinToString(" · ")
+                    val sub = listOfNotNull(step.at?.let(times::dateTime), step.detail).joinToString(" · ")
                     if (sub.isNotEmpty()) {
                         Text(sub, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -156,43 +338,25 @@ private fun StepDot(state: StepState) {
     }
 }
 
-/** Buyer: item price and total. Seller: sale price − platform fee = payout. */
+/** The money for this order and role (see [amountRows]): every amount in the order's currency. */
 @Composable
 internal fun AmountBreakdown(order: Order, modifier: Modifier = Modifier) {
+    val rows = order.amountRows()
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-        if (order.isBuyer) {
-            AmountLine("Item price", Format.price(order.amountCents, order.currency))
-            AmountLine("Service fee", "Free")
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        rows.forEach { row ->
+            if (row.emphasis) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             AmountLine(
-                when (order.status) {
-                    OrderStatus.PENDING_PAYMENT, OrderStatus.CANCELLED -> "Total"
-                    OrderStatus.REFUNDED -> "Total (refunded)"
-                    else -> "You paid"
-                },
-                Format.price(order.amountCents, order.currency),
-                emphasize = true,
-            )
-        } else {
-            AmountLine("Sale price", Format.price(order.amountCents, order.currency))
-            AmountLine("Platform fee", "−" + Format.price(order.feeCents, order.currency))
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            AmountLine(
-                when (order.status) {
-                    OrderStatus.COMPLETED -> "Your payout"
-                    OrderStatus.CANCELLED, OrderStatus.REFUNDED -> "Payout (not paid)"
-                    OrderStatus.DISPUTED -> "Payout (on hold)"
-                    else -> "You'll receive"
-                },
-                Format.price(order.payoutCents, order.currency),
-                emphasize = true,
+                row.label,
+                row.text ?: ((if (row.negative) "−" else "") + Format.price(row.cents ?: 0, order.currency)),
+                emphasize = row.emphasis,
+                muted = order.status == OrderStatus.CANCELLED || order.status == OrderStatus.REFUNDED,
             )
         }
     }
 }
 
 @Composable
-private fun AmountLine(label: String, value: String, emphasize: Boolean = false) {
+private fun AmountLine(label: String, value: String, emphasize: Boolean, muted: Boolean) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(
             label,
@@ -203,8 +367,8 @@ private fun AmountLine(label: String, value: String, emphasize: Boolean = false)
         Text(
             value,
             style = if (emphasize) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyMedium,
-            fontWeight = if (emphasize) FontWeight.Bold else FontWeight.Normal,
-            color = if (emphasize) CampusTheme.colors.price else MaterialTheme.colorScheme.onSurface,
+            fontWeight = if (emphasize) FontWeight.ExtraBold else FontWeight.Medium,
+            color = if (emphasize && !muted) CampusTheme.colors.price else MaterialTheme.colorScheme.onSurface,
         )
     }
 }
@@ -240,4 +404,10 @@ internal fun SectionCard(modifier: Modifier = Modifier, content: @Composable () 
     ) {
         Box(Modifier.padding(Spacing.lg)) { content() }
     }
+}
+
+/** Title inside a [SectionCard] ("Progress", "Payment"). */
+@Composable
+internal fun CardTitle(text: String, modifier: Modifier = Modifier) {
+    Text(text, style = MaterialTheme.typography.titleMedium, modifier = modifier.semantics { heading() })
 }

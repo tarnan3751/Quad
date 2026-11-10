@@ -23,6 +23,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -63,7 +64,8 @@ fun CheckoutScreen(route: CheckoutRoute, nav: NavController) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     CollectEvents(vm.events.flow) { event ->
         when (event) {
-            is CheckoutEvent.OrderPlaced -> nav.navigate(OrderDetailRoute(event.orderId)) { popUpTo<CheckoutRoute> { inclusive = true } }
+            is CheckoutEvent.OrderPlaced ->
+                nav.navigate(OrderDetailRoute(event.orderId, fromCheckout = event.checkoutOpened)) { popUpTo<CheckoutRoute> { inclusive = true } }
         }
     }
     val listing = listingState.valueOrNull
@@ -115,6 +117,11 @@ fun CheckoutScreen(route: CheckoutRoute, nav: NavController) {
                             Text("Total", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
                             PriceText(l.priceCents, currency = l.currency)
                         }
+                        Text(
+                            "Charged when you finish Stripe Checkout, then held by Quad until you confirm pickup.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
@@ -134,7 +141,7 @@ fun CheckoutScreen(route: CheckoutRoute, nav: NavController) {
                         3,
                         "Confirm pickup to release it",
                         "Once you have the item, tap “Confirm I received it” on the order. If you don't, the money is released to " +
-                            "${l.seller.displayName} automatically $DEFAULT_AUTO_RELEASE_HOURS hours after you pay.",
+                            "${l.seller.displayName} automatically $DEFAULT_AUTO_RELEASE_HOURS hours after you pay (about ${DEFAULT_AUTO_RELEASE_HOURS / 24} days).",
                     )
                     NumberedStep(
                         4,
@@ -161,14 +168,9 @@ private fun ItemSummary(listing: ListingDetail, onOpen: () -> Unit) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
             Text(listing.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
             PriceText(listing.priceCents, currency = listing.currency)
-            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm), verticalAlignment = Alignment.CenterVertically) {
+            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.xs), verticalAlignment = Alignment.CenterVertically) {
                 ConditionChip(listing.condition)
-                Text(
-                    "View listing",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.clip(MaterialTheme.shapes.small).clickable(onClick = onOpen).padding(Spacing.xs),
-                )
+                TextButton(onClick = onOpen) { Text("View listing") }
             }
         }
     }
