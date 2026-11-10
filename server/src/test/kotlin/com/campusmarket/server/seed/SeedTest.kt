@@ -56,6 +56,21 @@ class SeedTest {
                 assertEquals("image/jpeg", type)
             }
 
+            // every photo has its size variants on disk (a display-sized seed photo is its own display variant)
+            val variants = c.query("SELECT storage_key, thumb_key, display_key FROM photos WHERE variants_done") {
+                Triple(it.getString(1), it.getString(2), it.getString(3))
+            }
+            assertEquals(rows.size, variants.size)
+            for ((key, thumb, display) in variants) {
+                assertNotNull(thumb, key)
+                assertNotNull(display, key)
+                for (v in listOf(thumb, display)) {
+                    val img = SeedImage.fromJpeg(File(TestEnv.config.uploadsDir, v).readBytes())
+                    assertTrue(minOf(img.width, img.height) <= 480 || v == display, v)
+                    assertTrue(maxOf(img.width, img.height) <= 1280, v)
+                }
+            }
+
             // listing photos are the bundled files, in order, cover first
             val ti84 = c.query(
                 """SELECT p.storage_key FROM listing_photos lp JOIN photos p ON p.id = lp.photo_id
