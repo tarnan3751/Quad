@@ -12,18 +12,15 @@ import java.awt.geom.Ellipse2D
 import java.awt.geom.Path2D
 import java.awt.geom.RoundRectangle2D
 import java.awt.image.BufferedImage
-import java.io.ByteArrayOutputStream
-import javax.imageio.IIOImage
-import javax.imageio.ImageIO
-import javax.imageio.ImageWriteParam
 
-/** Generates simple placeholder product photos: soft gradient, a category icon drawn from shapes, and the item title. */
+/**
+ * Stand-in product photo for a seed listing whose bundled photo file is missing: soft gradient, a category icon
+ * drawn from shapes, and the item title.
+ */
 object PlaceholderImages {
-    const val SIZE = 800
+    private const val SIZE = 800
 
-    class Rendered(val bytes: ByteArray, val width: Int, val height: Int)
-
-    fun render(title: String, category: ListingCategory, variant: Int): Rendered {
+    fun render(title: String, category: ListingCategory, variant: Int): SeedImage {
         System.setProperty("java.awt.headless", "true")
         val img = BufferedImage(SIZE, SIZE, BufferedImage.TYPE_INT_RGB)
         val g = img.createGraphics()
@@ -65,18 +62,7 @@ object PlaceholderImages {
         } finally {
             g.dispose()
         }
-        val out = ByteArrayOutputStream()
-        val writer = ImageIO.getImageWritersByFormatName("jpg").next()
-        val param = writer.defaultWriteParam.apply {
-            compressionMode = ImageWriteParam.MODE_EXPLICIT
-            compressionQuality = 0.82f
-        }
-        ImageIO.createImageOutputStream(out).use { ios ->
-            writer.output = ios
-            writer.write(null, IIOImage(img, null, null), param)
-        }
-        writer.dispose()
-        return Rendered(out.toByteArray(), SIZE, SIZE)
+        return SeedImage.encode(img, quality = 0.82f)
     }
 
     private fun wrap(g: Graphics2D, text: String, maxWidth: Int, maxLines: Int): List<String> {
