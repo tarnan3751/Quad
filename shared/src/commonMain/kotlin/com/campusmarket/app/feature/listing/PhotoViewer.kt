@@ -39,6 +39,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -48,7 +49,8 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
+import com.campusmarket.app.platform.StatusBarIcons
+import com.campusmarket.app.platform.edgeToEdgeDialogProperties
 import com.campusmarket.app.ui.theme.Spacing
 import com.campusmarket.core.Photo
 import kotlinx.coroutines.launch
@@ -62,9 +64,10 @@ private const val DOUBLE_TAP_ZOOM = 2.5f
 /** Full-screen photos: swipe between them, pinch or double-tap to zoom, drag to pan while zoomed. */
 @Composable
 internal fun PhotoViewer(photos: List<Photo>, initialPage: Int, onDismiss: () -> Unit) {
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    Dialog(onDismissRequest = onDismiss, properties = edgeToEdgeDialogProperties()) {
         val pagerState = rememberPagerState(initialPage = initialPage) { photos.size }
         var zoomed by remember { mutableStateOf(false) }
+        StatusBarIcons(darkIcons = false)
         Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.scrim)) {
             HorizontalPager(
                 state = pagerState,
@@ -79,8 +82,14 @@ internal fun PhotoViewer(photos: List<Photo>, initialPage: Int, onDismiss: () ->
                     onZoomedChange = { if (page == pagerState.currentPage) zoomed = it },
                 )
             }
+            // A soft shade keeps the white controls readable over a bright, zoomed-in photo.
+            val shade = MaterialTheme.colorScheme.scrim
             Row(
-                Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = Spacing.xs, vertical = Spacing.xs),
+                Modifier
+                    .fillMaxWidth()
+                    .background(Brush.verticalGradient(listOf(shade.copy(alpha = 0.5f), Color.Transparent)))
+                    .statusBarsPadding()
+                    .padding(horizontal = Spacing.xs, vertical = Spacing.xs),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(onClick = onDismiss) { Icon(Icons.Filled.Close, contentDescription = "Close photos", tint = OnPhoto) }

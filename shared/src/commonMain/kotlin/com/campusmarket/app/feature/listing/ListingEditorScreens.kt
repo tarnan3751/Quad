@@ -106,8 +106,10 @@ fun SellScreen(nav: NavController) {
             nav.navigate(ListingDetailRoute(event.listingId))
         }
     }
-    // Back on the Sell tab leaves it (and its form) for good: ask first if there's something to lose.
-    BackHandler(enabled = vm.hasUnsavedChanges) { confirmLeave = true }
+    // Back on the Sell tab leaves it (and its form) for good: ask first if there's something to lose. Read `form`
+    // here so this re-evaluates as the user types (hasUnsavedChanges itself isn't observable state).
+    val unsaved = remember(form) { vm.hasUnsavedChanges }
+    BackHandler(enabled = unsaved) { confirmLeave = true }
 
     Scaffold(
         topBar = {

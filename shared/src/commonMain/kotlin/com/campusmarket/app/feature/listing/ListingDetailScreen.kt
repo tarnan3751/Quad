@@ -191,11 +191,8 @@ fun ListingDetailScreen(route: ListingDetailRoute, nav: NavController) {
         ReportSheet(
             targetType = ReportTargetType.LISTING,
             targetId = route.listingId,
+            // The sheet confirms with its own "Report sent" page, so no snackbar here.
             onDismiss = { reporting = false },
-            onReported = {
-                reporting = false
-                vm.onReported()
-            },
         )
     }
     val photos = listing?.photos.orEmpty()

@@ -282,8 +282,6 @@ class ConversationViewModel(
         _state.update { it.copy(restriction = if (blocked) SendRestriction.BlockedByMe else null) }
     }
 
-    fun onReported() = userMessages.show("Thanks for reporting. Our moderators will take a look.")
-
     // ------------------------------------------------------------------------------------------------ live
 
     internal fun onEvent(event: ChatEvent) {

@@ -145,7 +145,6 @@ fun ConversationScreen(route: ConversationRoute, nav: NavController) {
                 ReportTargetType.USER,
                 conversation.otherUser.id,
                 onDismiss = { reportUser = false },
-                onReported = { reportUser = false; vm.onReported() },
             )
         }
         reportMessageId?.let { id ->
@@ -153,7 +152,6 @@ fun ConversationScreen(route: ConversationRoute, nav: NavController) {
                 ReportTargetType.MESSAGE,
                 id,
                 onDismiss = { reportMessageId = null },
-                onReported = { reportMessageId = null; vm.onReported() },
             )
         }
         if (blockDialog) {

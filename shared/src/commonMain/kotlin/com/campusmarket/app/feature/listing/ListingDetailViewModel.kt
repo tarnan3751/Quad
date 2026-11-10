@@ -141,10 +141,6 @@ class ListingDetailViewModel(
             }
         }
     }
-
-    fun onReported() {
-        messages.show("Thanks for letting us know. A moderator will take a look.")
-    }
 }
 
 private fun ListingDetail.withFavorite(value: Boolean): ListingDetail =
