@@ -25,7 +25,7 @@ fun UserRow(
     ListItem(
         modifier = modifier.then(clickModifier),
         colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
-        leadingContent = { Avatar(user.avatarUrl, user.displayName, size = 44.dp, contentDescription = null) },
+        leadingContent = { Avatar(user.avatarImageUrl, user.displayName, size = 44.dp, contentDescription = null) },
         headlineContent = { Text(user.displayName, maxLines = 1, overflow = TextOverflow.Ellipsis) },
         supportingContent = {
             if (supporting != null) Text(supporting, maxLines = 2, overflow = TextOverflow.Ellipsis)

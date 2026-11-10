@@ -72,6 +72,7 @@ import com.campusmarket.app.ui.components.EmptyState
 import com.campusmarket.app.ui.components.ErrorState
 import com.campusmarket.app.ui.components.LoadingState
 import com.campusmarket.app.ui.components.RatingSummary
+import com.campusmarket.app.ui.components.avatarImageUrl
 import com.campusmarket.app.ui.rememberTimeFormat
 import com.campusmarket.app.ui.state.UiState
 import com.campusmarket.app.ui.theme.Spacing
@@ -200,7 +201,7 @@ private fun ConversationTopBar(
                     .padding(end = Spacing.sm),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Avatar(other.avatarUrl, other.displayName, size = 38.dp, contentDescription = null)
+                Avatar(other.avatarImageUrl, other.displayName, size = 38.dp, contentDescription = null)
                 Spacer(Modifier.width(Spacing.md))
                 Column {
                     Text(other.displayName, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)

@@ -8,9 +8,6 @@ plugins {
 dependencies {
     implementation(projects.shared)
     implementation(libs.androidx.activity.compose)
-    implementation(libs.compose.uiToolingPreview)
-    implementation(libs.compose.foundation)
-    implementation(libs.ktor.client.okhttp)
 }
 
 android {
@@ -25,6 +22,10 @@ android {
         versionCode = providers.gradleProperty("APP_VERSION_CODE").get().toInt()
         versionName = providers.gradleProperty("APP_VERSION_NAME").get()
     }
+    androidResources {
+        // The UI is English only: drop the other languages libraries bring for their few built-in strings.
+        localeFilters += "en"
+    }
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -32,7 +33,17 @@ android {
     }
     buildTypes {
         getByName("release") {
-            isMinifyEnabled = false
+            // R8 (full mode) shrinks, optimizes and obfuscates; unused resources are dropped afterwards.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+        }
+        // Release code (R8, not debuggable) signed with the local debug key and allowed to reach the HTTP dev server
+        // (src/benchmark/res/xml): for measuring performance and checking R8 on an emulator. Never distribute it.
+        create("benchmark") {
+            initWith(getByName("release"))
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += "release"
         }
     }
     compileOptions {
@@ -44,5 +55,15 @@ android {
 kotlin {
     compilerOptions {
         jvmTarget = JvmTarget.JVM_11
+    }
+}
+
+androidComponents {
+    onVariants { variant ->
+        if (variant.buildType == "debug") return@onVariants
+        // Only kotlin-reflect reads the builtins, and only the IDE reads the library version stamps.
+        variant.packaging.resources.excludes.addAll("/kotlin/**", "/META-INF/*.version", "/DebugProbesKt.bin")
+        // OkHttp reads its public suffix list only to validate cookies, and the API client keeps none.
+        variant.androidResources.ignoreAssetsPatterns.add("!PublicSuffixDatabase.list")
     }
 }

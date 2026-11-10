@@ -48,6 +48,8 @@ import com.campusmarket.app.ui.components.PriceText
 import com.campusmarket.app.ui.components.QuadIcons
 import com.campusmarket.app.ui.components.RatingSummary
 import com.campusmarket.app.ui.components.RemoteImage
+import com.campusmarket.app.ui.components.avatarImageUrl
+import com.campusmarket.app.ui.components.listImageUrl
 import com.campusmarket.app.ui.theme.CampusTheme
 import com.campusmarket.app.ui.theme.Spacing
 import com.campusmarket.core.ListingSummary
@@ -161,7 +163,7 @@ internal fun ListingLine(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Spacing.md),
     ) {
-        RemoteImage(listing.thumbnailUrl, contentDescription = null, modifier = Modifier.size(52.dp).clip(MaterialTheme.shapes.small))
+        RemoteImage(listing.listImageUrl, contentDescription = null, modifier = Modifier.size(52.dp).clip(MaterialTheme.shapes.small))
         Column(Modifier.weight(1f)) {
             Text(listing.title, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold), maxLines = 2, overflow = TextOverflow.Ellipsis)
             PriceText(listing.priceCents, currency = listing.currency, style = MaterialTheme.typography.bodyMedium)
@@ -180,7 +182,7 @@ internal fun PersonLine(user: UserPublic, onClick: (() -> Unit)?, supporting: St
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Spacing.md),
     ) {
-        Avatar(user.avatarUrl, user.displayName, size = 44.dp)
+        Avatar(user.avatarImageUrl, user.displayName, size = 44.dp)
         Column(Modifier.weight(1f)) {
             Text(user.displayName, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold), maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (supporting != null) Text(supporting, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)

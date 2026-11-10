@@ -57,6 +57,8 @@ import com.campusmarket.app.ui.components.RatingSummary
 import com.campusmarket.app.ui.components.RemoteImage
 import com.campusmarket.app.ui.components.SecondaryButton
 import com.campusmarket.app.ui.components.StatusChip
+import com.campusmarket.app.ui.components.avatarImageUrl
+import com.campusmarket.app.ui.components.listImageUrl
 import com.campusmarket.app.ui.label
 import com.campusmarket.app.ui.rememberTimeFormat
 import com.campusmarket.app.ui.state.UiState
@@ -118,7 +120,7 @@ private fun DisputeRow(case: DisputeCase, onClick: () -> Unit) {
         Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onClick).padding(horizontal = Spacing.screen, vertical = Spacing.md),
         horizontalArrangement = Arrangement.spacedBy(Spacing.md),
     ) {
-        RemoteImage(case.listing.thumbnailUrl, contentDescription = null, modifier = Modifier.size(52.dp).clip(MaterialTheme.shapes.small))
+        RemoteImage(case.listing.listImageUrl, contentDescription = null, modifier = Modifier.size(52.dp).clip(MaterialTheme.shapes.small))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(d.reason.label, style = MaterialTheme.typography.labelLarge, color = scheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
@@ -350,7 +352,7 @@ private fun PartyCard(role: String, user: UserPublic, suspended: Boolean, modifi
     Surface(onClick = onClick, shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = modifier) {
         Column(Modifier.padding(Spacing.md), verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
             Text(role, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Avatar(user.avatarUrl, user.displayName, size = 44.dp)
+            Avatar(user.avatarImageUrl, user.displayName, size = 44.dp)
             Text(user.displayName, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(user.campusDomain, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             RatingSummary(user.ratingAverage, user.ratingCount, starSize = 12.dp)

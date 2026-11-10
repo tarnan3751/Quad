@@ -56,6 +56,7 @@ import androidx.compose.ui.window.Dialog
 import com.campusmarket.app.platform.StatusBarIcons
 import com.campusmarket.app.platform.edgeToEdgeDialogProperties
 import com.campusmarket.app.ui.components.ListingImage
+import com.campusmarket.app.ui.components.screenImageUrl
 import com.campusmarket.app.ui.theme.Spacing
 import com.campusmarket.core.Photo
 import kotlinx.coroutines.launch
@@ -82,6 +83,7 @@ internal fun PhotoViewer(photos: List<Photo>, initialPage: Int, onDismiss: () ->
             ) { page ->
                 ZoomablePhoto(
                     url = photos[page].url,
+                    placeholderUrl = photos[page].screenImageUrl,
                     contentDescription = "Photo ${page + 1} of ${photos.size}",
                     isCurrent = page == pagerState.currentPage,
                     onZoomedChange = { if (page == pagerState.currentPage) zoomed = it },
@@ -134,7 +136,7 @@ internal fun PageDots(state: PagerState, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun ZoomablePhoto(url: String, contentDescription: String, isCurrent: Boolean, onZoomedChange: (Boolean) -> Unit) {
+private fun ZoomablePhoto(url: String, placeholderUrl: String, contentDescription: String, isCurrent: Boolean, onZoomedChange: (Boolean) -> Unit) {
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
     var size by remember { mutableStateOf(IntSize.Zero) }
@@ -209,6 +211,7 @@ private fun ZoomablePhoto(url: String, contentDescription: String, isCurrent: Bo
     ) {
         ListingImage(
             url = url,
+            placeholderUrl = placeholderUrl,
             contentDescription = contentDescription,
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Fit,

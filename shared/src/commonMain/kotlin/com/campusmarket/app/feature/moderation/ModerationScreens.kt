@@ -73,6 +73,8 @@ import com.campusmarket.app.ui.components.ReportStatusChip
 import com.campusmarket.app.ui.components.ShimmerGroup
 import com.campusmarket.app.ui.components.SkeletonBox
 import com.campusmarket.app.ui.components.StatusChip
+import com.campusmarket.app.ui.components.avatarImageUrl
+import com.campusmarket.app.ui.components.listImageUrl
 import com.campusmarket.app.ui.label
 import com.campusmarket.app.ui.rememberTimeFormat
 import com.campusmarket.app.ui.state.UiState
@@ -190,8 +192,8 @@ private fun ReportThumb(report: Report) {
     val user = report.targetUser
     when {
         report.targetType == ReportTargetType.LISTING && listing != null ->
-            RemoteImage(listing.thumbnailUrl, contentDescription = null, modifier = Modifier.size(52.dp).clip(MaterialTheme.shapes.small))
-        report.targetType == ReportTargetType.USER && user != null -> Avatar(user.avatarUrl, user.displayName, size = 52.dp)
+            RemoteImage(listing.listImageUrl, contentDescription = null, modifier = Modifier.size(52.dp).clip(MaterialTheme.shapes.small))
+        report.targetType == ReportTargetType.USER && user != null -> Avatar(user.avatarImageUrl, user.displayName, size = 52.dp)
         else -> Box(
             Modifier.size(52.dp).background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(14.dp)),
             contentAlignment = Alignment.Center,
@@ -458,7 +460,7 @@ private fun ReportBody(report: Report, nav: NavController, onOpenDialog: (ModDia
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
             ) {
-                Avatar(report.reporter.avatarUrl, report.reporter.displayName, size = 28.dp)
+                Avatar(report.reporter.avatarImageUrl, report.reporter.displayName, size = 28.dp)
                 Column(Modifier.weight(1f)) {
                     Text("Reported by ${report.reporter.displayName}", style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(rememberTimeFormat().dateTime(report.createdAt), style = MaterialTheme.typography.labelSmall, color = scheme.onSurfaceVariant)
@@ -480,7 +482,7 @@ private fun ReportBody(report: Report, nav: NavController, onOpenDialog: (ModDia
                 else MissingTarget(report.targetSummary, "This account no longer exists.")
             ReportTargetType.MESSAGE -> Column(Modifier.padding(vertical = Spacing.md)) {
                 Row(Modifier.padding(horizontal = Spacing.lg), horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                    Avatar(targetUser?.avatarUrl, targetUser?.displayName ?: "?", size = 32.dp)
+                    Avatar(targetUser?.avatarImageUrl, targetUser?.displayName ?: "?", size = 32.dp)
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
                         Text(targetUser?.displayName ?: "Unknown sender", style = MaterialTheme.typography.labelLarge, color = scheme.onSurfaceVariant)
                         Surface(
@@ -700,7 +702,7 @@ private fun LogRow(entry: ModerationLogEntry, onClick: () -> Unit) {
         Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onClick).padding(horizontal = Spacing.screen, vertical = Spacing.md),
         horizontalArrangement = Arrangement.spacedBy(Spacing.md),
     ) {
-        Avatar(entry.moderator.avatarUrl, entry.moderator.displayName, size = 40.dp)
+        Avatar(entry.moderator.avatarImageUrl, entry.moderator.displayName, size = 40.dp)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(entry.moderator.displayName, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))

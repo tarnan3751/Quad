@@ -7,14 +7,12 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import coil3.ImageLoader
 import coil3.compose.setSingletonImageLoaderFactory
-import coil3.network.ktor3.KtorNetworkFetcherFactory
-import coil3.request.crossfade
 import com.campusmarket.app.data.ServerConfig
 import com.campusmarket.app.data.SessionManager
 import com.campusmarket.app.navigation.AppNavigation
 import com.campusmarket.app.ui.components.LocalUrlResolver
+import com.campusmarket.app.ui.components.newImageLoader
 import com.campusmarket.app.ui.theme.CampusMarketTheme
 import org.koin.compose.koinInject
 
@@ -24,12 +22,7 @@ import org.koin.compose.koinInject
  */
 @Composable
 fun App() {
-    setSingletonImageLoaderFactory { context ->
-        ImageLoader.Builder(context)
-            .components { add(KtorNetworkFetcherFactory()) }
-            .crossfade(true)
-            .build()
-    }
+    setSingletonImageLoaderFactory(::newImageLoader)
     val server: ServerConfig = koinInject()
     val session: SessionManager = koinInject()
     LaunchedEffect(session) { session.restore() }

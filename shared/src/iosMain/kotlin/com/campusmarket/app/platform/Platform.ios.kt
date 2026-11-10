@@ -34,6 +34,7 @@ fun initCampusMarketIos() {
         platformModule = module {
             single<PlatformUrlLauncher> { IosUrlLauncher() }
             single<SecretStorage> { KeychainSecretStorage(service = "com.campusmarket.app.session", account = "session.v1") }
+            single<NetworkMonitor> { IosNetworkMonitor() }
         },
     )
 }

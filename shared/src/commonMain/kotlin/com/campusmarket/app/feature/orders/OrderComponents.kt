@@ -51,6 +51,7 @@ import com.campusmarket.app.ui.Format
 import com.campusmarket.app.ui.components.OrderStatusChip
 import com.campusmarket.app.ui.components.PriceText
 import com.campusmarket.app.ui.components.RemoteImage
+import com.campusmarket.app.ui.components.listImageUrl
 import com.campusmarket.app.ui.theme.CampusTheme
 import com.campusmarket.app.ui.theme.Spacing
 import com.campusmarket.core.Order
@@ -68,7 +69,7 @@ internal fun OrderRow(order: Order, times: TimeFormat, onClick: () -> Unit) {
             .padding(horizontal = Spacing.screen, vertical = Spacing.md),
         verticalAlignment = Alignment.Top,
     ) {
-        RemoteImage(order.listing.thumbnailUrl, contentDescription = null, modifier = Modifier.size(60.dp).clip(MaterialTheme.shapes.small))
+        RemoteImage(order.listing.listImageUrl, contentDescription = null, modifier = Modifier.size(60.dp).clip(MaterialTheme.shapes.small))
         Spacer(Modifier.width(Spacing.md))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Row(verticalAlignment = Alignment.Top) {

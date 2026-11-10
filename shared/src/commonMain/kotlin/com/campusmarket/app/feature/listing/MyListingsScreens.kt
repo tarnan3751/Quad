@@ -46,6 +46,7 @@ import com.campusmarket.app.ui.components.OnResume
 import com.campusmarket.app.ui.components.PagedLazyColumn
 import com.campusmarket.app.ui.components.PagedListingGrid
 import com.campusmarket.app.ui.components.PriceText
+import com.campusmarket.app.ui.components.listImageUrl
 import com.campusmarket.app.ui.label
 import com.campusmarket.app.ui.rememberTimeFormat
 import com.campusmarket.app.ui.theme.Spacing
@@ -151,7 +152,7 @@ private fun MyListingRow(listing: ListingSummary, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         ListingImage(
-            listing.thumbnailUrl,
+            listing.listImageUrl,
             contentDescription = null,
             modifier = Modifier.size(68.dp).clip(MaterialTheme.shapes.small),
             iconSize = 24.dp,

@@ -70,7 +70,6 @@ kotlin {
     sourceSets {
         commonMain.configure { kotlin.srcDir(generateBuildInfo.map { it.outputs.files }) }
         androidMain.dependencies {
-            implementation(libs.compose.uiToolingPreview)
             implementation(libs.androidx.activity.compose)
             implementation(libs.ktor.client.okhttp)
         }
@@ -105,7 +104,6 @@ kotlin {
             implementation(libs.compose.ui)
             implementation(libs.compose.ui.backhandler)
             implementation(libs.compose.components.resources)
-            implementation(libs.compose.uiToolingPreview)
 
             implementation(libs.navigation.compose)
             implementation(libs.androidx.lifecycle.runtimeCompose)
@@ -126,6 +124,12 @@ kotlin {
     }
 }
 
-dependencies {
-    androidRuntimeClasspath(libs.compose.uiTooling)
+composeCompiler {
+    stabilityConfigurationFiles.add(layout.projectDirectory.file("compose-stability.conf"))
+    // Compiler reports for checking which composables skip: ./gradlew :shared:compileKotlinJvm -PcomposeReports
+    // (written to shared/build/compose-reports).
+    if (providers.gradleProperty("composeReports").isPresent) {
+        reportsDestination = layout.buildDirectory.dir("compose-reports")
+        metricsDestination = layout.buildDirectory.dir("compose-reports")
+    }
 }

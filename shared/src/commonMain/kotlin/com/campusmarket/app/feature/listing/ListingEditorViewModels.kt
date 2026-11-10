@@ -7,6 +7,7 @@ import com.campusmarket.app.data.ApiError
 import com.campusmarket.app.platform.PickedImage
 import com.campusmarket.app.ui.Format
 import com.campusmarket.app.ui.Validate
+import com.campusmarket.app.ui.components.smallImageUrl
 import com.campusmarket.app.ui.fieldErrorsOf
 import com.campusmarket.app.ui.state.EventQueue
 import com.campusmarket.app.ui.state.UiState
@@ -182,7 +183,7 @@ abstract class ListingFormViewModel(
                         updatePhoto(key) { if (it.status == UploadStatus.Uploading) it.copy(progress = fraction) else it }
                     }
                 }
-                updatePhoto(key) { it.copy(status = UploadStatus.Uploaded, photoId = photo.id, url = photo.url, progress = null, error = null) }
+                updatePhoto(key) { it.copy(status = UploadStatus.Uploaded, photoId = photo.id, url = photo.smallImageUrl, progress = null, error = null) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: ApiError) {
@@ -335,7 +336,7 @@ class EditListingViewModel(
     private fun prefill(listing: ListingDetail) {
         cancelUploads()
         _form.value = ListingFormState(
-            photos = listing.photos.map { PhotoItem(newKey(), UploadStatus.Uploaded, photoId = it.id, url = it.url) },
+            photos = listing.photos.map { PhotoItem(newKey(), UploadStatus.Uploaded, photoId = it.id, url = it.smallImageUrl) },
             title = listing.title,
             description = listing.description,
             category = listing.category,

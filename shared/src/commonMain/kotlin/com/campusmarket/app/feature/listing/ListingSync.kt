@@ -97,6 +97,9 @@ fun ListingDetail.toSummary(): ListingSummary = ListingSummary(
     sellerName = seller.displayName,
     favorited = favorited,
     createdAt = createdAt,
+    thumbnailSmallUrl = photos.firstOrNull()?.thumbnailUrl,
+    thumbnailWidth = photos.firstOrNull()?.width,
+    thumbnailHeight = photos.firstOrNull()?.height,
 )
 
 /** Applies [change] to a loaded list in place: favorite flags and edits update matching rows, deletions remove them. */

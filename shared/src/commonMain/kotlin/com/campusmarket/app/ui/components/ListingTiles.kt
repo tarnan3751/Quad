@@ -101,13 +101,16 @@ fun ListingImage(
     iconTint: Color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
     iconSize: Dp = 32.dp,
     errorText: String? = null,
+    /** A smaller copy already shown elsewhere (see [rememberImageModel]): appears at once while [url] loads. */
+    placeholderUrl: String? = null,
 ) {
     val resolved = LocalUrlResolver.current(url)
+    val model = rememberImageModel(resolved, LocalUrlResolver.current(placeholderUrl))
     var load by remember(resolved) { mutableStateOf(if (resolved == null) PhotoLoad.Missing else PhotoLoad.Loading) }
     Box(modifier.background(backdrop), contentAlignment = Alignment.Center) {
         if (resolved != null) {
             AsyncImage(
-                model = resolved,
+                model = model,
                 contentDescription = contentDescription,
                 contentScale = contentScale,
                 modifier = Modifier.fillMaxSize(),
@@ -115,6 +118,7 @@ fun ListingImage(
                     load = when (state) {
                         is AsyncImagePainter.State.Success -> PhotoLoad.Loaded
                         is AsyncImagePainter.State.Error -> PhotoLoad.Failed
+                        is AsyncImagePainter.State.Loading -> if (state.painter != null) PhotoLoad.Loaded else PhotoLoad.Loading
                         else -> PhotoLoad.Loading
                     }
                 },
@@ -220,7 +224,7 @@ fun ListingTile(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
         Box {
-            ListingImage(listing.thumbnailUrl, contentDescription = null, modifier = Modifier.fillMaxWidth().aspectRatio(1f))
+            ListingImage(listing.listImageUrl, contentDescription = null, modifier = Modifier.fillMaxWidth().aspectRatio(1f))
             if (listing.status != ListingStatus.ACTIVE) {
                 if (listing.status != ListingStatus.RESERVED) {
                     Box(Modifier.matchParentSize().background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.28f)))

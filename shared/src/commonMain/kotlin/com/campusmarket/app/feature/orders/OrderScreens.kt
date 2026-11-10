@@ -72,6 +72,8 @@ import com.campusmarket.app.ui.components.RatingSummary
 import com.campusmarket.app.ui.components.RemoteImage
 import com.campusmarket.app.ui.components.SecondaryButton
 import com.campusmarket.app.ui.components.UiStateContent
+import com.campusmarket.app.ui.components.avatarImageUrl
+import com.campusmarket.app.ui.components.listImageUrl
 import com.campusmarket.app.ui.label
 import com.campusmarket.app.ui.rememberTimeFormat
 import com.campusmarket.app.ui.state.valueOrNull
@@ -302,7 +304,7 @@ private fun OrderHeader(order: Order, onOpenListing: () -> Unit) {
             .padding(vertical = Spacing.xs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        RemoteImage(order.listing.thumbnailUrl, contentDescription = null, modifier = Modifier.size(76.dp).clip(MaterialTheme.shapes.medium))
+        RemoteImage(order.listing.listImageUrl, contentDescription = null, modifier = Modifier.size(76.dp).clip(MaterialTheme.shapes.medium))
         Spacer(Modifier.width(Spacing.md))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
             Text(order.listing.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -330,7 +332,7 @@ private fun PartyCard(order: Order, canMessage: Boolean, onOpenUser: () -> Unit,
                 .padding(start = Spacing.lg, end = Spacing.sm, top = Spacing.md, bottom = Spacing.md),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Avatar(other.avatarUrl, other.displayName, size = 44.dp)
+            Avatar(other.avatarImageUrl, other.displayName, size = 44.dp)
             Spacer(Modifier.width(Spacing.md))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(if (order.isBuyer) "Seller" else "Buyer", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -466,7 +468,7 @@ fun RateOrderScreen(route: RateOrderRoute, nav: NavController) {
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(Spacing.md),
                     ) {
-                        Avatar(other.avatarUrl, other.displayName, size = 72.dp)
+                        Avatar(other.avatarImageUrl, other.displayName, size = 72.dp)
                         Text(
                             "How was trading with ${other.displayName}?",
                             style = MaterialTheme.typography.headlineSmall,

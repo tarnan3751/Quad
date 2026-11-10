@@ -30,6 +30,8 @@ import com.campusmarket.app.ui.state.Paginator
 import com.campusmarket.app.ui.theme.Spacing
 import kotlinx.coroutines.flow.distinctUntilChanged
 
+private const val PAGED_ITEM = "__item"
+
 /**
  * Infinite list for a [Paginator]: starts the first load if nobody has, full-screen [loading] (skeleton rows by
  * default) / error / [empty] states, pull-to-refresh, load-more near the end, and a retry footer.
@@ -74,11 +76,16 @@ fun <T> PagedLazyColumn(
                 if (paged.isEmpty) {
                     item(key = "__empty") { Box(Modifier.fillParentMaxSize()) { empty() } }
                 } else {
-                    items(count = paged.items.size, key = key?.let { k -> { index: Int -> k(paged.items[index]) } }) { index ->
+                    items(
+                        count = paged.items.size,
+                        key = key?.let { k -> { index: Int -> k(paged.items[index]) } },
+                        // Every row is the same kind of item, so any row's nodes can be reused for another.
+                        contentType = { PAGED_ITEM },
+                    ) { index ->
                         itemContent(paged.items[index])
                     }
                 }
-                item(key = "__footer") { PagingFooter(paged, paginator::retry) }
+                item(key = "__footer", contentType = "__footer") { PagingFooter(paged, paginator::retry) }
             }
         }
     }

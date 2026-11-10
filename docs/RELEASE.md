@@ -11,7 +11,7 @@ Later-scope checklist. Nothing here is done yet. Review store policy pages again
 - [ ] Support email, privacy policy URL, terms of service URL, marketing/support URL.
 
 ## 2. Signing and builds
-- [ ] Android: create an upload key, enrol in Play App Signing, build a release AAB (`bundleRelease`) with minify/shrink verified, keep the keystore backed up outside the repo.
+- [ ] Android: create an upload key, enrol in Play App Signing, build a release AAB (`bundleRelease`), keep the keystore backed up outside the repo. R8 (full mode) and resource shrinking are on for `release`; the same code runs in the debug-signed `benchmark` build (`installBenchmark`), which was walked through on the emulator. Upload the R8 mapping with each release (the AAB carries it) so Play deobfuscates crash reports.
 - [ ] iOS: App ID, distribution certificate, provisioning profile (or automatic signing), archive in Xcode, upload via Xcode/Transporter. Set `TEAM_ID` in `iosApp/Configuration/Config.xcconfig`. The app builds and runs on the simulator; it hasn't been archived or run on a device yet.
 - [ ] Set production server URL in the clients; release builds must use https only (no cleartext/ATS exceptions).
 - [ ] CI job for release builds with secrets in the CI secret store.

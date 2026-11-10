@@ -55,6 +55,7 @@ import com.campusmarket.app.ui.components.OnResume
 import com.campusmarket.app.ui.components.QuadIcons
 import com.campusmarket.app.ui.components.SecondaryButton
 import com.campusmarket.app.ui.components.StatusChip
+import com.campusmarket.app.ui.components.avatarImageUrl
 import com.campusmarket.app.ui.label
 import com.campusmarket.app.ui.rememberTimeFormat
 import com.campusmarket.app.ui.state.UserMessages
@@ -188,7 +189,7 @@ private fun OwnProfileHeader(user: UserPrivate, onEdit: () -> Unit, onPreview: (
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(Spacing.xs),
     ) {
-        Avatar(user.avatarUrl, user.displayName, size = 96.dp)
+        Avatar(user.avatarImageUrl, user.displayName, size = 96.dp)
         Text(
             user.displayName,
             style = MaterialTheme.typography.headlineSmall,

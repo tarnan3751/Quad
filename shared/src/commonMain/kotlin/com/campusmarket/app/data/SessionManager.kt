@@ -104,6 +104,8 @@ class SessionManager(
     /** Store a fresher copy of the user (e.g. the result of `PATCH /me`). No-op when signed out. */
     fun updateUser(user: UserPrivate) {
         val current = tokens.current() ?: return
+        // Usually unchanged (the profile tab refreshes on every visit): skip the encrypted, synchronous write.
+        if (current.user == user) return
         tokens.save(current.copy(user = user))
         sync()
     }
