@@ -6,6 +6,7 @@ import android.content.ContextWrapper
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.view.WindowCompat
 
 @Composable
@@ -25,6 +26,8 @@ actual fun StatusBarIcons(darkIcons: Boolean) {
         }
     }
 }
+
+actual fun fullScreenDialogProperties(): DialogProperties = DialogProperties(usePlatformDefaultWidth = false)
 
 private tailrec fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this

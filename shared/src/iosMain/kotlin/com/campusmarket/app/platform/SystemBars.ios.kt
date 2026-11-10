@@ -2,6 +2,7 @@ package com.campusmarket.app.platform
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.window.DialogProperties
 import platform.Foundation.NSNumber
 import platform.Foundation.setValue
 import platform.UIKit.UIApplication
@@ -30,3 +31,6 @@ actual fun StatusBarIcons(darkIcons: Boolean) {
 private fun UIApplication.setStatusBarStyleCompat(style: UIStatusBarStyle) {
     setValue(NSNumber(long = style), forKey = "statusBarStyle")
 }
+
+actual fun fullScreenDialogProperties(): DialogProperties =
+    DialogProperties(usePlatformDefaultWidth = false, usePlatformInsets = false)

@@ -12,12 +12,16 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
@@ -48,7 +52,8 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
+import com.campusmarket.app.platform.StatusBarIcons
+import com.campusmarket.app.platform.fullScreenDialogProperties
 import com.campusmarket.app.ui.theme.Spacing
 import com.campusmarket.core.Photo
 import kotlinx.coroutines.launch
@@ -62,7 +67,8 @@ private const val DOUBLE_TAP_ZOOM = 2.5f
 /** Full-screen photos: swipe between them, pinch or double-tap to zoom, drag to pan while zoomed. */
 @Composable
 internal fun PhotoViewer(photos: List<Photo>, initialPage: Int, onDismiss: () -> Unit) {
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    Dialog(onDismissRequest = onDismiss, properties = fullScreenDialogProperties()) {
+        StatusBarIcons(darkIcons = false)
         val pagerState = rememberPagerState(initialPage = initialPage) { photos.size }
         var zoomed by remember { mutableStateOf(false) }
         Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.scrim)) {
@@ -80,7 +86,11 @@ internal fun PhotoViewer(photos: List<Photo>, initialPage: Int, onDismiss: () ->
                 )
             }
             Row(
-                Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = Spacing.xs, vertical = Spacing.xs),
+                Modifier
+                    .fillMaxWidth()
+                    // Clear of the status bar, and of the notch / Dynamic Island in landscape.
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
+                    .padding(horizontal = Spacing.xs, vertical = Spacing.xs),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(onClick = onDismiss) { Icon(Icons.Filled.Close, contentDescription = "Close photos", tint = OnPhoto) }
