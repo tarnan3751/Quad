@@ -59,6 +59,14 @@ class ConversationViewModelTest {
         var sendGate: CompletableDeferred<Unit>? = null
         var sentCount = 0
 
+        /** The message is stored but its response never arrives (a timeout on the way back). */
+        var loseResponse = false
+
+        /** Sent messages show up in the history, as on the real server. */
+        var keepSent = false
+        val byClientId = HashMap<String, Message>()
+        val clientIds = mutableListOf<String?>()
+
         fun harness(scope: TestScope) = Harness(scope = scope) { req ->
             val path = req.url.encodedPath
             when {
@@ -74,9 +82,17 @@ class ConversationViewModelTest {
                     if (status != null) {
                         respondError(status, sendCode, "You can't message this user")
                     } else {
-                        val body = ApiJson.decodeFromString(SendMessageRequest.serializer(), req.bodyText).body
-                        sentCount++
-                        respondJson(Message.serializer(), msg("s$sentCount", me, body, NOW + sentCount))
+                        val sent = ApiJson.decodeFromString(SendMessageRequest.serializer(), req.bodyText)
+                        clientIds += sent.clientId
+                        val message = sent.clientId?.let(byClientId::get) ?: run {
+                            sentCount++
+                            msg("s$sentCount", me, sent.body, NOW + sentCount).copy(clientId = sent.clientId).also { m ->
+                                sent.clientId?.let { byClientId[it] = m }
+                                if (keepSent) newest.add(0, m)
+                            }
+                        }
+                        if (loseResponse) throw kotlinx.io.IOException("timeout")
+                        respondJson(Message.serializer(), message)
                     }
                 }
                 path == ApiRoutes.conversationRead("c1") -> respondJson(OkResponse.serializer(), OkResponse())
@@ -91,8 +107,12 @@ class ConversationViewModelTest {
         return Triple(server, server.harness(this), FakeLiveChat(status))
     }
 
+    private var ids = 0
+
     private fun vm(h: Harness, live: FakeLiveChat, outbox: ChatOutbox = ChatOutbox()) =
-        ConversationViewModel(ConversationRoute("c1"), h.api, live, h.session, h.messages, outbox = outbox, nowMillis = { NOW + 500 })
+        ConversationViewModel(
+            ConversationRoute("c1"), h.api, live, h.session, h.messages, outbox = outbox, nowMillis = { NOW + 500 }, newClientId = { "local-${ids++}" },
+        )
 
     private fun ConversationViewModel.bubbles() = rows.value.filterIsInstance<ChatRow.Bubble>()
 
@@ -400,6 +420,151 @@ class ConversationViewModelTest {
         assertTrue(third.state.value.pending.isEmpty())
         assertEquals(1, third.bubbles().count { it.body == "Leaving now" })
         third.close()
+    }
+
+    @Test
+    fun everySendCarriesItsOwnClientIdAndARetryRepeatsIt() = runTest {
+        val (server, h, live) = setUp()
+        val vm = vm(h, live)
+        advanceUntilIdle()
+        vm.onDraft("One")
+        vm.send()
+        vm.onDraft("Two")
+        vm.send()
+        advanceUntilIdle()
+        assertEquals(listOf<String?>("local-0", "local-1"), server.clientIds)
+
+        server.sendThrows = true
+        vm.onDraft("Three")
+        vm.send()
+        advanceUntilIdle()
+        server.sendThrows = false
+        vm.retry(vm.state.value.pending.single().localId)
+        advanceUntilIdle()
+        assertEquals("local-2", server.clientIds.last())
+        assertEquals(3, server.sentCount)
+        vm.close()
+    }
+
+    @Test
+    fun retryingASendWhoseResponseWasLostDoesNotSendItTwice() = runTest {
+        val (server, h, live) = setUp()
+        val vm = vm(h, live)
+        advanceUntilIdle()
+        server.loseResponse = true
+        vm.onDraft("See you at 5")
+        vm.send()
+        advanceUntilIdle()
+        val failed = vm.state.value.pending.single()
+        assertEquals(Delivery.Failed, failed.delivery)
+        assertEquals(1, server.sentCount, "the server did store it")
+
+        server.loseResponse = false
+        vm.retry(failed.localId)
+        advanceUntilIdle()
+
+        assertEquals(1, server.sentCount, "the retry got the stored message back")
+        assertEquals(listOf<String?>(failed.localId, failed.localId), server.clientIds)
+        assertTrue(vm.state.value.pending.isEmpty())
+        assertEquals(1, vm.bubbles().count { it.body == "See you at 5" })
+        assertEquals("s1", vm.bubbles().first { it.body == "See you at 5" }.messageId)
+        vm.close()
+    }
+
+    @Test
+    fun aMessageThatComesBackWithMyClientIdRetiresItsNotSentBubble() = runTest {
+        val (server, h, live) = setUp()
+        val vm = vm(h, live)
+        advanceUntilIdle()
+        server.loseResponse = true
+        vm.onDraft("First")
+        vm.send()
+        vm.onDraft("Second")
+        vm.send()
+        advanceUntilIdle()
+        val (first, second) = vm.state.value.pending
+        assertEquals(listOf(Delivery.Failed, Delivery.Failed), listOf(first.delivery, second.delivery))
+
+        // The socket's echo arrives after all.
+        live.emit(ChatEvent.MessageCreated(server.byClientId.getValue(first.localId)))
+        runCurrent()
+        assertEquals(listOf(second), vm.state.value.pending)
+
+        // A catch-up over REST finds the other one.
+        server.newest.add(0, server.byClientId.getValue(second.localId))
+        vm.syncNewest()
+        advanceUntilIdle()
+        assertTrue(vm.state.value.pending.isEmpty())
+        assertEquals(listOf("Second", "First"), vm.bubbles().take(2).map { it.body })
+        assertTrue(vm.bubbles().take(2).all { it.delivery == Delivery.Sent })
+        vm.close()
+    }
+
+    @Test
+    fun unsentMessagesAndTheDraftSurviveTheProcess() = runTest {
+        val (server, h, live) = setUp()
+        val disk = FakeSecretStorage()
+        server.sendThrows = true
+        val first = vm(h, live, ChatOutbox(disk))
+        advanceUntilIdle()
+        first.onDraft("Is 5pm ok?")
+        first.send()
+        advanceUntilIdle()
+        first.onDraft("half typed")
+        first.close()
+
+        // A new process: nothing in memory, only what was stored.
+        val second = vm(h, live, ChatOutbox(disk))
+        advanceUntilIdle()
+        val restored = second.state.value.pending.single()
+        assertEquals("Is 5pm ok?", restored.body)
+        assertEquals(Delivery.Failed, restored.delivery)
+        assertEquals("half typed", second.state.value.draft)
+
+        server.sendThrows = false
+        second.retry(restored.localId)
+        advanceUntilIdle()
+        assertTrue(second.state.value.pending.isEmpty())
+        second.onDraft("")
+        second.close()
+        assertNull(disk.value, "nothing left to keep")
+    }
+
+    @Test
+    fun aSendInFlightWhenTheProcessDiedIsNotSentUnlessTheHistoryHasItsClientId() = runTest {
+        val (server, h, live) = setUp()
+        val disk = FakeSecretStorage()
+        server.keepSent = true
+        server.sendGate = CompletableDeferred()
+        val first = vm(h, live, ChatOutbox(disk))
+        advanceUntilIdle()
+        first.onDraft("Leaving now")
+        first.send()
+        runCurrent()
+        assertEquals(Delivery.Sending, first.state.value.pending.single().delivery)
+        first.close()
+
+        // The request never reached the server: restored as "Not sent" (and flagged for the inbox right away).
+        val restoredOutbox = ChatOutbox(disk)
+        assertEquals(Delivery.Failed, restoredOutbox.load(me, "c1").pending.single().delivery)
+        val second = vm(h, live, restoredOutbox)
+        advanceUntilIdle()
+        assertEquals(Delivery.Failed, second.state.value.pending.single().delivery)
+        assertEquals("Not sent", second.bubbles().first().error)
+        second.close()
+
+        // It did reach the server (another message with the same text is not mistaken for it): the stored copy goes.
+        server.newest.add(0, msg("m5", me, "Leaving now", NOW + 400).copy(clientId = "someone-else"))
+        val third = vm(h, live, ChatOutbox(disk))
+        advanceUntilIdle()
+        assertEquals(1, third.state.value.pending.size, "same text, different id: still unsent")
+        third.close()
+        server.newest.add(0, msg("m6", me, "Leaving now", NOW + 450).copy(clientId = "local-0"))
+        val fourth = vm(h, live, ChatOutbox(disk))
+        advanceUntilIdle()
+        assertTrue(fourth.state.value.pending.isEmpty())
+        assertEquals(2, fourth.bubbles().count { it.body == "Leaving now" })
+        fourth.close()
     }
 
     @Test

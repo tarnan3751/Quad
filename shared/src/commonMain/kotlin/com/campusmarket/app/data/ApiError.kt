@@ -25,7 +25,6 @@ class ApiError(
     val isNetwork: Boolean get() = code == NETWORK
     val isValidation: Boolean get() = code == ErrorCodes.VALIDATION
     val isNotFound: Boolean get() = code == ErrorCodes.NOT_FOUND
-    val isSessionExpired: Boolean get() = code == SESSION_EXPIRED
 
     override fun toString(): String = "ApiError(code=$code, status=$status, message=$message, fields=$fields)"
 
@@ -59,6 +58,3 @@ class ApiError(
         }
     }
 }
-
-/** Wraps any throwable into an [ApiError] (non-ApiErrors become [ApiError.UNEXPECTED]). Never use on CancellationException. */
-fun Throwable.asApiError(): ApiError = this as? ApiError ?: ApiError.unexpected(this)

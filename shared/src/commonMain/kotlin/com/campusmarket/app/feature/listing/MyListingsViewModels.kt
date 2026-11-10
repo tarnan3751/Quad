@@ -19,10 +19,9 @@ class FavoritesViewModel(
     private val sync: ListingSync,
     private val messages: UserMessages,
 ) : ViewModel() {
-    val favorites = Paginator(viewModelScope, key = { it.id }) { cursor, limit -> api.myFavorites(cursor, limit) }
+    val favorites = Paginator(viewModelScope, messages = messages, key = { it.id }) { cursor, limit -> api.myFavorites(cursor, limit) }
 
     init {
-        favorites.onRefreshError = messages::showError // a failed pull-to-refresh (e.g. offline) isn't silent
         favorites.refresh()
         viewModelScope.launch {
             sync.changes.collect { change ->
@@ -68,12 +67,11 @@ class MyListingsViewModel(
     private val _filter = MutableStateFlow<ListingStatus?>(null)
     val filter: StateFlow<ListingStatus?> = _filter.asStateFlow()
 
-    val listings = Paginator(viewModelScope, key = { it.id }) { cursor, limit ->
+    val listings = Paginator(viewModelScope, messages = messages, key = { it.id }) { cursor, limit ->
         api.myListings(status = _filter.value, cursor = cursor, limit = limit)
     }
 
     init {
-        listings.onRefreshError = messages::showError // a failed pull-to-refresh keeps the list, but says why
         listings.refresh()
         viewModelScope.launch {
             sync.changes.collect { change ->

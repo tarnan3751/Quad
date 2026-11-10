@@ -4,8 +4,13 @@ import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.composable
 import androidx.navigation.toRoute
+import com.campusmarket.app.data.SecretStorage
+import com.campusmarket.app.data.SignOutListener
 import com.campusmarket.app.di.AppScope
+import com.campusmarket.app.di.OutboxSecrets
+import com.campusmarket.app.platform.AppEnvironment
 import org.koin.core.module.dsl.viewModel
+import org.koin.dsl.bind
 import org.koin.dsl.module
 
 // Owner: feature B. Register every chat destination here; the shell calls chatGraph(nav).
@@ -20,8 +25,15 @@ fun NavGraphBuilder.chatGraph(nav: NavController) {
 val chatModule = module {
     single<LiveChat> { SocketLiveChat(get()) }
     single { UnreadConversations(api = get(), live = get(), session = get(), scope = get(AppScope)) }
-    single { ChatOutbox() }
-    viewModel { InboxViewModel(api = get(), live = get(), session = get(), userMessages = get(), unread = get()) }
+    single {
+        val environment = get<AppEnvironment>()
+        ChatOutbox(
+            secrets = getOrNull<SecretStorage>(OutboxSecrets),
+            scope = get(AppScope),
+            onError = { what, e -> if (environment.isDebug) println("Quad chat outbox: $what: ${e.message}") },
+        )
+    } bind SignOutListener::class
+    viewModel { InboxViewModel(api = get(), live = get(), session = get(), userMessages = get(), unread = get(), outbox = get()) }
     viewModel { params ->
         ConversationViewModel(route = params.get(), api = get(), live = get(), session = get(), userMessages = get(), unread = get(), outbox = get())
     }

@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.campusmarket.app.data.ChatSocket
 import com.campusmarket.app.data.HOUR
 import com.campusmarket.app.data.NOW
+import com.campusmarket.app.data.SecretStorage
 import com.campusmarket.core.ChatEvent
 import com.campusmarket.core.ListingCategory
 import com.campusmarket.core.ListingCondition
@@ -32,6 +33,28 @@ class FakeLiveChat(initial: ChatSocket.Status = ChatSocket.Status.Connected) : L
 }
 
 fun ViewModel.close() = viewModelScope.cancel()
+
+/** Stands in for the Keystore / Keychain slot of the chat outbox: what is "on disk" between two processes. */
+class FakeSecretStorage(var value: String? = null) : SecretStorage {
+    var failReads = false
+    var failWrites = false
+    var writes = 0
+    override val isSecure: Boolean get() = true
+    override fun read(): String? {
+        check(!failReads) { "key invalidated" }
+        return value
+    }
+
+    override fun write(value: String) {
+        check(!failWrites) { "keystore unavailable" }
+        writes++
+        this.value = value
+    }
+
+    override fun delete() {
+        value = null
+    }
+}
 
 // ---------------------------------------------------------------------------------------------------- fixtures
 

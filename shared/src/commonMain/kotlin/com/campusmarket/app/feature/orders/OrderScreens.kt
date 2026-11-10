@@ -443,6 +443,7 @@ fun RateOrderScreen(route: RateOrderRoute, nav: NavController) {
     CollectEvents(vm.done.flow) { nav.popBackStack() }
 
     Scaffold(topBar = { AppTopBar("Rate", onBack = { nav.popBackStack() }) }) { padding ->
+        // UiStateContent's modifier is for its loading and error states; the content pads itself.
         UiStateContent(orderState, onRetry = vm::reload, modifier = Modifier.fillMaxSize().padding(padding)) { order ->
             val other = order.otherParty
             when {
@@ -461,11 +462,11 @@ fun RateOrderScreen(route: RateOrderRoute, nav: NavController) {
                     onAction = { nav.popBackStack() },
                 )
                 else -> FormColumn(
-                    Modifier.fillMaxSize().consumeWindowInsets(padding),
+                    Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Column(
-                        Modifier.fillMaxWidth().widthIn(max = 480.dp).padding(horizontal = Spacing.xl, vertical = Spacing.lg),
+                        Modifier.widthIn(max = 480.dp).fillMaxWidth().padding(horizontal = Spacing.xl, vertical = Spacing.lg),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(Spacing.md),
                     ) {

@@ -241,13 +241,13 @@ class UserProfileViewModel(
     val user: StateFlow<UiState<UserPublic>> = _user.asStateFlow()
 
     // Pulling either tab to refresh reloads its first page; take the header along so name, rating and bio stay current.
-    val listings = Paginator(viewModelScope, key = { it.id }) { cursor, limit ->
+    val listings = Paginator(viewModelScope, messages = messages, key = { it.id }) { cursor, limit ->
         if (cursor == null) refreshUserQuietly()
         api.userListings(userId, cursor, limit)
     }
 
     /** Big pages: most people's ratings fit in one, which makes the star breakdown exact. */
-    val ratings = Paginator<Rating>(viewModelScope, pageSize = Limits.PAGE_MAX, key = { it.id }) { cursor, limit ->
+    val ratings = Paginator<Rating>(viewModelScope, pageSize = Limits.PAGE_MAX, messages = messages, key = { it.id }) { cursor, limit ->
         if (cursor == null) refreshUserQuietly()
         api.userRatings(userId, cursor, limit)
     }

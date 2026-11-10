@@ -29,12 +29,8 @@ class DisputesViewModel(private val api: ApiClient, messages: UserMessages) : Vi
     private val _status = MutableStateFlow(DisputeStatus.OPEN)
     val status: StateFlow<DisputeStatus> = _status.asStateFlow()
 
-    val disputes = Paginator<DisputeCase>(viewModelScope, key = { it.dispute.id }) { cursor, limit ->
+    val disputes = Paginator<DisputeCase>(viewModelScope, messages = messages, key = { it.dispute.id }) { cursor, limit ->
         api.modDisputes(_status.value, cursor, limit)
-    }
-
-    init {
-        disputes.onRefreshError = messages::showError
     }
 
     private val resumes = ResumeGate()

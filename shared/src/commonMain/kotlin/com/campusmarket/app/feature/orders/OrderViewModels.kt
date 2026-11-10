@@ -43,8 +43,8 @@ class OrdersViewModel(
     userMessages: UserMessages,
 ) : ViewModel() {
 
-    val buying = Paginator(viewModelScope, key = { it.id }) { cursor, limit -> api.orders(OrderRole.BUYER, cursor, limit) }
-    val selling = Paginator(viewModelScope, key = { it.id }) { cursor, limit -> api.orders(OrderRole.SELLER, cursor, limit) }
+    val buying = Paginator(viewModelScope, messages = userMessages, key = { it.id }) { cursor, limit -> api.orders(OrderRole.BUYER, cursor, limit) }
+    val selling = Paginator(viewModelScope, messages = userMessages, key = { it.id }) { cursor, limit -> api.orders(OrderRole.SELLER, cursor, limit) }
 
     private val _tab = MutableStateFlow(if (route.role.equals("seller", ignoreCase = true)) OrderRole.SELLER else OrderRole.BUYER)
     val tab: StateFlow<OrderRole> = _tab.asStateFlow()
@@ -52,8 +52,6 @@ class OrdersViewModel(
     private val resumes = ResumeGate()
 
     init {
-        buying.onRefreshError = userMessages::showError
-        selling.onRefreshError = userMessages::showError
         viewModelScope.launch { updates.updates.collect(::apply) }
     }
 

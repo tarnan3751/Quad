@@ -27,6 +27,8 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -88,22 +90,36 @@ fun HttpRequestData.jsonBody(): JsonObject = Json.parseToJsonElement(bodyText).j
 /**
  * An [ApiClient] wired to a [MockEngine] with the real client configuration, plus the other things view models take
  * (user messages, external links that record what was opened). With a [scope], HTTP runs on the test scheduler, so
- * `advanceUntilIdle()` / `advanceTimeBy()` drive it; without one it answers on Ktor's IO threads (see [awaitValue]).
+ * `advanceUntilIdle()` / `advanceTimeBy()` drive it; without one it answers at once, on the calling thread, so a call
+ * made from an eagerly dispatched coroutine (`withMainDispatcher`) has finished when the function that made it returns.
+ * No test talks to the fake server from another thread: under load that made requests go missing from [requests] and
+ * states get skipped.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class Harness(
     initial: StoredSession? = session(),
     var now: Long = NOW,
     private val scope: TestScope? = null,
+    /**
+     * Answer on Ktor's IO threads instead (only without a [scope]): multipart uploads need a real dispatcher to
+     * stream their body. Wait for results with [awaitValue] / [awaitCondition], and only for states that can't
+     * already hold.
+     */
+    threaded: Boolean = false,
     handler: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData,
 ) {
     val tokens = InMemoryTokenStore(initial)
-    val requests = mutableListOf<HttpRequestData>()
+    private val recording = Mutex()
+
+    /** Every request so far, in order. A snapshot: the engine may be recording on another thread. */
+    @kotlin.concurrent.Volatile
+    var requests: List<HttpRequestData> = emptyList()
+        private set
     val engine = MockEngine(
         MockEngineConfig().apply {
-            scope?.let { dispatcher = StandardTestDispatcher(it.testScheduler) }
+            if (scope != null) dispatcher = StandardTestDispatcher(scope.testScheduler) else if (!threaded) dispatcher = UnconfinedTestDispatcher()
             addHandler { request ->
-                requests += request
+                recording.withLock { requests = requests + request }
                 handler(request)
             }
         },
@@ -140,11 +156,11 @@ inline fun withMainDispatcher(block: () -> Unit) {
 }
 
 /** Waits in real time (the MockEngine answers on another thread), up to [timeoutMs], for the first value matching [predicate]. */
-suspend fun <T> Flow<T>.awaitValue(timeoutMs: Long = 5_000, predicate: (T) -> Boolean = { true }): T =
+suspend fun <T> Flow<T>.awaitValue(timeoutMs: Long = 30_000, predicate: (T) -> Boolean = { true }): T =
     withContext(Dispatchers.Default) { withTimeout(timeoutMs) { first(predicate) } }
 
 /** Polls [condition] (real time) until it holds. For effects off the main dispatcher, e.g. calls made in the app scope. */
-suspend fun awaitCondition(timeoutMs: Long = 5_000, condition: () -> Boolean) =
+suspend fun awaitCondition(timeoutMs: Long = 30_000, condition: () -> Boolean) =
     withContext(Dispatchers.Default) {
         // runCatching: the condition may read a list the engine thread is appending to.
         withTimeout(timeoutMs) { while (!runCatching(condition).getOrDefault(false)) delay(10) }

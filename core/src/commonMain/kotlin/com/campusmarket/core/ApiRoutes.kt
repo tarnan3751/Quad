@@ -97,6 +97,8 @@ object Limits {
     const val PHOTOS_MAX = 8
     const val PHOTO_MAX_BYTES = 8 * 1024 * 1024
     const val MESSAGE_MAX = 2000
+    /** Longest `SendMessageRequest.clientId` (the sender's idempotency id for a message). */
+    const val MESSAGE_CLIENT_ID_MAX = 64
     const val RATING_COMMENT_MAX = 500
     const val REPORT_DETAILS_MAX = 1000
     /** Buyer's description of a problem with an order (`OpenDisputeRequest.details`). */

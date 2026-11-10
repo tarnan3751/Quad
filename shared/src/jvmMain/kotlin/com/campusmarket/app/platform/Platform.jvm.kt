@@ -1,5 +1,6 @@
 package com.campusmarket.app.platform
 
+import com.campusmarket.app.di.OutboxSecrets
 import com.campusmarket.app.di.initKoin
 import com.campusmarket.app.data.SecretStorage
 import com.campusmarket.app.data.SettingsSecretStorage
@@ -50,6 +51,7 @@ fun initCampusMarketDesktop() {
             single<PlatformUrlLauncher> { DesktopUrlLauncher() }
             // DEV HARNESS ONLY: tokens in plain java.util.prefs, NOT secure. Real clients are Android and iOS.
             single<SecretStorage> { SettingsSecretStorage(get<Settings>()) }
+            single<SecretStorage>(OutboxSecrets) { SettingsSecretStorage(get<Settings>(), key = "chat.outbox.v1") }
         },
     )
 }

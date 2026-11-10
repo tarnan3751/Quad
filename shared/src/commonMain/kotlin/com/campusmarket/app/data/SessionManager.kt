@@ -18,6 +18,14 @@ sealed interface SessionState {
     data class SignedIn(val user: UserPrivate) : SessionState
 }
 
+/**
+ * Something that keeps private data of the signed-in user on the device (e.g. unsent chat messages) and must drop it
+ * when they sign out or delete their account. Bind implementations to this type in Koin.
+ */
+fun interface SignOutListener {
+    fun onSignedOut()
+}
+
 val UserPrivate.isModerator: Boolean get() = role == UserRole.MODERATOR || role == UserRole.ADMIN
 
 /**
@@ -31,6 +39,8 @@ class SessionManager(
     private val api: ApiClient,
     private val tokens: TokenStore,
     private val scope: CoroutineScope,
+    /** Told about a deliberate sign-out or an account deletion, not about a session the server ended. */
+    private val signOutListeners: () -> List<SignOutListener> = { emptyList() },
 ) {
     private val _state = MutableStateFlow(tokens.current().toState())
     val state: StateFlow<SessionState> = _state.asStateFlow()
@@ -118,6 +128,7 @@ class SessionManager(
         api.clearSessionEndReason()
         tokens.clear()
         sync()
+        forgetLocalData()
         if (current != null) {
             try {
                 api.logout(current.refreshToken)
@@ -135,6 +146,20 @@ class SessionManager(
         api.clearSessionEndReason()
         tokens.clear()
         sync()
+        forgetLocalData()
+    }
+
+    /**
+     * `POST /auth/delete-account` for an account that can't hold a session (suspended). Throws [ApiError] like
+     * [ApiClient.deleteAccountWithCredentials].
+     */
+    suspend fun deleteAccountWithCredentials(email: String, password: String) {
+        api.deleteAccountWithCredentials(email, password)
+        forgetLocalData()
+    }
+
+    private fun forgetLocalData() {
+        signOutListeners().forEach { runCatching { it.onSignedOut() } }
     }
 
     private fun StoredSession?.toState(): SessionState =

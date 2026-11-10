@@ -1,5 +1,6 @@
 package com.campusmarket.app.platform
 
+import com.campusmarket.app.di.OutboxSecrets
 import com.campusmarket.app.di.initKoin
 import com.campusmarket.app.data.SecretStorage
 import io.ktor.client.HttpClient
@@ -34,6 +35,7 @@ fun initCampusMarketIos() {
         platformModule = module {
             single<PlatformUrlLauncher> { IosUrlLauncher() }
             single<SecretStorage> { KeychainSecretStorage(service = "com.campusmarket.app.session", account = "session.v1") }
+            single<SecretStorage>(OutboxSecrets) { KeychainSecretStorage(service = "com.campusmarket.app.session", account = "chatOutbox.v1") }
             single<NetworkMonitor> { IosNetworkMonitor() }
         },
     )
