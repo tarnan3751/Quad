@@ -179,6 +179,10 @@ fun SuspendedAccountDialog(message: String, initialEmail: String?, onDismiss: (d
                     }
                     DeleteAccountStep.Credentials -> {
                         Text("To confirm it's you, enter your email and password.", style = MaterialTheme.typography.bodyMedium)
+                        // Collected inside the dialog, so the fields never lag behind typing (docs/CLIENT.md, "Text fields
+                        // in sheets and dialogs").
+                        @Suppress("NAME_SHADOWING")
+                        val state by vm.state.collectAsStateWithLifecycle()
                         EmailField(value = state.email, onValueChange = vm::onEmail, error = state.fieldErrors["email"])
                         PasswordField(
                             value = state.password,

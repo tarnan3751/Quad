@@ -43,6 +43,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -213,8 +216,27 @@ private fun ReportRow(report: Report, onClick: () -> Unit) {
         ReportTargetType.ORDER -> "Order"
     }
     val headline = report.targetSummary.ifBlank { "(no summary)" }.let { if (report.targetType == ReportTargetType.MESSAGE) "“$it”" else it }
+    val closedBy = report.resolvedBy?.displayName
+    val open = report.status == ReportStatus.OPEN
+    val times = rememberTimeFormat()
+    // One summary for screen readers: merged, the row read an account's name twice and dropped the last lines.
+    val spoken = buildString {
+        append(report.reason.label).append(": ").append(headline)
+        append(". ").append(what).append(", reported by ").append(report.reporter.displayName)
+        if (open) {
+            append(", ").append(times.ago(report.createdAt))
+            if (report.openReportsAgainstTargetUser > 1) append(". ${report.openReportsAgainstTargetUser} open reports on ${owner ?: "this user"}")
+        } else {
+            append(". ").append(report.status.label)
+            report.resolutionAction?.takeIf { it != ModerationAction.DISMISS }?.let { append(": ").append(it.label) }
+            if (closedBy != null) append(", by ").append(closedBy)
+            append(", ").append(times.ago(report.resolvedAt ?: report.createdAt))
+        }
+    }
     Row(
-        Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onClick).padding(horizontal = Spacing.screen, vertical = Spacing.md),
+        Modifier.fillMaxWidth().clickable(role = Role.Button, onClickLabel = "Open report", onClick = onClick)
+            .clearAndSetSemantics { contentDescription = spoken }
+            .padding(horizontal = Spacing.screen, vertical = Spacing.md),
         horizontalArrangement = Arrangement.spacedBy(Spacing.md),
     ) {
         ReportThumb(report)
@@ -232,7 +254,6 @@ private fun ReportRow(report: Report, onClick: () -> Unit) {
             }
             Text(headline, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold), maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text("$what · reported by ${report.reporter.displayName}", style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            val closedBy = report.resolvedBy?.displayName
             if (report.status != ReportStatus.OPEN || report.openReportsAgainstTargetUser > 1) {
                 Row(Modifier.padding(top = Spacing.xs), horizontalArrangement = Arrangement.spacedBy(Spacing.xs), verticalAlignment = Alignment.CenterVertically) {
                     if (report.status != ReportStatus.OPEN) {
@@ -440,7 +461,11 @@ private fun ReportBody(report: Report, nav: NavController, onOpenDialog: (ModDia
         modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.screen).padding(top = Spacing.md),
     ) {
         Column(Modifier.padding(Spacing.lg), verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.md), verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                Modifier.semantics(mergeDescendants = true) { },
+                horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Box(Modifier.size(40.dp).background(scheme.primaryContainer, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
                     Icon(QuadIcons.Flag, contentDescription = null, tint = scheme.onPrimaryContainer, modifier = Modifier.size(20.dp))
                 }
@@ -460,7 +485,7 @@ private fun ReportBody(report: Report, nav: NavController, onOpenDialog: (ModDia
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
             ) {
-                Avatar(report.reporter.avatarImageUrl, report.reporter.displayName, size = 28.dp)
+                Avatar(report.reporter.avatarImageUrl, report.reporter.displayName, size = 28.dp, contentDescription = null)
                 Column(Modifier.weight(1f)) {
                     Text("Reported by ${report.reporter.displayName}", style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(rememberTimeFormat().dateTime(report.createdAt), style = MaterialTheme.typography.labelSmall, color = scheme.onSurfaceVariant)
@@ -482,7 +507,7 @@ private fun ReportBody(report: Report, nav: NavController, onOpenDialog: (ModDia
                 else MissingTarget(report.targetSummary, "This account no longer exists.")
             ReportTargetType.MESSAGE -> Column(Modifier.padding(vertical = Spacing.md)) {
                 Row(Modifier.padding(horizontal = Spacing.lg), horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                    Avatar(targetUser?.avatarImageUrl, targetUser?.displayName ?: "?", size = 32.dp)
+                    Avatar(targetUser?.avatarImageUrl, targetUser?.displayName ?: "?", size = 32.dp, contentDescription = null)
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
                         Text(targetUser?.displayName ?: "Unknown sender", style = MaterialTheme.typography.labelLarge, color = scheme.onSurfaceVariant)
                         Surface(
@@ -698,15 +723,23 @@ private val ModerationLogEntry.displayNote: String
 @Composable
 private fun LogRow(entry: ModerationLogEntry, onClick: () -> Unit) {
     val scheme = MaterialTheme.colorScheme
+    val time = rememberTimeFormat().time(entry.createdAt)
+    val spoken = buildString {
+        append(entry.moderator.displayName).append(", ").append(entry.action.label).append(' ').append(entry.targetText.replace(" · ", ", "))
+        append(", ").append(time)
+        if (entry.note.isNotBlank()) append(". Note: ").append(entry.displayNote)
+    }
     Row(
-        Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onClick).padding(horizontal = Spacing.screen, vertical = Spacing.md),
+        Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onClick)
+            .clearAndSetSemantics { contentDescription = spoken }
+            .padding(horizontal = Spacing.screen, vertical = Spacing.md),
         horizontalArrangement = Arrangement.spacedBy(Spacing.md),
     ) {
         Avatar(entry.moderator.avatarImageUrl, entry.moderator.displayName, size = 40.dp)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(entry.moderator.displayName, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                Text(rememberTimeFormat().time(entry.createdAt), style = MaterialTheme.typography.labelMedium, color = scheme.onSurfaceVariant)
+                Text(time, style = MaterialTheme.typography.labelMedium, color = scheme.onSurfaceVariant)
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
                 ActionChip(entry.action)

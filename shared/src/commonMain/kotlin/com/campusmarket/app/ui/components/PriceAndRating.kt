@@ -68,6 +68,11 @@ fun RatingStars(rating: Double, modifier: Modifier = Modifier, starSize: Dp = 16
     }
 }
 
+/** A rating as a screen reader says it: "Rated 4.8 out of 5, 12 ratings" or "No ratings yet". */
+fun ratingSpoken(average: Double?, count: Int): String =
+    if (average == null || count == 0) "No ratings yet"
+    else "Rated ${Format.rating(average)} out of 5, $count rating${if (count == 1) "" else "s"}"
+
 /** Stars + "4.8 (12)", or "No ratings yet". Matches `UserPublic.ratingAverage / ratingCount`. */
 @Composable
 fun RatingSummary(average: Double?, count: Int, modifier: Modifier = Modifier, starSize: Dp = 14.dp) {
@@ -75,9 +80,7 @@ fun RatingSummary(average: Double?, count: Int, modifier: Modifier = Modifier, s
     val spoken = if (average == null || count == 0) {
         Modifier
     } else {
-        Modifier.clearAndSetSemantics {
-            contentDescription = "Rated ${Format.rating(average)} out of 5, $count rating${if (count == 1) "" else "s"}"
-        }
+        Modifier.clearAndSetSemantics { contentDescription = ratingSpoken(average, count) }
     }
     Row(
         modifier.then(spoken),

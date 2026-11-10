@@ -40,6 +40,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -359,7 +361,7 @@ internal fun AmountBreakdown(order: Order, modifier: Modifier = Modifier) {
 
 @Composable
 private fun AmountLine(label: String, value: String, emphasize: Boolean, muted: Boolean) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { }, verticalAlignment = Alignment.CenterVertically) {
         Text(
             label,
             style = if (emphasize) MaterialTheme.typography.titleSmall else MaterialTheme.typography.bodyMedium,
@@ -378,7 +380,7 @@ private fun AmountLine(label: String, value: String, emphasize: Boolean, muted: 
 /** Numbered "what happens next" step (checkout, payouts). */
 @Composable
 internal fun NumberedStep(number: Int, title: String, body: String) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+    Row(Modifier.fillMaxWidth().clearAndSetSemantics { contentDescription = "Step $number: $title. $body" }, verticalAlignment = Alignment.Top) {
         Surface(shape = CircleShape, color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.size(28.dp)) {
             Box(contentAlignment = Alignment.Center) {
                 Text(
