@@ -16,7 +16,6 @@ import com.campusmarket.server.loadUserPublic
 import io.ktor.client.call.body
 import io.ktor.client.request.get
 import io.ktor.client.request.post
-import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.async
@@ -26,13 +25,9 @@ import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import com.campusmarket.server.assertApiError
 
 class RatingTest {
-
-    private suspend fun HttpResponse.assertError(status: HttpStatusCode, code: String) {
-        assertEquals(status, this.status, bodyAsText())
-        assertEquals(code, body<ErrorResponse>().code)
-    }
 
     private suspend fun PaymentsScope.rate(user: TestEnv.TestUser, orderId: Any, stars: Int, comment: String = "") =
         client.post(ApiRoutes.orderRating(orderId.toString())) { auth(user); json(CreateRatingRequest(stars, comment)) }
@@ -61,7 +56,7 @@ class RatingTest {
         assertEquals(true, client.get(ApiRoutes.order(orderId.toString())) { auth(buyer) }.body<Order>().iHaveRated)
         assertEquals(false, client.get(ApiRoutes.order(orderId.toString())) { auth(seller) }.body<Order>().iHaveRated)
 
-        rate(buyer, orderId, 1).assertError(HttpStatusCode.Conflict, ErrorCodes.CONFLICT)
+        rate(buyer, orderId, 1).assertApiError(HttpStatusCode.Conflict, ErrorCodes.CONFLICT)
         assertEquals(5.0, publicUser(seller).ratingAverage)
 
         assertEquals(HttpStatusCode.OK, rate(seller, orderId, 4).status)
@@ -79,12 +74,12 @@ class RatingTest {
         val buyer = buyer()
         val seller = seller()
         val pending = buyOk(buyer, env.listing(seller))
-        rate(buyer, pending.id, 5).assertError(HttpStatusCode.Conflict, ErrorCodes.INVALID_ORDER_STATE)
+        rate(buyer, pending.id, 5).assertApiError(HttpStatusCode.Conflict, ErrorCodes.INVALID_ORDER_STATE)
 
         val done = completedOrder(buyer, seller)
-        rate(buyer(), done, 5).assertError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
-        rate(buyer, UUID.randomUUID(), 5).assertError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
-        rate(buyer, "bogus", 5).assertError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
+        rate(buyer(), done, 5).assertApiError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
+        rate(buyer, UUID.randomUUID(), 5).assertApiError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
+        rate(buyer, "bogus", 5).assertApiError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
     }
 
     @Test
@@ -93,7 +88,7 @@ class RatingTest {
         val done = completedOrder(buyer, seller())
         for (stars in listOf(0, 6, -1)) {
             val res = rate(buyer, done, stars)
-            res.assertError(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
+            res.assertApiError(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
         }
         val tooLong = rate(buyer, done, 3, "x".repeat(Limits.RATING_COMMENT_MAX + 1))
         assertEquals(HttpStatusCode.BadRequest, tooLong.status)

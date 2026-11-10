@@ -3,7 +3,6 @@ package com.campusmarket.server.moderation
 import com.campusmarket.core.ApiRoutes
 import com.campusmarket.core.CreateReportRequest
 import com.campusmarket.core.ErrorCodes
-import com.campusmarket.core.ErrorResponse
 import com.campusmarket.core.ListingStatus
 import com.campusmarket.core.ModerationAction
 import com.campusmarket.core.ModerationLogEntry
@@ -36,6 +35,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import com.campusmarket.server.assertApiError
 
 class ModerationTest {
     private suspend fun ApiTestScope.report(
@@ -48,11 +48,6 @@ class ModerationTest {
 
     private suspend fun ApiTestScope.resolve(m: TestEnv.TestUser, id: String, action: ModerationAction, note: String = "", days: Int? = null) =
         client.post(ApiRoutes.modReportResolve(id)) { auth(m); json(ResolveReportRequest(action, note, days)) }
-
-    private suspend fun HttpResponse.err(status: HttpStatusCode, code: String) {
-        assertEquals(status, this.status)
-        assertEquals(code, body<ErrorResponse>().code)
-    }
 
     private fun TestEnv.count(sql: String, vararg p: Any?): Int = db.txBlocking { c -> c.queryOne(sql, *p) { it.getInt(1) }!! }
 
@@ -100,19 +95,19 @@ class ModerationTest {
         val seller = env.user("seller"); val rep = env.user("rep")
         val other = env.user("outsider", domain = "other.edu")
         val listing = env.listing(seller)
-        report(seller, ReportTargetType.LISTING, listing).err(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
-        report(other, ReportTargetType.LISTING, listing).err(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
-        report(rep, ReportTargetType.LISTING, UUID.randomUUID()).err(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
+        report(seller, ReportTargetType.LISTING, listing).assertApiError(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
+        report(other, ReportTargetType.LISTING, listing).assertApiError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
+        report(rep, ReportTargetType.LISTING, UUID.randomUUID()).assertApiError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
         for (s in listOf(ListingStatus.REMOVED, ListingStatus.DELETED)) {
-            report(rep, ReportTargetType.LISTING, env.listing(seller, status = s)).err(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
+            report(rep, ReportTargetType.LISTING, env.listing(seller, status = s)).assertApiError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
         }
         // reserved / sold stay reportable
         assertEquals(HttpStatusCode.OK, report(rep, ReportTargetType.LISTING, env.listing(seller, status = ListingStatus.SOLD)).status)
-        report(rep, ReportTargetType.LISTING, listing, details = "x".repeat(1001)).err(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
+        report(rep, ReportTargetType.LISTING, listing, details = "x".repeat(1001)).assertApiError(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
         // malformed id
         client.post(ApiRoutes.REPORTS) {
             auth(rep); json(CreateReportRequest(ReportTargetType.LISTING, "not-a-uuid", ReportReason.SPAM))
-        }.err(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
+        }.assertApiError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
         // unauthenticated
         assertEquals(HttpStatusCode.Unauthorized, client.post(ApiRoutes.REPORTS) {
             json(CreateReportRequest(ReportTargetType.LISTING, listing.toString(), ReportReason.SPAM))
@@ -123,12 +118,12 @@ class ModerationTest {
     fun reportUserRules() = apiTest { env ->
         val bad = env.user("badguy"); val rep = env.user("rep"); val other = env.user("far", domain = "other.edu")
         val mod = env.user("mod", role = UserRole.MODERATOR)
-        report(rep, ReportTargetType.USER, rep.id).err(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
-        report(other, ReportTargetType.USER, bad.id).err(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
-        report(rep, ReportTargetType.USER, UUID.randomUUID()).err(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
+        report(rep, ReportTargetType.USER, rep.id).assertApiError(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
+        report(other, ReportTargetType.USER, bad.id).assertApiError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
+        report(rep, ReportTargetType.USER, UUID.randomUUID()).assertApiError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
         val gone = env.user("gone")
         env.db.tx { c -> c.update("UPDATE users SET deleted_at = now() WHERE id = ?", gone.id) }
-        report(rep, ReportTargetType.USER, gone.id).err(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
+        report(rep, ReportTargetType.USER, gone.id).assertApiError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
         assertEquals(HttpStatusCode.OK, report(rep, ReportTargetType.USER, bad.id, ReportReason.HARASSMENT).status)
         val r = queue(mod).body<Page<Report>>().items.single()
         assertEquals("badguy", r.targetSummary)
@@ -143,9 +138,9 @@ class ModerationTest {
         val listing = env.listing(seller, title = "Bike")
         val conv = env.conversation(listing, buyer, seller)
         val msg = env.message(conv, buyer, "send me your password")
-        report(snoop, ReportTargetType.MESSAGE, msg).err(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
-        report(buyer, ReportTargetType.MESSAGE, msg).err(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
-        report(seller, ReportTargetType.MESSAGE, UUID.randomUUID()).err(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
+        report(snoop, ReportTargetType.MESSAGE, msg).assertApiError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
+        report(buyer, ReportTargetType.MESSAGE, msg).assertApiError(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
+        report(seller, ReportTargetType.MESSAGE, UUID.randomUUID()).assertApiError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
         assertEquals(HttpStatusCode.OK, report(seller, ReportTargetType.MESSAGE, msg, ReportReason.SCAM).status)
         val r = queue(mod).body<Page<Report>>().items.single()
         assertEquals("send me your password", r.targetSummary)
@@ -153,7 +148,7 @@ class ModerationTest {
         assertEquals(listing.toString(), r.targetListing?.id)
         // cross-campus participant (data oddity) can't report
         val far = env.user("far", domain = "other.edu")
-        report(far, ReportTargetType.MESSAGE, msg).err(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
+        report(far, ReportTargetType.MESSAGE, msg).assertApiError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
     }
 
     // ------------------------------------------------------------ queue & detail
@@ -162,10 +157,10 @@ class ModerationTest {
     fun queueIsModeratorOnlyAndFiltersAndPaginates() = apiTest { env ->
         val user = env.user("plain"); val mod = env.user("mod", role = UserRole.MODERATOR); val admin = env.user("adm", role = UserRole.ADMIN)
         val seller = env.user("seller")
-        queue(user).err(HttpStatusCode.Forbidden, ErrorCodes.FORBIDDEN)
+        queue(user).assertApiError(HttpStatusCode.Forbidden, ErrorCodes.FORBIDDEN)
         assertEquals(HttpStatusCode.Unauthorized, client.get(ApiRoutes.MOD_REPORTS).status)
-        client.get(ApiRoutes.modReport(UUID.randomUUID().toString())) { auth(user) }.err(HttpStatusCode.Forbidden, ErrorCodes.FORBIDDEN)
-        client.get(ApiRoutes.MOD_LOG) { auth(user) }.err(HttpStatusCode.Forbidden, ErrorCodes.FORBIDDEN)
+        client.get(ApiRoutes.modReport(UUID.randomUUID().toString())) { auth(user) }.assertApiError(HttpStatusCode.Forbidden, ErrorCodes.FORBIDDEN)
+        client.get(ApiRoutes.MOD_LOG) { auth(user) }.assertApiError(HttpStatusCode.Forbidden, ErrorCodes.FORBIDDEN)
 
         // five open reports from five reporters, spread over time
         val ids = (1..5).map { i ->
@@ -183,8 +178,8 @@ class ModerationTest {
         val p3 = queue(admin, "?limit=2&cursor=${p2.nextCursor}").body<Page<Report>>()
         assertEquals(listOf(ids[4]), p3.items.map { it.targetId })
         assertNull(p3.nextCursor)
-        queue(admin, "?cursor=garbage").err(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
-        queue(admin, "?status=NOPE").err(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
+        queue(admin, "?cursor=garbage").assertApiError(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
+        queue(admin, "?status=NOPE").assertApiError(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
         assertEquals(0, queue(admin, "?status=RESOLVED").body<Page<Report>>().items.size)
 
         // resolve two as dismissed in order; DISMISSED list is newest first
@@ -224,8 +219,8 @@ class ModerationTest {
         assertEquals(3, d.openReportsAgainstTargetUser)
         assertEquals(ReportStatus.OPEN, d.status)
         assertNull(d.resolvedBy); assertNull(d.resolvedAt)
-        client.get(ApiRoutes.modReport(UUID.randomUUID().toString())) { auth(mod) }.err(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
-        client.get(ApiRoutes.modReport("zzz")) { auth(mod) }.err(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
+        client.get(ApiRoutes.modReport(UUID.randomUUID().toString())) { auth(mod) }.assertApiError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
+        client.get(ApiRoutes.modReport("zzz")) { auth(mod) }.assertApiError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
     }
 
     // ------------------------------------------------------------ resolve
@@ -248,10 +243,10 @@ class ModerationTest {
         assertEquals(2, env.count("SELECT count(*) FROM reports WHERE status = 'DISMISSED' AND resolved_by = ?", mod.id))
         assertEquals(1, env.count("SELECT count(*) FROM moderation_actions WHERE report_id = ?", UUID.fromString(target.id)))
         // not open any more
-        resolve(mod, target.id, ModerationAction.DISMISS).err(HttpStatusCode.Conflict, ErrorCodes.CONFLICT)
+        resolve(mod, target.id, ModerationAction.DISMISS).assertApiError(HttpStatusCode.Conflict, ErrorCodes.CONFLICT)
         // sibling was resolved too, so can't be resolved again either
         val sibling = queue(mod, "?status=DISMISSED").body<Page<Report>>().items.first { it.id != target.id }
-        resolve(mod, sibling.id, ModerationAction.REMOVE_LISTING).err(HttpStatusCode.Conflict, ErrorCodes.CONFLICT)
+        resolve(mod, sibling.id, ModerationAction.REMOVE_LISTING).assertApiError(HttpStatusCode.Conflict, ErrorCodes.CONFLICT)
         assertEquals("ACTIVE", env.listingStatus(l))
     }
 
@@ -284,22 +279,22 @@ class ModerationTest {
         val sold = env.listing(seller, status = ListingStatus.SOLD)
         report(env.user("a"), ReportTargetType.LISTING, sold)
         val id = queue(mod).body<Page<Report>>().items.single().id
-        resolve(mod, id, ModerationAction.REMOVE_LISTING).err(HttpStatusCode.Conflict, ErrorCodes.CONFLICT)
+        resolve(mod, id, ModerationAction.REMOVE_LISTING).assertApiError(HttpStatusCode.Conflict, ErrorCodes.CONFLICT)
         // transaction rolled back: still open, no log
         assertEquals(1, queue(mod).body<Page<Report>>().items.size)
         assertEquals(0, env.count("SELECT count(*) FROM moderation_actions"))
         // wrong target type, wrong action
         report(env.user("b"), ReportTargetType.USER, seller.id)
         val userReport = queue(mod).body<Page<Report>>().items.first { it.targetType == ReportTargetType.USER }
-        resolve(mod, userReport.id, ModerationAction.REMOVE_LISTING).err(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
-        resolve(mod, userReport.id, ModerationAction.RESTORE_LISTING).err(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
-        resolve(mod, userReport.id, ModerationAction.UNSUSPEND_USER).err(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
-        resolve(mod, userReport.id, ModerationAction.WARN_USER, days = 3).err(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
-        resolve(mod, userReport.id, ModerationAction.SUSPEND_USER, days = 0).err(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
+        resolve(mod, userReport.id, ModerationAction.REMOVE_LISTING).assertApiError(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
+        resolve(mod, userReport.id, ModerationAction.RESTORE_LISTING).assertApiError(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
+        resolve(mod, userReport.id, ModerationAction.UNSUSPEND_USER).assertApiError(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
+        resolve(mod, userReport.id, ModerationAction.WARN_USER, days = 3).assertApiError(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
+        resolve(mod, userReport.id, ModerationAction.SUSPEND_USER, days = 0).assertApiError(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
         client.post(ApiRoutes.modReportResolve(UUID.randomUUID().toString())) { auth(mod); json(ResolveReportRequest(ModerationAction.DISMISS)) }
-            .err(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
+            .assertApiError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
         client.post(ApiRoutes.modReportResolve(userReport.id)) { auth(env.user("plain")); json(ResolveReportRequest(ModerationAction.DISMISS)) }
-            .err(HttpStatusCode.Forbidden, ErrorCodes.FORBIDDEN)
+            .assertApiError(HttpStatusCode.Forbidden, ErrorCodes.FORBIDDEN)
     }
 
     @Test
@@ -336,7 +331,7 @@ class ModerationTest {
         report(env.user("b"), ReportTargetType.USER, mod2.id)
         val reports = queue(mod).body<Page<Report>>().items
         val vr = reports.first { it.targetId == victim.id.toString() }; val mr = reports.first { it.targetId == mod2.id.toString() }
-        resolve(mod, mr.id, ModerationAction.SUSPEND_USER).err(HttpStatusCode.Forbidden, ErrorCodes.FORBIDDEN)
+        resolve(mod, mr.id, ModerationAction.SUSPEND_USER).assertApiError(HttpStatusCode.Forbidden, ErrorCodes.FORBIDDEN)
         assertEquals(1, queue(mod).body<Page<Report>>().items.count { it.id == mr.id })  // still open
         assertEquals(HttpStatusCode.OK, resolve(mod, vr.id, ModerationAction.SUSPEND_USER).status)
         val row = env.db.tx { c -> c.queryOne("SELECT suspended_until, suspension_reason FROM users WHERE id = ?", victim.id) { it.getTimestamp(1) to it.getString(2) }!! }
@@ -390,14 +385,14 @@ class ModerationTest {
         suspend fun suspend(by: TestEnv.TestUser, id: UUID, reason: String = "spam", days: Int? = null) =
             client.post(ApiRoutes.modUserSuspend(id.toString())) { auth(by); json(SuspendUserRequest(reason, days)) }
 
-        suspend(plain, victim.id).err(HttpStatusCode.Forbidden, ErrorCodes.FORBIDDEN)
-        suspend(mod, victim.id, reason = "  ").err(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
-        suspend(mod, victim.id, days = -1).err(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
-        suspend(mod, UUID.randomUUID()).err(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
-        suspend(mod, mod.id).err(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
-        suspend(mod, mod2.id).err(HttpStatusCode.Forbidden, ErrorCodes.FORBIDDEN)
-        suspend(mod, admin.id).err(HttpStatusCode.Forbidden, ErrorCodes.FORBIDDEN)
-        suspend(admin, admin2.id).err(HttpStatusCode.Forbidden, ErrorCodes.FORBIDDEN)
+        suspend(plain, victim.id).assertApiError(HttpStatusCode.Forbidden, ErrorCodes.FORBIDDEN)
+        suspend(mod, victim.id, reason = "  ").assertApiError(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
+        suspend(mod, victim.id, days = -1).assertApiError(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
+        suspend(mod, UUID.randomUUID()).assertApiError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
+        suspend(mod, mod.id).assertApiError(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
+        suspend(mod, mod2.id).assertApiError(HttpStatusCode.Forbidden, ErrorCodes.FORBIDDEN)
+        suspend(mod, admin.id).assertApiError(HttpStatusCode.Forbidden, ErrorCodes.FORBIDDEN)
+        suspend(admin, admin2.id).assertApiError(HttpStatusCode.Forbidden, ErrorCodes.FORBIDDEN)
         assertEquals(0, env.count("SELECT count(*) FROM moderation_actions"))
 
         assertEquals(OkResponse(), suspend(mod, faraway.id, "harassing", 30).body())  // any campus
@@ -407,12 +402,12 @@ class ModerationTest {
 
         // unsuspend
         client.post(ApiRoutes.modUserUnsuspend(victim.id.toString())) { auth(mod); json(ModerationNoteRequest("oops")) }
-            .err(HttpStatusCode.Conflict, ErrorCodes.CONFLICT)
-        client.post(ApiRoutes.modUserUnsuspend(mod2.id.toString())) { auth(mod) }.err(HttpStatusCode.Forbidden, ErrorCodes.FORBIDDEN)
+            .assertApiError(HttpStatusCode.Conflict, ErrorCodes.CONFLICT)
+        client.post(ApiRoutes.modUserUnsuspend(mod2.id.toString())) { auth(mod) }.assertApiError(HttpStatusCode.Forbidden, ErrorCodes.FORBIDDEN)
         assertEquals(HttpStatusCode.OK, client.post(ApiRoutes.modUserUnsuspend(faraway.id.toString())) { auth(mod); json(ModerationNoteRequest("appealed")) }.status)
         assertEquals(HttpStatusCode.OK, client.post(ApiRoutes.modUserUnsuspend(mod2.id.toString())) { auth(admin) }.status)  // no body at all
         assertEquals(0, env.count("SELECT count(*) FROM users WHERE suspended"))
-        client.post(ApiRoutes.modUserUnsuspend(UUID.randomUUID().toString())) { auth(mod) }.err(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
+        client.post(ApiRoutes.modUserUnsuspend(UUID.randomUUID().toString())) { auth(mod) }.assertApiError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
 
         val log = client.get(ApiRoutes.MOD_LOG) { auth(admin) }.body<Page<ModerationLogEntry>>().items
         assertEquals(
@@ -431,19 +426,19 @@ class ModerationTest {
         suspend fun remove(by: TestEnv.TestUser, id: UUID) = client.post(ApiRoutes.modListingRemove(id.toString())) { auth(by); json(ModerationNoteRequest("bad")) }
         suspend fun restore(by: TestEnv.TestUser, id: UUID) = client.post(ApiRoutes.modListingRestore(id.toString())) { auth(by); json(ModerationNoteRequest("ok")) }
 
-        remove(seller, active).err(HttpStatusCode.Forbidden, ErrorCodes.FORBIDDEN)
-        remove(mod, UUID.randomUUID()).err(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
-        remove(mod, reserved).err(HttpStatusCode.Conflict, ErrorCodes.CONFLICT)
-        remove(mod, sold).err(HttpStatusCode.Conflict, ErrorCodes.CONFLICT)
-        remove(mod, deleted).err(HttpStatusCode.Conflict, ErrorCodes.CONFLICT)
-        restore(mod, active).err(HttpStatusCode.Conflict, ErrorCodes.CONFLICT)
-        restore(mod, UUID.randomUUID()).err(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
-        restore(seller, active).err(HttpStatusCode.Forbidden, ErrorCodes.FORBIDDEN)
+        remove(seller, active).assertApiError(HttpStatusCode.Forbidden, ErrorCodes.FORBIDDEN)
+        remove(mod, UUID.randomUUID()).assertApiError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
+        remove(mod, reserved).assertApiError(HttpStatusCode.Conflict, ErrorCodes.CONFLICT)
+        remove(mod, sold).assertApiError(HttpStatusCode.Conflict, ErrorCodes.CONFLICT)
+        remove(mod, deleted).assertApiError(HttpStatusCode.Conflict, ErrorCodes.CONFLICT)
+        restore(mod, active).assertApiError(HttpStatusCode.Conflict, ErrorCodes.CONFLICT)
+        restore(mod, UUID.randomUUID()).assertApiError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
+        restore(seller, active).assertApiError(HttpStatusCode.Forbidden, ErrorCodes.FORBIDDEN)
         assertEquals(0, env.count("SELECT count(*) FROM moderation_actions"))
 
         assertEquals(OkResponse(), remove(mod, active).body())
         assertEquals("REMOVED", env.listingStatus(active))
-        remove(mod, active).err(HttpStatusCode.Conflict, ErrorCodes.CONFLICT)
+        remove(mod, active).assertApiError(HttpStatusCode.Conflict, ErrorCodes.CONFLICT)
         assertEquals(OkResponse(), restore(mod, active).body())
         assertEquals("ACTIVE", env.listingStatus(active))
         val log = client.get(ApiRoutes.MOD_LOG) { auth(mod) }.body<Page<ModerationLogEntry>>().items
@@ -471,6 +466,6 @@ class ModerationTest {
         assertEquals(6, all.map { it.id }.toSet().size)
         assertEquals(all.map { it.createdAt }.sortedDescending(), all.map { it.createdAt })
         assertEquals(ModerationAction.RESTORE_LISTING, all.first().action)
-        client.get(ApiRoutes.MOD_LOG + "?cursor=bm9wZQ") { auth(mod) }.err(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
+        client.get(ApiRoutes.MOD_LOG + "?cursor=bm9wZQ") { auth(mod) }.assertApiError(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
     }
 }

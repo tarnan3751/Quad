@@ -2,7 +2,6 @@ package com.campusmarket.server.payments
 
 import com.campusmarket.core.ApiRoutes
 import com.campusmarket.core.ErrorCodes
-import com.campusmarket.core.ErrorResponse
 import com.campusmarket.core.ListingStatus
 import com.campusmarket.core.Order
 import com.campusmarket.core.OrderRole
@@ -12,7 +11,6 @@ import com.campusmarket.server.auth
 import io.ktor.client.call.body
 import io.ktor.client.request.get
 import io.ktor.client.request.post
-import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import java.util.UUID
@@ -22,22 +20,9 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import com.campusmarket.server.assertApiError
 
 class OrderLifecycleTest {
-
-    private suspend fun HttpResponse.assertError(status: HttpStatusCode, code: String) {
-        assertEquals(status, this.status, bodyAsText())
-        assertEquals(code, body<ErrorResponse>().code)
-    }
-
-    private suspend fun PaymentsScope.confirm(user: com.campusmarket.server.TestEnv.TestUser, id: String) =
-        client.post(ApiRoutes.orderConfirm(id)) { auth(user) }
-
-    private suspend fun PaymentsScope.cancel(user: com.campusmarket.server.TestEnv.TestUser, id: String) =
-        client.post(ApiRoutes.orderCancel(id)) { auth(user) }
-
-    private suspend fun PaymentsScope.getOrder(user: com.campusmarket.server.TestEnv.TestUser, id: String) =
-        client.get(ApiRoutes.order(id)) { auth(user) }
 
     @Test
     fun fullBuyFlowThroughFakeCheckout() = paymentsTest {
@@ -61,7 +46,7 @@ class OrderLifecycleTest {
         assertEquals(HttpStatusCode.OK, bounce.status)
         assertContains(bounce.bodyAsText(), "campusmarket://orders/${order.id}")
 
-        val afterPay = getOrder(buyer, order.id).body<Order>()
+        val afterPay = getOrder(buyer, order.id)
         assertEquals(OrderStatus.PAID, afterPay.status)
         assertNotNull(afterPay.paidAt)
         assertNull(afterPay.checkoutUrl)
@@ -82,7 +67,7 @@ class OrderLifecycleTest {
         assertEquals("cm-order-${order.id}-transfer-0", transfer.idempotencyKey)
         assertEquals(fake.transferFor(UUID.fromString(order.id)), orderRow(order.id).transferId)
 
-        val sellerView = getOrder(seller, order.id).body<Order>()
+        val sellerView = getOrder(seller, order.id)
         assertEquals(OrderRole.SELLER, sellerView.myRole)
         assertEquals(OrderStatus.COMPLETED, sellerView.status)
     }
@@ -91,11 +76,11 @@ class OrderLifecycleTest {
     fun onlyParticipantsSeeOrders() = paymentsTest {
         val order = buyOk(buyer(), env.listing(seller()))
         val stranger = buyer()
-        getOrder(stranger, order.id).assertError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
-        confirm(stranger, order.id).assertError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
-        cancel(stranger, order.id).assertError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
-        getOrder(stranger, "nope").assertError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
-        getOrder(stranger, UUID.randomUUID().toString()).assertError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
+        client.get(ApiRoutes.order(order.id)) { auth(stranger) }.assertApiError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
+        confirm(stranger, order.id).assertApiError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
+        cancel(stranger, order.id).assertApiError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
+        client.get(ApiRoutes.order("nope")) { auth(stranger) }.assertApiError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
+        client.get(ApiRoutes.order(UUID.randomUUID().toString())) { auth(stranger) }.assertApiError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
         assertEquals(OrderStatus.PENDING_PAYMENT, orderStatus(order.id))
     }
 
@@ -104,17 +89,17 @@ class OrderLifecycleTest {
         val seller = seller()
         val buyer = buyer()
         val pending = buyOk(buyer, env.listing(seller))
-        confirm(buyer, pending.id).assertError(HttpStatusCode.Conflict, ErrorCodes.INVALID_ORDER_STATE)
+        confirm(buyer, pending.id).assertApiError(HttpStatusCode.Conflict, ErrorCodes.INVALID_ORDER_STATE)
 
         payViaFakeCheckout(pending.id)
-        confirm(seller, pending.id).assertError(HttpStatusCode.Forbidden, ErrorCodes.FORBIDDEN)
+        confirm(seller, pending.id).assertApiError(HttpStatusCode.Forbidden, ErrorCodes.FORBIDDEN)
         assertEquals(HttpStatusCode.OK, confirm(buyer, pending.id).status)
         // a second confirm is a state error, and never a second transfer
-        confirm(buyer, pending.id).assertError(HttpStatusCode.Conflict, ErrorCodes.INVALID_ORDER_STATE)
+        confirm(buyer, pending.id).assertApiError(HttpStatusCode.Conflict, ErrorCodes.INVALID_ORDER_STATE)
         assertEquals(1, gateway.calls("createTransfer").size)
         // completed orders can't be cancelled
-        cancel(buyer, pending.id).assertError(HttpStatusCode.Conflict, ErrorCodes.INVALID_ORDER_STATE)
-        cancel(seller, pending.id).assertError(HttpStatusCode.Conflict, ErrorCodes.INVALID_ORDER_STATE)
+        cancel(buyer, pending.id).assertApiError(HttpStatusCode.Conflict, ErrorCodes.INVALID_ORDER_STATE)
+        cancel(seller, pending.id).assertApiError(HttpStatusCode.Conflict, ErrorCodes.INVALID_ORDER_STATE)
     }
 
     @Test
@@ -135,7 +120,7 @@ class OrderLifecycleTest {
         // the dead checkout can't be paid any more, and cancelling again is a state error
         payViaFakeCheckout(order.id)
         assertEquals(OrderStatus.CANCELLED, orderStatus(order.id))
-        cancel(seller, order.id).assertError(HttpStatusCode.Conflict, ErrorCodes.INVALID_ORDER_STATE)
+        cancel(seller, order.id).assertApiError(HttpStatusCode.Conflict, ErrorCodes.INVALID_ORDER_STATE)
         assertTrue(gateway.calls("refund").isEmpty())
 
         // and the listing is buyable again
@@ -165,8 +150,8 @@ class OrderLifecycleTest {
         assertEquals(fake.refundFor(UUID.fromString(order.id)), orderRow(order.id).refundId)
         assertTrue(gateway.calls("createTransfer").isEmpty())
 
-        cancel(seller, order.id).assertError(HttpStatusCode.Conflict, ErrorCodes.INVALID_ORDER_STATE)
-        confirm(buyer, order.id).assertError(HttpStatusCode.Conflict, ErrorCodes.INVALID_ORDER_STATE)
+        cancel(seller, order.id).assertApiError(HttpStatusCode.Conflict, ErrorCodes.INVALID_ORDER_STATE)
+        confirm(buyer, order.id).assertApiError(HttpStatusCode.Conflict, ErrorCodes.INVALID_ORDER_STATE)
     }
 
     /** The buyer may already hold the item: they can't refund themselves, they report a problem instead. */
@@ -174,7 +159,7 @@ class OrderLifecycleTest {
     fun buyerCanNotCancelAPaidOrder() = paymentsTest {
         val buyer = buyer()
         val order = paidOrder(buyer = buyer)
-        cancel(buyer, order.id).assertError(HttpStatusCode.Forbidden, ErrorCodes.FORBIDDEN)
+        cancel(buyer, order.id).assertApiError(HttpStatusCode.Forbidden, ErrorCodes.FORBIDDEN)
         assertEquals(OrderStatus.PAID, orderStatus(order.id))
         assertEquals(ListingStatus.RESERVED, listingStatus(order))
         assertTrue(gateway.calls("refund").isEmpty())

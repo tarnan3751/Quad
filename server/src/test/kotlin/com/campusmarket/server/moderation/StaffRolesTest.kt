@@ -2,7 +2,6 @@ package com.campusmarket.server.moderation
 
 import com.campusmarket.core.ApiRoutes
 import com.campusmarket.core.ErrorCodes
-import com.campusmarket.core.ErrorResponse
 import com.campusmarket.core.ModerationAction
 import com.campusmarket.core.ModerationLogEntry
 import com.campusmarket.core.Page
@@ -26,15 +25,11 @@ import io.ktor.http.HttpStatusCode
 import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import com.campusmarket.server.assertApiError
 
 class StaffRolesTest {
     private suspend fun ApiTestScope.setRole(caller: TestEnv.TestUser, target: UUID, role: UserRole): HttpResponse =
         client.put(ApiRoutes.modUserRole(target.toString())) { auth(caller); json(SetRoleRequest(role)) }
-
-    private suspend fun HttpResponse.err(status: HttpStatusCode, code: String) {
-        assertEquals(status, this.status)
-        assertEquals(code, body<ErrorResponse>().code)
-    }
 
     private fun TestEnv.roleOf(u: TestEnv.TestUser): String =
         db.txBlocking { c -> c.queryOne("SELECT role FROM users WHERE id = ?", u.id) { it.getString(1) }!! }
@@ -73,9 +68,9 @@ class StaffRolesTest {
     fun moderatorsAndUsersGet403OnAllStaffEndpoints() = apiTest { env ->
         val mod = env.user("mod", role = UserRole.MODERATOR); val user = env.user("plain"); val target = env.user("target")
         for (caller in listOf(mod, user)) {
-            setRole(caller, target.id, UserRole.MODERATOR).err(HttpStatusCode.Forbidden, ErrorCodes.FORBIDDEN)
-            client.get(ApiRoutes.MOD_STAFF) { auth(caller) }.err(HttpStatusCode.Forbidden, ErrorCodes.FORBIDDEN)
-            client.get(ApiRoutes.MOD_USER_SEARCH + "?q=target") { auth(caller) }.err(HttpStatusCode.Forbidden, ErrorCodes.FORBIDDEN)
+            setRole(caller, target.id, UserRole.MODERATOR).assertApiError(HttpStatusCode.Forbidden, ErrorCodes.FORBIDDEN)
+            client.get(ApiRoutes.MOD_STAFF) { auth(caller) }.assertApiError(HttpStatusCode.Forbidden, ErrorCodes.FORBIDDEN)
+            client.get(ApiRoutes.MOD_USER_SEARCH + "?q=target") { auth(caller) }.assertApiError(HttpStatusCode.Forbidden, ErrorCodes.FORBIDDEN)
         }
         assertEquals("USER", env.roleOf(target))
         assertEquals(0, env.auditCount(target.id))
@@ -91,18 +86,18 @@ class StaffRolesTest {
     @Test
     fun cannotChangeOwnRole() = apiTest { env ->
         val admin = env.user("admin", role = UserRole.ADMIN)
-        setRole(admin, admin.id, UserRole.USER).err(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
-        setRole(admin, admin.id, UserRole.MODERATOR).err(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
+        setRole(admin, admin.id, UserRole.USER).assertApiError(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
+        setRole(admin, admin.id, UserRole.MODERATOR).assertApiError(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
         assertEquals("ADMIN", env.roleOf(admin))
     }
 
     @Test
     fun cannotAlterAnotherAdminOrAssignAdmin() = apiTest { env ->
         val a1 = env.user("a1", role = UserRole.ADMIN); val a2 = env.user("a2", role = UserRole.ADMIN); val u = env.user("u")
-        setRole(a1, a2.id, UserRole.USER).err(HttpStatusCode.Forbidden, ErrorCodes.FORBIDDEN)
-        setRole(a1, a2.id, UserRole.MODERATOR).err(HttpStatusCode.Forbidden, ErrorCodes.FORBIDDEN)
+        setRole(a1, a2.id, UserRole.USER).assertApiError(HttpStatusCode.Forbidden, ErrorCodes.FORBIDDEN)
+        setRole(a1, a2.id, UserRole.MODERATOR).assertApiError(HttpStatusCode.Forbidden, ErrorCodes.FORBIDDEN)
         assertEquals("ADMIN", env.roleOf(a2))
-        setRole(a1, u.id, UserRole.ADMIN).err(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
+        setRole(a1, u.id, UserRole.ADMIN).assertApiError(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
         assertEquals("USER", env.roleOf(u))
         assertEquals(0, env.auditCount(a2.id) + env.auditCount(u.id))
     }
@@ -115,11 +110,11 @@ class StaffRolesTest {
             c.update("UPDATE users SET email_verified = false WHERE id = ?", unverified.id)
             c.update("UPDATE users SET deleted_at = now() WHERE id = ?", deleted.id)
         }
-        setRole(admin, unverified.id, UserRole.MODERATOR).err(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
-        setRole(admin, deleted.id, UserRole.MODERATOR).err(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
-        setRole(admin, UUID.randomUUID(), UserRole.MODERATOR).err(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
+        setRole(admin, unverified.id, UserRole.MODERATOR).assertApiError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
+        setRole(admin, deleted.id, UserRole.MODERATOR).assertApiError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
+        setRole(admin, UUID.randomUUID(), UserRole.MODERATOR).assertApiError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
         client.put(ApiRoutes.modUserRole("not-a-uuid")) { auth(admin); json(SetRoleRequest(UserRole.MODERATOR)) }
-            .err(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
+            .assertApiError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
         assertEquals("USER", env.roleOf(unverified))
         assertEquals("USER", env.roleOf(deleted))
     }
@@ -142,7 +137,7 @@ class StaffRolesTest {
     fun changeRoleCannotResolveReports() = apiTest { env ->
         val mod = env.user("mod", role = UserRole.MODERATOR)
         client.post(ApiRoutes.modReportResolve(UUID.randomUUID().toString())) { auth(mod); json(ResolveReportRequest(ModerationAction.CHANGE_ROLE)) }
-            .err(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
+            .assertApiError(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
     }
 
     @Test
@@ -177,6 +172,6 @@ class StaffRolesTest {
 
         repeat(25) { env.user("Bulk Person $it") }
         assertEquals(20, search("bulk person").body<List<StaffMember>>().size)
-        search("x".repeat(101)).err(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
+        search("x".repeat(101)).assertApiError(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
     }
 }

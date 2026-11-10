@@ -87,9 +87,10 @@ fun Connection.loadListingSummaries(config: AppConfig, ids: Collection<UUID>, vi
         """SELECT l.id, l.title, l.price_cents, l.currency, l.category, l.condition, l.status, l.seller_id, l.created_at,
                   CASE WHEN s.deleted_at IS NULL THEN s.display_name ELSE 'Deleted user' END AS seller_name,
                   ph.storage_key, ph.thumb_key, ph.width, ph.height,
-                  f.user_id IS NOT NULL AS favorited
+                  fav.yes IS NOT NULL AS favorited
            FROM listings l JOIN users s ON s.id = l.seller_id
-           LEFT JOIN favorites f ON f.user_id = ? AND f.listing_id = l.id
+           -- a primary-key probe per listing (LIMIT keeps it from becoming a scan of all the viewer's favorites)
+           LEFT JOIN LATERAL (SELECT true AS yes FROM favorites f WHERE f.user_id = ? AND f.listing_id = l.id LIMIT 1) fav ON true
            LEFT JOIN LATERAL (SELECT p.storage_key, p.thumb_key, p.width, p.height
                               FROM listing_photos lp JOIN photos p ON p.id = lp.photo_id
                               WHERE lp.listing_id = l.id ORDER BY lp.position LIMIT 1) ph ON true

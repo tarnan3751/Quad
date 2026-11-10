@@ -2,7 +2,6 @@ package com.campusmarket.server.users
 
 import com.campusmarket.core.ApiRoutes
 import com.campusmarket.core.ErrorCodes
-import com.campusmarket.core.ErrorResponse
 import com.campusmarket.core.UpdateProfileRequest
 import com.campusmarket.core.UserPrivate
 import com.campusmarket.core.UserRole
@@ -13,19 +12,14 @@ import io.ktor.client.call.body
 import io.ktor.client.request.bearerAuth
 import io.ktor.client.request.get
 import io.ktor.client.request.patch
-import io.ktor.client.statement.HttpResponse
 import io.ktor.http.HttpStatusCode
 import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import com.campusmarket.server.assertApiError
 
 class MeTest {
-
-    private suspend fun HttpResponse.assertError(status: HttpStatusCode, code: String): ErrorResponse {
-        assertEquals(status, this.status)
-        return body<ErrorResponse>().also { assertEquals(code, it.code) }
-    }
 
     @Test
     fun getMe() = apiTest { env ->
@@ -44,9 +38,9 @@ class MeTest {
 
     @Test
     fun meRequiresAValidToken() = apiTest {
-        client.get(ApiRoutes.ME).assertError(HttpStatusCode.Unauthorized, ErrorCodes.UNAUTHORIZED)
-        client.get(ApiRoutes.ME) { bearerAuth("garbage") }.assertError(HttpStatusCode.Unauthorized, ErrorCodes.UNAUTHORIZED)
-        client.patch(ApiRoutes.ME) { json(UpdateProfileRequest(bio = "x")) }.assertError(HttpStatusCode.Unauthorized, ErrorCodes.UNAUTHORIZED)
+        client.get(ApiRoutes.ME).assertApiError(HttpStatusCode.Unauthorized, ErrorCodes.UNAUTHORIZED)
+        client.get(ApiRoutes.ME) { bearerAuth("garbage") }.assertApiError(HttpStatusCode.Unauthorized, ErrorCodes.UNAUTHORIZED)
+        client.patch(ApiRoutes.ME) { json(UpdateProfileRequest(bio = "x")) }.assertApiError(HttpStatusCode.Unauthorized, ErrorCodes.UNAUTHORIZED)
     }
 
     @Test
@@ -77,11 +71,11 @@ class MeTest {
         val err = client.patch(ApiRoutes.ME) {
             auth(alice)
             json(UpdateProfileRequest(displayName = " A ", bio = "x".repeat(301), avatarPhotoId = "not-a-uuid"))
-        }.assertError(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
+        }.assertApiError(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
         assertEquals(setOf("displayName", "bio", "avatarPhotoId"), err.fields.keys)
 
         val long = client.patch(ApiRoutes.ME) { auth(alice); json(UpdateProfileRequest(displayName = "x".repeat(41))) }
-        assertEquals(setOf("displayName"), long.assertError(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION).fields.keys)
+        assertEquals(setOf("displayName"), long.assertApiError(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION).fields.keys)
         // nothing was applied
         assertEquals("alice", client.get(ApiRoutes.ME) { auth(alice) }.body<UserPrivate>().displayName)
     }
@@ -99,7 +93,7 @@ class MeTest {
 
         for (bad in listOf(theirs.toString(), UUID.randomUUID().toString())) {
             val err = client.patch(ApiRoutes.ME) { auth(alice); json(UpdateProfileRequest(avatarPhotoId = bad)) }
-                .assertError(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
+                .assertApiError(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
             assertEquals(setOf("avatarPhotoId"), err.fields.keys)
         }
         assertEquals("http://localhost/uploads/$mine.jpg", client.get(ApiRoutes.ME) { auth(alice) }.body<UserPrivate>().avatarUrl)

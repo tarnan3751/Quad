@@ -18,6 +18,7 @@ import com.campusmarket.core.ReportReason
 import com.campusmarket.core.ReportTargetType
 import com.campusmarket.core.UserRole
 import com.campusmarket.server.TestEnv
+import com.campusmarket.server.assertApiError
 import com.campusmarket.server.auth
 import com.campusmarket.server.json
 import com.campusmarket.server.query
@@ -42,9 +43,6 @@ import kotlin.test.assertTrue
 /** Buyer disputes, their effect on the order, and moderators resolving them. */
 class DisputeTest {
 
-    private suspend fun PaymentsScope.confirm(user: TestEnv.TestUser, id: String) = client.post(ApiRoutes.orderConfirm(id)) { auth(user) }
-    private suspend fun PaymentsScope.cancel(user: TestEnv.TestUser, id: String) = client.post(ApiRoutes.orderCancel(id)) { auth(user) }
-    private suspend fun PaymentsScope.getOrder(user: TestEnv.TestUser, id: String) = client.get(ApiRoutes.order(id)) { auth(user) }.body<Order>()
     private suspend fun PaymentsScope.case(mod: TestEnv.TestUser, orderId: String) = client.get(ApiRoutes.modDispute(orderId)) { auth(mod) }
 
     private suspend fun PaymentsScope.queue(mod: TestEnv.TestUser, query: String = ""): Page<DisputeCase> {

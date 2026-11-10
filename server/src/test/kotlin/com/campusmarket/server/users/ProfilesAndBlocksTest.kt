@@ -2,7 +2,6 @@ package com.campusmarket.server.users
 
 import com.campusmarket.core.ApiRoutes
 import com.campusmarket.core.ErrorCodes
-import com.campusmarket.core.ErrorResponse
 import com.campusmarket.core.OkResponse
 import com.campusmarket.core.UserPublic
 import com.campusmarket.core.UserRole
@@ -13,7 +12,6 @@ import io.ktor.client.call.body
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.post
-import io.ktor.client.statement.HttpResponse
 import io.ktor.http.HttpStatusCode
 import java.time.Instant
 import java.util.UUID
@@ -21,13 +19,9 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import com.campusmarket.server.assertApiError
 
 class ProfilesAndBlocksTest {
-
-    private suspend fun HttpResponse.assertError(status: HttpStatusCode, code: String): ErrorResponse {
-        assertEquals(status, this.status)
-        return body<ErrorResponse>().also { assertEquals(code, it.code) }
-    }
 
     // ---------- GET /users/{id} ----------
 
@@ -58,9 +52,9 @@ class ProfilesAndBlocksTest {
         val pending = env.user("pending")
         env.db.tx { c -> c.update("UPDATE users SET email_verified = false WHERE id = ?", pending.id) }
         for (id in listOf(carol.id.toString(), pending.id.toString(), UUID.randomUUID().toString(), "not-a-uuid")) {
-            client.get(ApiRoutes.user(id)) { auth(alice) }.assertError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
+            client.get(ApiRoutes.user(id)) { auth(alice) }.assertApiError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
         }
-        client.get(ApiRoutes.user(alice.id.toString())).assertError(HttpStatusCode.Unauthorized, ErrorCodes.UNAUTHORIZED)
+        client.get(ApiRoutes.user(alice.id.toString())).assertApiError(HttpStatusCode.Unauthorized, ErrorCodes.UNAUTHORIZED)
     }
 
     @Test
@@ -121,18 +115,18 @@ class ProfilesAndBlocksTest {
     fun blockRules() = apiTest { env ->
         val alice = env.user("alice")
         val carol = env.user("carol", domain = "other.edu")
-        client.post(ApiRoutes.userBlock(alice.id.toString())) { auth(alice) }.assertError(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
-        client.delete(ApiRoutes.userBlock(alice.id.toString())) { auth(alice) }.assertError(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
-        client.post(ApiRoutes.userBlock(carol.id.toString())) { auth(alice) }.assertError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
-        client.post(ApiRoutes.userBlock(UUID.randomUUID().toString())) { auth(alice) }.assertError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
-        client.post(ApiRoutes.userBlock("nope")) { auth(alice) }.assertError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
-        client.delete(ApiRoutes.userBlock(UUID.randomUUID().toString())) { auth(alice) }.assertError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
-        client.post(ApiRoutes.userBlock(carol.id.toString())).assertError(HttpStatusCode.Unauthorized, ErrorCodes.UNAUTHORIZED)
-        client.get(ApiRoutes.MY_BLOCKS).assertError(HttpStatusCode.Unauthorized, ErrorCodes.UNAUTHORIZED)
+        client.post(ApiRoutes.userBlock(alice.id.toString())) { auth(alice) }.assertApiError(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
+        client.delete(ApiRoutes.userBlock(alice.id.toString())) { auth(alice) }.assertApiError(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
+        client.post(ApiRoutes.userBlock(carol.id.toString())) { auth(alice) }.assertApiError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
+        client.post(ApiRoutes.userBlock(UUID.randomUUID().toString())) { auth(alice) }.assertApiError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
+        client.post(ApiRoutes.userBlock("nope")) { auth(alice) }.assertApiError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
+        client.delete(ApiRoutes.userBlock(UUID.randomUUID().toString())) { auth(alice) }.assertApiError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
+        client.post(ApiRoutes.userBlock(carol.id.toString())).assertApiError(HttpStatusCode.Unauthorized, ErrorCodes.UNAUTHORIZED)
+        client.get(ApiRoutes.MY_BLOCKS).assertApiError(HttpStatusCode.Unauthorized, ErrorCodes.UNAUTHORIZED)
 
         // moderators may view other campuses but blocking stays campus-scoped
         val mod = env.user("mod", role = UserRole.MODERATOR)
-        client.post(ApiRoutes.userBlock(carol.id.toString())) { auth(mod) }.assertError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
+        client.post(ApiRoutes.userBlock(carol.id.toString())) { auth(mod) }.assertApiError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
     }
 
     @Test

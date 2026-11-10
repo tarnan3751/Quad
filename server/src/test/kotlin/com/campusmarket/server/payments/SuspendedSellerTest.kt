@@ -11,11 +11,10 @@ import com.campusmarket.core.ListingStatus
 import com.campusmarket.core.Order
 import com.campusmarket.core.OrderStatus
 import com.campusmarket.core.Page
-import com.campusmarket.server.TestEnv
+import com.campusmarket.server.assertApiError
 import com.campusmarket.server.auth
 import io.ktor.client.call.body
 import io.ktor.client.request.get
-import io.ktor.client.request.post
 import io.ktor.http.HttpStatusCode
 import java.time.Instant
 import java.util.UUID
@@ -36,9 +35,6 @@ class SuspendedSellerTest {
         val clock = MutableClock()
         paymentsTest(options = PaymentOptions(expiryJobEnabled = false, clock = clock)) { block(clock) }
     }
-
-    private suspend fun PaymentsScope.confirm(user: TestEnv.TestUser, id: String) = client.post(ApiRoutes.orderConfirm(id)) { auth(user) }
-    private suspend fun PaymentsScope.getOrder(user: TestEnv.TestUser, id: String) = client.get(ApiRoutes.order(id)) { auth(user) }.body<Order>()
 
     @Test
     fun aSuspendedSellersUnpaidCheckoutsAreClosed() = clocked {

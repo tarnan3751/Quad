@@ -2,7 +2,6 @@ package com.campusmarket.server.payments
 
 import com.campusmarket.core.ApiRoutes
 import com.campusmarket.core.ErrorCodes
-import com.campusmarket.core.ErrorResponse
 import com.campusmarket.core.ListingStatus
 import com.campusmarket.core.Order
 import com.campusmarket.core.OrderStatus
@@ -11,8 +10,6 @@ import com.campusmarket.server.auth
 import com.campusmarket.server.update
 import io.ktor.client.call.body
 import io.ktor.client.request.get
-import io.ktor.client.request.post
-import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.async
@@ -24,17 +21,10 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
+import com.campusmarket.server.assertApiError
 
 /** Crashes, lost responses, races and the background sweep. */
 class OrderRecoveryTest {
-
-    private suspend fun HttpResponse.assertError(status: HttpStatusCode, code: String) {
-        assertEquals(status, this.status, bodyAsText())
-        assertEquals(code, body<ErrorResponse>().code)
-    }
-
-    private suspend fun PaymentsScope.confirm(user: TestEnv.TestUser, id: String) = client.post(ApiRoutes.orderConfirm(id)) { auth(user) }
-    private suspend fun PaymentsScope.cancel(user: TestEnv.TestUser, id: String) = client.post(ApiRoutes.orderCancel(id)) { auth(user) }
 
     @Test
     fun confirmRetriedAfterTransferSucceededDoesNotPayTwice() = paymentsTest {
@@ -44,12 +34,12 @@ class OrderRecoveryTest {
 
         // the transfer goes through but the response is lost
         gateway.failNext("createTransfer", retryable = true, afterPerforming = true)
-        confirm(buyer, order.id).assertError(HttpStatusCode.BadGateway, ErrorCodes.PAYMENT_FAILED)
+        confirm(buyer, order.id).assertApiError(HttpStatusCode.BadGateway, ErrorCodes.PAYMENT_FAILED)
         assertEquals(OrderStatus.PAID, orderStatus(order.id))
         assertEquals(PendingAction.TRANSFER, orderRow(order.id).pendingAction)
 
         // the seller can't slip a refund in while the transfer's outcome is unknown
-        cancel(seller, order.id).assertError(HttpStatusCode.Conflict, ErrorCodes.INVALID_ORDER_STATE)
+        cancel(seller, order.id).assertApiError(HttpStatusCode.Conflict, ErrorCodes.INVALID_ORDER_STATE)
         assertTrue(gateway.calls("refund").isEmpty())
 
         // retry: same idempotency key, the one transfer is reused, order completes
@@ -68,7 +58,7 @@ class OrderRecoveryTest {
         val order = paidOrder(buyer = buyer, seller = seller)
 
         gateway.failNext("createTransfer", retryable = false)
-        confirm(buyer, order.id).assertError(HttpStatusCode.BadGateway, ErrorCodes.PAYMENT_FAILED)
+        confirm(buyer, order.id).assertApiError(HttpStatusCode.BadGateway, ErrorCodes.PAYMENT_FAILED)
         val row = orderRow(order.id)
         assertEquals(OrderStatus.PAID, row.status)
         assertEquals(null, row.pendingAction)
@@ -99,10 +89,10 @@ class OrderRecoveryTest {
         val seller = seller()
         val order = paidOrder(buyer = buyer, seller = seller)
         gateway.failNext("refund", retryable = true, afterPerforming = true)
-        cancel(seller, order.id).assertError(HttpStatusCode.BadGateway, ErrorCodes.PAYMENT_FAILED)
+        cancel(seller, order.id).assertApiError(HttpStatusCode.BadGateway, ErrorCodes.PAYMENT_FAILED)
         assertEquals(PendingAction.REFUND, orderRow(order.id).pendingAction)
         // the buyer can't confirm (transfer) while a refund may be under way
-        confirm(buyer, order.id).assertError(HttpStatusCode.Conflict, ErrorCodes.INVALID_ORDER_STATE)
+        confirm(buyer, order.id).assertApiError(HttpStatusCode.Conflict, ErrorCodes.INVALID_ORDER_STATE)
 
         assertEquals(OrderStatus.REFUNDED, cancel(seller, order.id).body<Order>().status)
         assertEquals(1, gateway.args<RefundRequest>("refund").map { it.idempotencyKey }.toSet().size)
@@ -131,8 +121,8 @@ class OrderRecoveryTest {
                 OrderStatus.REFUNDED -> assertEquals(null, fake.transferFor(id))
                 else -> error("unexpected final state $final")
             }
-            if (c1.status != HttpStatusCode.OK) c1.assertError(HttpStatusCode.Conflict, ErrorCodes.INVALID_ORDER_STATE)
-            if (c2.status != HttpStatusCode.OK) c2.assertError(HttpStatusCode.Conflict, ErrorCodes.INVALID_ORDER_STATE)
+            if (c1.status != HttpStatusCode.OK) c1.assertApiError(HttpStatusCode.Conflict, ErrorCodes.INVALID_ORDER_STATE)
+            if (c2.status != HttpStatusCode.OK) c2.assertApiError(HttpStatusCode.Conflict, ErrorCodes.INVALID_ORDER_STATE)
         }
     }
 
@@ -210,7 +200,7 @@ class OrderRecoveryTest {
         val listing = env.listing(seller())
         val order = buyOk(buyer, listing)
         gateway.failNext("expireCheckoutSession")
-        cancel(buyer, order.id).assertError(HttpStatusCode.BadGateway, ErrorCodes.PAYMENT_FAILED)
+        cancel(buyer, order.id).assertApiError(HttpStatusCode.BadGateway, ErrorCodes.PAYMENT_FAILED)
         assertEquals(OrderStatus.PENDING_PAYMENT, orderStatus(order.id))
         assertEquals(ListingStatus.RESERVED, listingStatus(listing))
         assertEquals(OrderStatus.CANCELLED, cancel(buyer, order.id).body<Order>().status)
