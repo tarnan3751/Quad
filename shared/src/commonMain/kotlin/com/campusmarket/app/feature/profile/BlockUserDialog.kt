@@ -2,6 +2,7 @@ package com.campusmarket.app.feature.profile
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.AlertDialog
@@ -116,5 +117,8 @@ fun BlockUserDialog(user: UserPublic, onDismiss: () -> Unit, onDone: (blocked: B
 
 @Composable
 private fun Bullet(text: String) {
-    Text("•  $text", style = MaterialTheme.typography.bodyMedium)
+    Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+        Text("•", style = MaterialTheme.typography.bodyMedium)
+        Text(text, style = MaterialTheme.typography.bodyMedium)
+    }
 }

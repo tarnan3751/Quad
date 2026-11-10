@@ -52,6 +52,8 @@ import androidx.navigation.NavController
 import com.campusmarket.app.feature.listing.ListingDetailRoute
 import com.campusmarket.app.feature.profile.Chevron
 import com.campusmarket.app.feature.profile.Glyphs
+import com.campusmarket.app.feature.profile.ListingLine
+import com.campusmarket.app.feature.profile.PersonLine
 import com.campusmarket.app.feature.profile.MenuDivider
 import com.campusmarket.app.feature.profile.MenuGroup
 import com.campusmarket.app.feature.profile.MenuRow
@@ -69,12 +71,10 @@ import com.campusmarket.app.ui.components.CollectEvents
 import com.campusmarket.app.ui.components.EmptyState
 import com.campusmarket.app.ui.components.ErrorState
 import com.campusmarket.app.ui.components.FilterChip
-import com.campusmarket.app.ui.components.ListingRow
 import com.campusmarket.app.ui.components.PagedLazyColumn
 import com.campusmarket.app.ui.components.RemoteImage
 import com.campusmarket.app.ui.components.ReportStatusChip
 import com.campusmarket.app.ui.components.StatusChip
-import com.campusmarket.app.ui.components.UserRow
 import com.campusmarket.app.ui.label
 import com.campusmarket.app.ui.state.UiState
 import com.campusmarket.app.ui.theme.Spacing
@@ -485,10 +485,10 @@ private fun ReportBody(report: Report, nav: NavController, onOpenDialog: (ModDia
     ContentCard {
         when (report.targetType) {
             ReportTargetType.LISTING ->
-                if (listing != null) ListingRow(listing, onClick = { nav.navigate(ListingDetailRoute(listing.id)) })
+                if (listing != null) ListingLine(listing, onClick = { nav.navigate(ListingDetailRoute(listing.id)) })
                 else MissingTarget(report.targetSummary, "This listing is no longer available.")
             ReportTargetType.USER ->
-                if (targetUser != null) UserRow(targetUser, onClick = { nav.navigate(UserProfileRoute(targetUser.id)) }, trailing = { Chevron() })
+                if (targetUser != null) PersonLine(targetUser, onClick = { nav.navigate(UserProfileRoute(targetUser.id)) })
                 else MissingTarget(report.targetSummary, "This account no longer exists.")
             ReportTargetType.MESSAGE -> Column(Modifier.padding(vertical = Spacing.md)) {
                 Row(Modifier.padding(horizontal = Spacing.lg), horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
@@ -510,7 +510,7 @@ private fun ReportBody(report: Report, nav: NavController, onOpenDialog: (ModDia
                         color = scheme.onSurfaceVariant,
                         modifier = Modifier.padding(start = Spacing.lg, top = Spacing.md),
                     )
-                    ListingRow(listing, onClick = { nav.navigate(ListingDetailRoute(listing.id)) })
+                    ListingLine(listing, onClick = { nav.navigate(ListingDetailRoute(listing.id)) })
                 }
             }
             ReportTargetType.ORDER -> MissingTarget(report.targetSummary, "Orders aren't reported; see Disputes.")
@@ -522,7 +522,7 @@ private fun ReportBody(report: Report, nav: NavController, onOpenDialog: (ModDia
         if (report.targetType != ReportTargetType.USER) {
             ModHeading(if (report.targetType == ReportTargetType.LISTING) "Seller" else "Sender")
             ContentCard {
-                UserRow(targetUser, onClick = { nav.navigate(UserProfileRoute(targetUser.id)) }, supporting = targetUser.campusDomain, trailing = { Chevron() })
+                PersonLine(targetUser, onClick = { nav.navigate(UserProfileRoute(targetUser.id)) })
             }
         }
         val count = report.openReportsAgainstTargetUser
@@ -554,7 +554,7 @@ private fun ReportBody(report: Report, nav: NavController, onOpenDialog: (ModDia
             }
         }
         if (ModerationAction.REMOVE_LISTING in actions || ModerationAction.SUSPEND_USER in actions) {
-            MenuGroup("Take action") {
+            MenuGroup("Take action", warning = true) {
                 if (ModerationAction.REMOVE_LISTING in actions) {
                     val removable = listing == null || canRemoveListing(listing.status)
                     MenuRow(

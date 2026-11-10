@@ -35,6 +35,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
@@ -49,8 +50,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.campusmarket.app.ui.components.Avatar
+import com.campusmarket.app.ui.components.ListingStatusChip
+import com.campusmarket.app.ui.components.PriceText
+import com.campusmarket.app.ui.components.RatingSummary
+import com.campusmarket.app.ui.components.RemoteImage
 import com.campusmarket.app.ui.theme.CampusTheme
 import com.campusmarket.app.ui.theme.Spacing
+import com.campusmarket.core.ListingSummary
+import com.campusmarket.core.UserPublic
 
 // Building blocks shared by the profile and moderation screens (feature-local on purpose: see docs/CLIENT.md).
 
@@ -144,15 +152,15 @@ internal object Glyphs {
 
 // ---------------------------------------------------------------------------------------------------- menu
 
-/** A titled card of [MenuRow]s (the grouped-list look of the profile tab and settings). */
+/** A titled card of [MenuRow]s (the grouped-list look of the profile tab and settings). [warning] tints the title red. */
 @Composable
-internal fun MenuGroup(title: String?, modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+internal fun MenuGroup(title: String?, modifier: Modifier = Modifier, warning: Boolean = false, content: @Composable ColumnScope.() -> Unit) {
     Column(modifier.fillMaxWidth().padding(horizontal = Spacing.screen)) {
         if (title != null) {
             Text(
                 title,
                 style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = if (warning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(start = Spacing.xs, top = Spacing.xl, bottom = Spacing.sm).semantics { heading() },
             )
         } else {
@@ -229,6 +237,53 @@ internal fun Chevron() {
 @Composable
 internal fun ExternalMark() {
     Icon(Glyphs.OpenInNew, contentDescription = "Opens in your browser", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+}
+
+/**
+ * A listing as one tappable line inside a card (no background of its own, unlike `ListingRow`): thumbnail, title,
+ * price, then [trailing] (the status by default).
+ */
+@Composable
+internal fun ListingLine(
+    listing: ListingSummary,
+    onClick: (() -> Unit)?,
+    trailing: @Composable () -> Unit = { ListingStatusChip(listing.status) },
+) {
+    Row(
+        Modifier.fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)
+            .padding(horizontal = Spacing.lg, vertical = Spacing.md),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+    ) {
+        RemoteImage(listing.thumbnailUrl, contentDescription = null, modifier = Modifier.size(52.dp).clip(MaterialTheme.shapes.small))
+        Column(Modifier.weight(1f)) {
+            Text(listing.title, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold), maxLines = 2, overflow = TextOverflow.Ellipsis)
+            PriceText(listing.priceCents, currency = listing.currency, style = MaterialTheme.typography.bodyMedium)
+        }
+        trailing()
+    }
+}
+
+/** A person as one tappable line inside a card: avatar, name, [supporting] (rating by default), chevron. */
+@Composable
+internal fun PersonLine(user: UserPublic, onClick: (() -> Unit)?, supporting: String? = null, trailing: (@Composable () -> Unit)? = null) {
+    Row(
+        Modifier.fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)
+            .padding(horizontal = Spacing.lg, vertical = Spacing.md),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+    ) {
+        Avatar(user.avatarUrl, user.displayName, size = 44.dp)
+        Column(Modifier.weight(1f)) {
+            Text(user.displayName, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (supporting != null) Text(supporting, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            else RatingSummary(user.ratingAverage, user.ratingCount)
+        }
+        trailing?.invoke()
+        if (onClick != null) Chevron()
+    }
 }
 
 // ---------------------------------------------------------------------------------------------------- stats

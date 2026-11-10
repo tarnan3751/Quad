@@ -257,13 +257,19 @@ class ProfileModerationScreenshotTest {
                 shot("p08-other-public")
                 runCatching { click("Ratings", substring = true) }
                 shot("p09-other-ratings")
-                runCatching { clickNode(hasContentDescription("More options") and hasClickAction()) }
-                shot("p10-other-menu")
-                runCatching { click("Block user") }
+                runCatching { click("Ratings", substring = true) }
+                runCatching { click("Listings", substring = true) }
+                runCatching { click("Message") }
+                shot("p10-message-sheet")
+                back()
+                go(UserProfileRoute(seller.id))
+                awaitText(seller.bio.take(12))
+                runCatching { click("Block") }
                 shot("p11-block-dialog")
                 runCatching { click("Cancel") }
                 runCatching { clickNode(hasContentDescription("More options") and hasClickAction()) }
-                runCatching { click("Report user", substring = true) }
+                shot("p11b-other-menu")
+                runCatching { click("Report ${seller.displayName}") }
                 shot("p12-report-sheet")
                 runCatching { click("Spam") }
                 shot("p13-report-sheet-reason")
@@ -284,6 +290,10 @@ class ProfileModerationScreenshotTest {
                 shot("m02-queue-resolved")
                 runCatching { click("Dismissed") }
                 shot("m03-queue-dismissed")
+                runCatching { click("Open") }
+                runCatching { click("Messages") }
+                shot("m04-queue-filter-messages")
+                runCatching { click("All") }
                 openReports.forEachIndexed { i, r ->
                     go(ReportDetailRoute(r.id))
                     awaitText(r.reporter.displayName)
@@ -343,7 +353,7 @@ class ProfileModerationScreenshotTest {
                 onAllNodes(hasSetTextAction()).onFirst().performImeAction()
                 awaitText("Priya")
                 shot("a03-staff-search")
-                runCatching { click("Promote", substring = true) }
+                runCatching { click("Make moderator") }
                 shot("a04-staff-promote-dialog")
             }
         }

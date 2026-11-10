@@ -39,6 +39,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.campusmarket.app.feature.listing.ListingDetailRoute
 import com.campusmarket.app.feature.profile.Glyphs
+import com.campusmarket.app.feature.profile.ListingLine
 import com.campusmarket.app.feature.profile.UserProfileRoute
 import com.campusmarket.app.feature.profile.ago
 import com.campusmarket.app.navigation.LocalCurrentUser
@@ -50,7 +51,6 @@ import com.campusmarket.app.ui.components.ChipTone
 import com.campusmarket.app.ui.components.CollectEvents
 import com.campusmarket.app.ui.components.EmptyState
 import com.campusmarket.app.ui.components.ErrorState
-import com.campusmarket.app.ui.components.ListingRow
 import com.campusmarket.app.ui.components.OrderStatusChip
 import com.campusmarket.app.ui.components.PagedLazyColumn
 import com.campusmarket.app.ui.components.PriceText
@@ -240,7 +240,7 @@ private fun DisputeBody(case: DisputeCase, nav: NavController, canResolve: Boole
                     PriceText(case.amountCents, currency = case.currency, style = CampusTheme.priceLarge)
                 }
                 Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
-                    StatusChip(if (d.status == DisputeStatus.OPEN) "Open dispute" else "Closed", if (d.status == DisputeStatus.OPEN) ChipTone.Warning else ChipTone.Neutral)
+                    if (d.status == DisputeStatus.CLOSED) StatusChip("Dispute closed", ChipTone.Neutral)
                     OrderStatusChip(case.orderStatus)
                 }
             }
@@ -278,7 +278,7 @@ private fun DisputeBody(case: DisputeCase, nav: NavController, canResolve: Boole
     ModHeading("Order")
     Surface(shape = MaterialTheme.shapes.medium, color = scheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.screen)) {
         Column(Modifier.padding(bottom = Spacing.md)) {
-            ListingRow(case.listing, onClick = { nav.navigate(ListingDetailRoute(case.listing.id)) })
+            ListingLine(case.listing, onClick = { nav.navigate(ListingDetailRoute(case.listing.id)) })
             HorizontalDivider(Modifier.padding(horizontal = Spacing.lg), color = scheme.outlineVariant)
             Column(Modifier.padding(horizontal = Spacing.lg, vertical = Spacing.sm), verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
                 AmountRow("Buyer paid", Format.price(case.amountCents, case.currency))

@@ -101,7 +101,6 @@ import com.campusmarket.app.ui.components.EmptyState
 import com.campusmarket.app.ui.components.ErrorState
 import com.campusmarket.app.ui.components.InlineError
 import com.campusmarket.app.ui.components.ListingCard
-import com.campusmarket.app.ui.components.ListingRow
 import com.campusmarket.app.ui.components.PagedLazyColumn
 import com.campusmarket.app.ui.components.PagedLazyGrid
 import com.campusmarket.app.ui.components.PrimaryButton
@@ -307,7 +306,7 @@ fun UserProfileScreen(route: UserProfileRoute, nav: NavController) {
                                     onClick = { menuOpen = false; reporting = true },
                                 )
                                 DropdownMenuItem(
-                                    text = { Text(if (loaded.blockedByMe) "Unblock" else "Block") },
+                                    text = { Text(if (loaded.blockedByMe) "Unblock ${loaded.displayName}" else "Block ${loaded.displayName}") },
                                     leadingIcon = { Icon(Glyphs.Block, contentDescription = null) },
                                     onClick = { menuOpen = false; blocking = true },
                                 )
@@ -742,7 +741,7 @@ private fun MessageAboutSheet(
                     modifier = Modifier.padding(horizontal = Spacing.screen, vertical = Spacing.md),
                 )
                 else -> listings.forEach { listing ->
-                    ListingRow(listing, onClick = { onPick(listing) }, trailing = { Chevron() })
+                    ListingLine(listing, onClick = { onPick(listing) }, trailing = { Chevron() })
                 }
             }
         }

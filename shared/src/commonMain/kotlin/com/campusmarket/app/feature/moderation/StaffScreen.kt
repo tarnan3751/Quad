@@ -3,6 +3,8 @@ package com.campusmarket.app.feature.moderation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -178,8 +180,7 @@ private fun MemberGroup(title: String, members: List<StaffMember>, currentUserId
 private fun MemberRow(m: StaffMember, currentUserId: String, onAction: (StaffMember) -> Unit) {
     val isMe = m.user.id == currentUserId
     Row(
-        Modifier.fillMaxWidth().padding(start = Spacing.lg, end = Spacing.sm, top = Spacing.md, bottom = Spacing.md),
-        verticalAlignment = Alignment.CenterVertically,
+        Modifier.fillMaxWidth().padding(start = Spacing.lg, end = Spacing.sm, top = Spacing.md, bottom = Spacing.sm),
         horizontalArrangement = Arrangement.spacedBy(Spacing.md),
     ) {
         Avatar(m.user.avatarUrl, m.user.displayName, size = 40.dp)
@@ -187,23 +188,28 @@ private fun MemberRow(m: StaffMember, currentUserId: String, onAction: (StaffMem
             Text(
                 if (isMe) "${m.user.displayName} (you)" else m.user.displayName,
                 style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(m.email, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            StatusChip(
-                m.role.label,
-                when (m.role) {
-                    UserRole.ADMIN -> ChipTone.Info
-                    UserRole.MODERATOR -> ChipTone.Positive
-                    UserRole.USER -> ChipTone.Neutral
-                },
-                Modifier.padding(top = 2.dp),
-            )
-        }
-        if (canChangeRole(m, currentUserId)) {
-            TextButton(onClick = { onAction(m) }) {
-                Text(if (m.role == UserRole.MODERATOR) "Remove moderator" else "Make moderator")
+            // Role and the change sit on their own line so long names and emails aren't squeezed by the button.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                StatusChip(
+                    m.role.label,
+                    when (m.role) {
+                        UserRole.ADMIN -> ChipTone.Info
+                        UserRole.MODERATOR -> ChipTone.Positive
+                        UserRole.USER -> ChipTone.Neutral
+                    },
+                )
+                Spacer(Modifier.weight(1f))
+                if (canChangeRole(m, currentUserId)) {
+                    TextButton(onClick = { onAction(m) }) {
+                        Text(if (m.role == UserRole.MODERATOR) "Remove moderator" else "Make moderator")
+                    }
+                } else {
+                    Spacer(Modifier.height(Spacing.sm))
+                }
             }
         }
     }

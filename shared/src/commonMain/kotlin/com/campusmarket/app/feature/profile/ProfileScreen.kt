@@ -122,7 +122,7 @@ fun ProfileScreen(nav: NavController) {
                     MenuRow(
                         Glyphs.Wallet,
                         "Payouts",
-                        if (user.payoutsEnabled) "Sales are paid to your bank account" else "Set up payouts to get paid for sales",
+                        if (user.payoutsEnabled) "Sales are paid to your bank" else "Get paid for what you sell",
                         onClick = { nav.navigate(PayoutsRoute) },
                         trailing = {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {

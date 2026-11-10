@@ -251,6 +251,8 @@ class UserProfileViewModel(
 
     init {
         load(_user) { api.user(userId) }
+        // The header's listing count and the Message sheet need the listings even when the Ratings tab is open.
+        listings.refresh()
     }
 
     fun reload() {
