@@ -3,6 +3,7 @@ package com.campusmarket.app.feature.chat
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onAllNodesWithContentDescription
@@ -33,6 +34,7 @@ import com.campusmarket.app.di.coreModule
 import com.campusmarket.app.di.featureModules
 import com.campusmarket.app.feature.orders.buyerUser
 import com.campusmarket.app.feature.orders.sellerUser
+import com.campusmarket.app.hasContentDescriptionStartingWith
 import com.campusmarket.app.platform.AppEnvironment
 import com.campusmarket.app.platform.DeepLinks
 import com.campusmarket.app.platform.PlatformKind
@@ -177,13 +179,17 @@ class ChatOrdersUiTest {
 
     private fun signedIn() = InMemoryTokenStore(StoredSession("a1", "r1", System.currentTimeMillis() + HOUR, testUser))
 
+    /** Shown text, or the summary a row or chat bubble is read as (its texts are in the content description). */
+    private fun shows(text: String) = hasText(text, substring = true) or hasContentDescription(text, substring = true)
+
     private fun ComposeUiTest.awaitText(text: String, timeoutMillis: Long = 5_000) {
-        waitUntil(timeoutMillis = timeoutMillis) { onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
+        waitUntil(timeoutMillis = timeoutMillis) { onAllNodes(shows(text)).fetchSemanticsNodes().isNotEmpty() }
     }
 
     private fun ComposeUiTest.click(text: String) {
-        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText(text) and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
-        val node = onAllNodes(hasText(text) and hasClickAction()).onFirst()
+        val matcher = (hasText(text) or hasContentDescriptionStartingWith(text)) and hasClickAction()
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty() }
+        val node = onAllNodes(matcher).onFirst()
         try {
             node.performScrollTo()
         } catch (e: AssertionError) {
@@ -224,14 +230,14 @@ class ChatOrdersUiTest {
         clickDescription("Send")
         waitUntil(timeoutMillis = 5_000) { sent.contains("Can I come at 5?") }
         awaitText("Sent")
-        waitUntil(timeoutMillis = 5_000) { onAllNodesWithText("Can I come at 5?").fetchSemanticsNodes().size == 1 }
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(shows("Can I come at 5?")).fetchSemanticsNodes().size == 1 }
 
         // Live message from the seller, then their read receipt.
         live.emit(ChatEvent.MessageCreated(Message("m-live", "c1", sellerUser.id, "Sure, see you then!", System.currentTimeMillis())))
         awaitText("Sure, see you then!")
         live.emit(ChatEvent.MessageCreated(Message("m-live", "c1", sellerUser.id, "Sure, see you then!", System.currentTimeMillis())))
         waitForIdle()
-        assertEquals(1, onAllNodesWithText("Sure, see you then!").fetchSemanticsNodes().size, "de-duplicated by id")
+        assertEquals(1, onAllNodes(shows("Sure, see you then!")).fetchSemanticsNodes().size, "de-duplicated by id")
 
         // Back to the inbox: the row reflects the live message and the read.
         clickDescription("Back")

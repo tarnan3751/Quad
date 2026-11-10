@@ -258,7 +258,7 @@ internal fun ratingStat(average: Double?, count: Int, onClick: () -> Unit): Stat
             else -> "$count ratings"
         },
         onClick = onClick,
-        description = if (rated) "Rated ${Format.rating(average)} out of 5 from $count ratings" else "No ratings yet",
+        description = if (rated) "Rated ${Format.rating(average)} out of 5 from ${if (count == 1) "1 rating" else "$count ratings"}" else "No ratings yet",
         star = rated,
     )
 }

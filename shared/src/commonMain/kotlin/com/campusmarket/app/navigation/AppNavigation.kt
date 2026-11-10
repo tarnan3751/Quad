@@ -40,7 +40,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.findRootCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -75,8 +77,10 @@ import com.campusmarket.app.feature.orders.PayoutsRoute
 import com.campusmarket.app.feature.orders.ordersGraph
 import com.campusmarket.app.feature.profile.ProfileRoute
 import com.campusmarket.app.feature.profile.profileGraph
+import com.campusmarket.app.platform.AppEnvironment
 import com.campusmarket.app.platform.DeepLink
 import com.campusmarket.app.platform.DeepLinks
+import com.campusmarket.app.platform.PlatformKind
 import com.campusmarket.app.ui.components.AppNavigationBar
 import com.campusmarket.app.ui.components.AppNavigationBarItem
 import com.campusmarket.app.ui.components.AppSnackbar
@@ -213,9 +217,11 @@ private fun AuthShell(snackbar: SnackbarHostState) {
     }
 }
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 private fun SignedInShell(snackbar: SnackbarHostState) {
     val nav = rememberNavController()
+    val ios = koinInject<AppEnvironment>().platform == PlatformKind.IOS
     DeepLinkHandler(nav)
 
     val backStackEntry by nav.currentBackStackEntryAsState()
@@ -274,6 +280,10 @@ private fun SignedInShell(snackbar: SnackbarHostState) {
                 profileGraph(nav)
                 moderationGraph(nav)
             }
+            // iOS has no "back" between tabs: the edge swipe would otherwise pop Sell / Inbox / Profile to Browse.
+            // Registered after the NavHost so it goes first; a screen's own handler (e.g. Sell's unsaved form) still
+            // comes before it.
+            if (ios) BackHandler(enabled = onTabRoot && currentTab != TopLevelTab.Browse) { }
         }
     }
 }

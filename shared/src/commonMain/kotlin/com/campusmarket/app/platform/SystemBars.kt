@@ -19,6 +19,7 @@ expect fun StatusBarIcons(darkIcons: Boolean)
 /**
  * A full-screen dialog (the photo viewer) that draws behind the status and navigation bars, so its black backdrop
  * reaches the screen edges instead of leaving the dimmed app showing in the bars. Pad controls with the system-bar
- * insets. Android: `decorFitsSystemWindows = false`; elsewhere the platform default.
+ * insets. Android: `decorFitsSystemWindows = false`. iOS: `usePlatformInsets = false` (a dialog otherwise stops at
+ * the safe area).
  */
 expect fun edgeToEdgeDialogProperties(): DialogProperties

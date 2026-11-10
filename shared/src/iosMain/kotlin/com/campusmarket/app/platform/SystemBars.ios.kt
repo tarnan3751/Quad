@@ -1,8 +1,8 @@
 package com.campusmarket.app.platform
 
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.window.DialogProperties
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.window.DialogProperties
 import platform.Foundation.NSNumber
 import platform.Foundation.setValue
 import platform.UIKit.UIApplication
@@ -32,4 +32,5 @@ private fun UIApplication.setStatusBarStyleCompat(style: UIStatusBarStyle) {
     setValue(NSNumber(long = style), forKey = "statusBarStyle")
 }
 
-actual fun edgeToEdgeDialogProperties(): DialogProperties = DialogProperties(usePlatformDefaultWidth = false)
+actual fun edgeToEdgeDialogProperties(): DialogProperties =
+    DialogProperties(usePlatformDefaultWidth = false, usePlatformInsets = false)
