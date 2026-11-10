@@ -41,6 +41,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.campusmarket.app.ui.Format
 import com.campusmarket.app.ui.components.Avatar
 import com.campusmarket.app.ui.components.ConfirmDialog
 import com.campusmarket.app.ui.components.ListingStatusChip
@@ -50,6 +51,7 @@ import com.campusmarket.app.ui.components.RatingSummary
 import com.campusmarket.app.ui.components.RemoteImage
 import com.campusmarket.app.ui.components.avatarImageUrl
 import com.campusmarket.app.ui.components.listImageUrl
+import com.campusmarket.app.ui.label
 import com.campusmarket.app.ui.theme.CampusTheme
 import com.campusmarket.app.ui.theme.Spacing
 import com.campusmarket.core.ListingSummary
@@ -101,13 +103,18 @@ internal fun MenuRow(
     onClick: (() -> Unit)? = null,
     trailing: (@Composable () -> Unit)? = if (onClick != null) ({ Chevron() }) else null,
     destructive: Boolean = false,
+    /** What [trailing] says ("Opens in your browser", "Set up"), for screen readers. */
+    trailingDescription: String? = null,
 ) {
     val scheme = MaterialTheme.colorScheme
     val tileColor = if (destructive) scheme.errorContainer else scheme.primaryContainer
     val iconColor = if (destructive) scheme.onErrorContainer else scheme.onPrimaryContainer
+    // Read as one element in this order, whatever part of the row is on screen.
+    val spoken = listOfNotNull(title, supporting, trailingDescription).joinToString(", ")
     Row(
         Modifier.fillMaxWidth()
             .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)
+            .clearAndSetSemantics { contentDescription = spoken }
             .heightIn(min = 56.dp)
             .padding(horizontal = Spacing.lg, vertical = Spacing.md),
         verticalAlignment = Alignment.CenterVertically,
@@ -140,10 +147,12 @@ internal fun Chevron() {
     Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
+internal const val EXTERNAL_MARK_DESCRIPTION = "Opens in your browser"
+
 /** Trailing mark for rows that open a web page in the browser. */
 @Composable
 internal fun ExternalMark() {
-    Icon(QuadIcons.OpenInNew, contentDescription = "Opens in your browser", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+    Icon(QuadIcons.OpenInNew, contentDescription = EXTERNAL_MARK_DESCRIPTION, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
 }
 
 /**
@@ -156,9 +165,11 @@ internal fun ListingLine(
     onClick: (() -> Unit)?,
     trailing: @Composable () -> Unit = { ListingStatusChip(listing.status) },
 ) {
+    val spoken = "${listing.title}, ${Format.price(listing.priceCents, listing.currency)}, ${listing.status.label}"
     Row(
         Modifier.fillMaxWidth()
             .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)
+            .clearAndSetSemantics { contentDescription = spoken }
             .padding(horizontal = Spacing.lg, vertical = Spacing.md),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Spacing.md),
@@ -177,12 +188,12 @@ internal fun ListingLine(
 internal fun PersonLine(user: UserPublic, onClick: (() -> Unit)?, supporting: String? = null, trailing: (@Composable () -> Unit)? = null) {
     Row(
         Modifier.fillMaxWidth()
-            .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)
+            .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClickLabel = "View profile", onClick = onClick) else Modifier)
             .padding(horizontal = Spacing.lg, vertical = Spacing.md),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Spacing.md),
     ) {
-        Avatar(user.avatarImageUrl, user.displayName, size = 44.dp)
+        Avatar(user.avatarImageUrl, user.displayName, size = 44.dp, contentDescription = null)
         Column(Modifier.weight(1f)) {
             Text(user.displayName, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold), maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (supporting != null) Text(supporting, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)

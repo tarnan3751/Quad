@@ -28,6 +28,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -114,7 +116,7 @@ fun CheckoutScreen(route: CheckoutRoute, nav: NavController) {
                         PriceLine("Item price", Format.price(l.priceCents, l.currency))
                         PriceLine("Service fee", "Free")
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(Modifier.semantics(mergeDescendants = true) { }, verticalAlignment = Alignment.CenterVertically) {
                             Text("Total", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
                             PriceText(l.priceCents, currency = l.currency)
                         }
@@ -126,7 +128,7 @@ fun CheckoutScreen(route: CheckoutRoute, nav: NavController) {
                     }
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
-                    Text("What happens next", style = MaterialTheme.typography.titleMedium)
+                    Text("What happens next", style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
                     NumberedStep(
                         1,
                         "Pay securely with Stripe",
@@ -194,7 +196,7 @@ private fun SellerSection(listing: ListingDetail, onOpen: () -> Unit) {
 
 @Composable
 private fun PriceLine(label: String, value: String) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.semantics(mergeDescendants = true) { }, verticalAlignment = Alignment.CenterVertically) {
         Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
         Text(value, style = MaterialTheme.typography.bodyMedium)
     }

@@ -12,6 +12,7 @@ import com.campusmarket.app.LiveServer
 import com.campusmarket.app.awaitText
 import com.campusmarket.app.click
 import com.campusmarket.app.clickDescription
+import com.campusmarket.app.shows
 import com.campusmarket.app.data.ApiClient
 import com.campusmarket.app.data.awaitCondition
 import com.campusmarket.app.data.awaitValue
@@ -274,7 +275,7 @@ class LiveServerTest {
                 awaitText("Delete this listing?")
                 click("Delete", last = true)
                 awaitText("Post listing") // back on the (reset) Sell form
-                assertTrue(onAllNodesWithText(title).fetchSemanticsNodes().isEmpty())
+                assertTrue(onAllNodes(shows(title)).fetchSemanticsNodes().isEmpty())
             }
         } finally {
             stopKoin()

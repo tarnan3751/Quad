@@ -62,6 +62,9 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -70,6 +73,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import coil3.compose.AsyncImagePainter
+import com.campusmarket.app.ui.Format
+import com.campusmarket.app.ui.label
 import com.campusmarket.app.ui.rememberTimeFormat
 import com.campusmarket.app.ui.state.PagedState
 import com.campusmarket.app.ui.state.Paginator
@@ -217,9 +222,17 @@ fun ListingTile(
     modifier: Modifier = Modifier,
     onToggleFavorite: (() -> Unit)? = null,
 ) {
+    val age = rememberTimeFormat().ago(listing.createdAt)
+    // One summary for screen readers, set on the card itself: the texts below are clipped away while a tile is only
+    // half on screen, and a tile read from what is left of them says nothing. The heart stays its own element.
+    val spoken = buildString {
+        append(listing.title).append(", ").append(Format.price(listing.priceCents, listing.currency))
+        append(", ").append(listing.condition.label).append(", ").append(age)
+        if (listing.status != ListingStatus.ACTIVE) append(", ").append(listing.status.label)
+    }
     Card(
         onClick = onClick,
-        modifier = modifier,
+        modifier = modifier.semantics { contentDescription = spoken },
         shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
@@ -229,14 +242,14 @@ fun ListingTile(
                 if (listing.status != ListingStatus.RESERVED) {
                     Box(Modifier.matchParentSize().background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.28f)))
                 }
-                ListingStatusChip(listing.status, Modifier.align(Alignment.TopStart).padding(Spacing.sm))
+                ListingStatusChip(listing.status, Modifier.align(Alignment.TopStart).padding(Spacing.sm).clearAndSetSemantics { })
             }
             if (onToggleFavorite != null) {
                 FavoriteButton(listing.favorited, onToggleFavorite, Modifier.align(Alignment.TopEnd).padding(2.dp))
             }
         }
         Column(
-            Modifier.padding(start = Spacing.md, end = Spacing.md, top = 10.dp, bottom = Spacing.md),
+            Modifier.clearAndSetSemantics { }.padding(start = Spacing.md, end = Spacing.md, top = 10.dp, bottom = Spacing.md),
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             PriceText(listing.priceCents, currency = listing.currency)
@@ -248,7 +261,7 @@ fun ListingTile(
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                "${listing.condition.label} · ${rememberTimeFormat().ago(listing.createdAt)}",
+                "${listing.condition.label} · $age",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,

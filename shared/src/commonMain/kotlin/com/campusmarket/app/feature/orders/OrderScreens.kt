@@ -333,7 +333,7 @@ private fun PartyCard(order: Order, canMessage: Boolean, onOpenUser: () -> Unit,
                 .padding(start = Spacing.lg, end = Spacing.sm, top = Spacing.md, bottom = Spacing.md),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Avatar(other.avatarImageUrl, other.displayName, size = 44.dp)
+            Avatar(other.avatarImageUrl, other.displayName, size = 44.dp, contentDescription = null)
             Spacer(Modifier.width(Spacing.md))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(if (order.isBuyer) "Seller" else "Buyer", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -469,7 +469,7 @@ fun RateOrderScreen(route: RateOrderRoute, nav: NavController) {
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(Spacing.md),
                     ) {
-                        Avatar(other.avatarImageUrl, other.displayName, size = 72.dp)
+                        Avatar(other.avatarImageUrl, other.displayName, size = 72.dp, contentDescription = null)
                         Text(
                             "How was trading with ${other.displayName}?",
                             style = MaterialTheme.typography.headlineSmall,

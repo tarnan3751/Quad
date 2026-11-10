@@ -268,13 +268,13 @@ private fun FailedCaption(reason: String, onRetry: () -> Unit, onDiscard: () -> 
             onClick = onRetry,
             modifier = Modifier.semantics { contentDescription = "Retry sending" },
             contentPadding = PaddingValues(horizontal = Spacing.sm),
-        ) { Text("Retry", fontWeight = FontWeight.Bold) }
+        ) { Text("Retry", fontWeight = FontWeight.Bold, modifier = Modifier.clearAndSetSemantics { }) } // iOS would read both
         TextButton(
             onClick = onDiscard,
             modifier = Modifier.semantics { contentDescription = "Delete unsent message" },
             colors = ButtonDefaults.textButtonColors(contentColor = scheme.onSurfaceVariant),
             contentPadding = PaddingValues(horizontal = Spacing.sm),
-        ) { Text("Delete") }
+        ) { Text("Delete", modifier = Modifier.clearAndSetSemantics { }) }
     }
 }
 

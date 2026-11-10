@@ -151,7 +151,7 @@ class DisputesUiTest {
         awaitText("Mountain bike, barely used")
         awaitText("Bea Buyer bought from Sam Seller")
         awaitText("Seller suspended")
-        click("Mountain bike, barely used")
+        clickDescription("Mountain bike, barely used", substring = true)
 
         awaitText("Gears are broken")
         awaitText("Seller would receive")
