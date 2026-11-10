@@ -77,6 +77,17 @@ class RegisterViewModel(private val session: SessionManager, private val pending
     fun onDisplayName(v: String) = _state.update { it.copy(displayName = v, fieldErrors = it.fieldErrors - "displayName", formError = null) }
     fun onPassword(v: String) = _state.update { it.copy(password = v, fieldErrors = it.fieldErrors - "password", formError = null) }
 
+    /** Focus left a field: flag a mistake straight away, but never nag about a field the user hasn't typed in. */
+    fun checkEmail() = checkField("email", _state.value.email) { Validate.email(it) }
+    fun checkDisplayName() = checkField("displayName", _state.value.displayName) { Validate.displayName(it) }
+    fun checkPassword() = checkField("password", _state.value.password) { Validate.password(it) }
+
+    private fun checkField(key: String, value: String, validate: (String) -> String?) {
+        if (value.isBlank()) return
+        val error = validate(value) ?: return
+        _state.update { it.copy(fieldErrors = it.fieldErrors + (key to error)) }
+    }
+
     fun submit() {
         val s = _state.value
         if (s.submitting) return
@@ -244,6 +255,14 @@ class LoginViewModel(route: LoginRoute, private val session: SessionManager, pri
         if (deleted) it.copy(password = "", formError = null, suspended = null, showSuspended = false) else it.copy(showSuspended = false)
     }
     fun onPassword(v: String) = _state.update { it.copy(password = v, fieldErrors = it.fieldErrors - "password", formError = null) }
+
+    /** Focus left the email field: flag a typo straight away (an empty field waits for submit). */
+    fun checkEmail() {
+        val email = _state.value.email
+        if (email.isBlank()) return
+        val error = Validate.email(email) ?: return
+        _state.update { it.copy(fieldErrors = it.fieldErrors + ("email" to error)) }
+    }
 
     fun submit() {
         val s = _state.value

@@ -136,7 +136,7 @@ class AppSmokeTest {
         onAllNodes(hasSetTextAction() and hasText("Password")).onFirst().performTextInput("password123")
         click("Continue")
 
-        awaitText("Check your inbox")
+        awaitText("Check your email")
         awaitText("123456")
         click("Use code")
 

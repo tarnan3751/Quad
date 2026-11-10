@@ -25,6 +25,7 @@ import com.campusmarket.app.data.ApiClient
 import com.campusmarket.app.data.ApiError
 import com.campusmarket.app.ui.Validate
 import com.campusmarket.app.ui.components.EmailField
+import com.campusmarket.app.ui.components.InfoBanner
 import com.campusmarket.app.ui.components.InlineError
 import com.campusmarket.app.ui.components.PasswordField
 import com.campusmarket.app.ui.fieldErrorsOf
@@ -171,7 +172,7 @@ fun SuspendedAccountDialog(message: String, initialEmail: String?, onDismiss: (d
             Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
                 when (state.step) {
                     DeleteAccountStep.Info -> {
-                        Text(message, style = MaterialTheme.typography.bodyLarge)
+                        Text(message, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
                         Text(
                             "You can't sign in or use your account while it's suspended. If you'd rather leave, you can delete your account.",
                             style = MaterialTheme.typography.bodyMedium,
@@ -235,8 +236,12 @@ fun SuspendedAccountDialog(message: String, initialEmail: String?, onDismiss: (d
  */
 @Composable
 fun SignOutNotice(reason: ApiError, modifier: Modifier = Modifier) {
+    if (reason.code != ErrorCodes.ACCOUNT_SUSPENDED) {
+        // An expired session isn't the user's fault: a calm notice, not a red error.
+        InfoBanner(reason.message, modifier)
+        return
+    }
     InlineError(reason.message, modifier)
-    if (reason.code != ErrorCodes.ACCOUNT_SUSPENDED) return
     val api: ApiClient = koinInject()
     var showDialog by rememberSaveable(reason.message) { mutableStateOf(true) }
     TextButton(onClick = { showDialog = true }) { Text("Delete my account") }

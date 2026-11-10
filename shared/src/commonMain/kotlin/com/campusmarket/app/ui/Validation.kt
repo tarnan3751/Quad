@@ -17,6 +17,7 @@ object Validate {
     }
 
     fun password(value: String): String? = when {
+        value.isEmpty() -> "Choose a password (at least ${Limits.PASSWORD_MIN} characters)"
         value.length < Limits.PASSWORD_MIN -> "Use at least ${Limits.PASSWORD_MIN} characters"
         value.length > Limits.PASSWORD_MAX -> "Use at most ${Limits.PASSWORD_MAX} characters"
         else -> null
@@ -25,6 +26,7 @@ object Validate {
     fun displayName(value: String): String? {
         val v = value.trim()
         return when {
+            v.isEmpty() -> "Enter the name people will see"
             v.length < Limits.DISPLAY_NAME_MIN -> "Use at least ${Limits.DISPLAY_NAME_MIN} characters"
             v.length > Limits.DISPLAY_NAME_MAX -> "Use at most ${Limits.DISPLAY_NAME_MAX} characters"
             else -> null

@@ -1,12 +1,14 @@
 package com.campusmarket.app.feature.auth
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -17,35 +19,39 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.autofill.ContentType
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withLink
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -56,6 +62,7 @@ import com.campusmarket.app.platform.ExternalLinks
 import com.campusmarket.app.platform.StatusBarIcons
 import com.campusmarket.app.ui.components.AppTextField
 import com.campusmarket.app.ui.components.AppTopBar
+import com.campusmarket.app.ui.components.CodeField
 import com.campusmarket.app.ui.components.CollectEvents
 import com.campusmarket.app.ui.components.EmailField
 import com.campusmarket.app.ui.components.InlineError
@@ -66,6 +73,7 @@ import com.campusmarket.app.ui.components.QuadMark
 import com.campusmarket.app.ui.components.QuadWordmark
 import com.campusmarket.app.ui.components.SecondaryButton
 import com.campusmarket.app.ui.components.ServerSettingsDialog
+import com.campusmarket.app.ui.components.onFocusLost
 import com.campusmarket.app.ui.theme.CampusTheme
 import com.campusmarket.app.ui.theme.Spacing
 import com.campusmarket.core.ApiRoutes
@@ -73,6 +81,8 @@ import com.campusmarket.core.Limits
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
+
+private val FormMaxWidth = 480.dp
 
 // ---------------------------------------------------------------------------------------------------- welcome
 
@@ -115,29 +125,34 @@ fun WelcomeScreen(nav: NavController) {
             Modifier
                 .fillMaxWidth()
                 .navigationBarsPadding()
-                .padding(Spacing.xl),
+                .padding(start = Spacing.xl, end = Spacing.xl, top = Spacing.xl, bottom = Spacing.lg),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(Spacing.md),
         ) {
-            signOutReason?.let { SignOutNotice(it, Modifier.fillMaxWidth().widthIn(max = 480.dp)) }
+            signOutReason?.let { SignOutNotice(it, Modifier.fillMaxWidth().widthIn(max = FormMaxWidth)) }
             PrimaryButton(
                 "Create account",
                 onClick = { nav.navigate(RegisterRoute) },
-                modifier = Modifier.fillMaxWidth().widthIn(max = 480.dp),
+                modifier = Modifier.fillMaxWidth().widthIn(max = FormMaxWidth),
             )
             SecondaryButton(
                 "Sign in",
                 onClick = { nav.navigate(LoginRoute()) },
-                modifier = Modifier.fillMaxWidth().widthIn(max = 480.dp),
+                modifier = Modifier.fillMaxWidth().widthIn(max = FormMaxWidth),
             )
             Text(
                 "Only verified campus (.edu) emails can join.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
             )
+            // Debug builds only (release ignores overrides): which server this build talks to, and a way to change it.
             if (server.canOverride) {
-                TextButton(onClick = { showServer = true }) {
-                    Text("Server: $baseUrl", style = MaterialTheme.typography.labelSmall)
+                TextButton(
+                    onClick = { showServer = true },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)),
+                ) {
+                    Text("Dev server · ${baseUrl.substringAfter("://")}", style = MaterialTheme.typography.labelSmall)
                 }
             }
         }
@@ -153,19 +168,14 @@ fun RegisterScreen(nav: NavController) {
     val state by vm.state.collectAsStateWithLifecycle()
     CollectEvents(vm.events.flow) { nav.navigate(VerifyEmailRoute(it.email, it.devCode)) }
 
-    AuthFormScaffold(title = "Create account", onBack = { nav.popBackStack() }) {
-        Text("Join Quad", style = MaterialTheme.typography.headlineSmall)
-        Text(
-            "Use your school email. We'll send a code to confirm it's you.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(Spacing.sm))
+    AuthFormScaffold(onBack = { nav.popBackStack() }) {
+        AuthHeader("Join Quad", "Use your school email. We'll send you a code to confirm it's you.")
         EmailField(
             value = state.email,
             onValueChange = vm::onEmail,
             error = state.fieldErrors["email"],
-            supportingText = "Must be your school address (e.g. ends in .edu)",
+            supportingText = "Your school address, ending in .edu",
+            modifier = Modifier.onFocusLost(vm::checkEmail),
         )
         AppTextField(
             value = state.displayName,
@@ -175,6 +185,8 @@ fun RegisterScreen(nav: NavController) {
             supportingText = "Shown to buyers and sellers",
             maxLength = Limits.DISPLAY_NAME_MAX,
             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words, imeAction = ImeAction.Next),
+            contentType = ContentType.PersonFullName,
+            modifier = Modifier.onFocusLost(vm::checkDisplayName),
         )
         PasswordField(
             value = state.password,
@@ -182,8 +194,11 @@ fun RegisterScreen(nav: NavController) {
             error = state.fieldErrors["password"],
             supportingText = "At least ${Limits.PASSWORD_MIN} characters",
             onImeAction = vm::submit,
+            newPassword = true,
+            modifier = Modifier.onFocusLost(vm::checkPassword),
         )
         InlineError(state.formError, Modifier.fillMaxWidth())
+        Spacer(Modifier.height(Spacing.xs))
         PrimaryButton("Continue", onClick = vm::submit, loading = state.submitting, modifier = Modifier.fillMaxWidth())
         LegalFooter()
         TextButton(
@@ -222,57 +237,75 @@ fun VerifyEmailScreen(route: VerifyEmailRoute, nav: NavController) {
     CollectEvents(vm.events.flow) {
         nav.navigate(LoginRoute(it.email, it.notice)) { popUpTo(WelcomeRoute) }
     }
+    val codeFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { codeFocus.requestFocus() } }
 
-    AuthFormScaffold(title = "Verify email", onBack = { nav.popBackStack() }) {
-        Text("Check your inbox", style = MaterialTheme.typography.headlineSmall)
-        Text(
-            "Enter the ${Limits.VERIFICATION_CODE_LENGTH}-digit code we sent to ${state.email}. It expires in 15 minutes.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        state.devCode?.let { code ->
-            Surface(
-                color = MaterialTheme.colorScheme.tertiaryContainer,
-                contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                shape = MaterialTheme.shapes.medium,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Row(Modifier.padding(start = Spacing.lg, end = Spacing.sm, top = Spacing.sm, bottom = Spacing.sm), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Dev mode", style = MaterialTheme.typography.labelMedium)
-                        Text(code, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    }
-                    TextButton(onClick = vm::useDevCode) { Text("Use code") }
-                }
-            }
-        }
-        AppTextField(
-            value = state.code,
-            onValueChange = vm::onCode,
-            label = "Verification code",
-            error = state.fieldErrors["code"],
-            placeholder = "123456",
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword, imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(onDone = { vm.submit() }),
-        )
-        state.info?.let {
-            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
-        }
-        InlineError(state.formError, Modifier.fillMaxWidth())
-        PrimaryButton("Verify", onClick = vm::submit, loading = state.submitting, modifier = Modifier.fillMaxWidth())
-        TextButton(
-            onClick = vm::resend,
-            enabled = !state.resending && state.resendCooldown == 0,
-            modifier = Modifier.align(Alignment.CenterHorizontally),
-        ) {
+    AuthFormScaffold(onBack = { nav.popBackStack() }) {
+        AuthHeader("Check your email") {
             Text(
-                when {
-                    state.resending -> "Sending…"
-                    state.resendCooldown > 0 -> "Resend code in ${state.resendCooldown}s"
-                    else -> "Resend code"
+                buildAnnotatedString {
+                    append("Enter the ${Limits.VERIFICATION_CODE_LENGTH}-digit code we sent to ")
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)) { append(state.email) }
+                    append(". It expires in 15 minutes.")
                 },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+        CodeField(
+            value = state.code,
+            onValueChange = vm::onCode,
+            length = Limits.VERIFICATION_CODE_LENGTH,
+            error = state.fieldErrors["code"],
+            onDone = vm::submit,
+            modifier = Modifier.fillMaxWidth().focusRequester(codeFocus),
+        )
+        state.devCode?.let { DevCodeHint(it, onUse = vm::useDevCode) }
+        state.info?.let {
+            Text(it, style = MaterialTheme.typography.bodySmall, color = CampusTheme.colors.success)
+        }
+        InlineError(state.formError, Modifier.fillMaxWidth())
+        Spacer(Modifier.height(Spacing.xs))
+        PrimaryButton("Verify", onClick = vm::submit, loading = state.submitting, modifier = Modifier.fillMaxWidth())
+        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+            TextButton(onClick = vm::resend, enabled = !state.resending && state.resendCooldown == 0) {
+                Text(
+                    when {
+                        state.resending -> "Sending…"
+                        state.resendCooldown > 0 -> "Resend code in ${state.resendCooldown}s"
+                        else -> "Didn't get it? Resend code"
+                    },
+                )
+            }
+            TextButton(
+                onClick = { nav.popBackStack() },
+                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant),
+            ) { Text("Use a different email") }
+        }
+    }
+}
+
+/** Dev servers return the code in the response; a quiet hint offers it so nobody has to read the server log. */
+@Composable
+private fun DevCodeHint(code: String, onUse: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .border(1.dp, scheme.outlineVariant, MaterialTheme.shapes.small)
+            .padding(start = Spacing.md, end = Spacing.xs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            buildAnnotatedString {
+                append("Dev code ")
+                withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = scheme.onSurface, letterSpacing = 1.sp)) { append(code) }
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = scheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
+        )
+        TextButton(onClick = onUse) { Text("Use code") }
     }
 }
 
@@ -284,10 +317,14 @@ fun LoginScreen(route: LoginRoute, nav: NavController) {
     val state by vm.state.collectAsStateWithLifecycle()
     CollectEvents(vm.events.flow) { nav.navigate(VerifyEmailRoute(it.email, it.devCode)) }
 
-    AuthFormScaffold(title = "Sign in", onBack = { nav.popBackStack() }) {
-        Text("Welcome back", style = MaterialTheme.typography.headlineSmall)
-        Spacer(Modifier.height(Spacing.sm))
-        EmailField(value = state.email, onValueChange = vm::onEmail, error = state.fieldErrors["email"])
+    AuthFormScaffold(onBack = { nav.popBackStack() }) {
+        AuthHeader("Welcome back", "Sign in with your campus email.")
+        EmailField(
+            value = state.email,
+            onValueChange = vm::onEmail,
+            error = state.fieldErrors["email"],
+            modifier = Modifier.onFocusLost(vm::checkEmail),
+        )
         PasswordField(
             value = state.password,
             onValueChange = vm::onPassword,
@@ -299,31 +336,54 @@ fun LoginScreen(route: LoginRoute, nav: NavController) {
             TextButton(onClick = vm::showSuspendedDialog, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text("Delete my account") }
             if (state.showSuspended) SuspendedAccountDialog(suspended, state.email, onDismiss = vm::dismissSuspended)
         }
+        Spacer(Modifier.height(Spacing.xs))
         PrimaryButton("Sign in", onClick = vm::submit, loading = state.submitting, modifier = Modifier.fillMaxWidth())
         TextButton(
             onClick = { nav.navigate(RegisterRoute) { popUpTo(WelcomeRoute) } },
             modifier = Modifier.align(Alignment.CenterHorizontally),
-        ) { Text("New here? Create an account") }
+        ) { Text("New to Quad? Create an account") }
     }
 }
 
 // ---------------------------------------------------------------------------------------------------- shared
 
-/** Scrollable, keyboard-aware, width-capped form column with a back top bar, headed by the Quad app icon. */
+/**
+ * Scrollable, keyboard-aware, width-capped form column under a bare back bar (the screen's headline is the title),
+ * headed by the Quad app icon.
+ */
 @Composable
-private fun AuthFormScaffold(title: String, onBack: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
-    Scaffold(topBar = { AppTopBar(title, onBack = onBack) }) { padding ->
+private fun AuthFormScaffold(onBack: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+    Scaffold(topBar = { AppTopBar("", onBack = onBack) }) { padding ->
         Box(
-            Modifier.fillMaxSize().padding(padding).imePadding().verticalScroll(rememberScrollState()),
+            Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .consumeWindowInsets(padding)
+                .imePadding()
+                .verticalScroll(rememberScrollState()),
             contentAlignment = Alignment.TopCenter,
         ) {
             Column(
-                Modifier.fillMaxWidth().widthIn(max = 480.dp).padding(horizontal = Spacing.xl, vertical = Spacing.lg),
+                Modifier.fillMaxWidth().widthIn(max = FormMaxWidth).padding(start = Spacing.xl, end = Spacing.xl, bottom = Spacing.xl),
                 verticalArrangement = Arrangement.spacedBy(Spacing.md),
             ) {
-                QuadAppIcon(size = 48.dp, modifier = Modifier.padding(bottom = Spacing.xs))
+                QuadAppIcon(size = 48.dp, modifier = Modifier.padding(bottom = Spacing.sm))
                 content()
             }
         }
+    }
+}
+
+/** The form's title (a heading for screen readers) and a short line under it. */
+@Composable
+private fun AuthHeader(title: String, subtitle: String) = AuthHeader(title) {
+    Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+}
+
+@Composable
+private fun AuthHeader(title: String, subtitle: @Composable () -> Unit) {
+    Column(Modifier.padding(bottom = Spacing.sm), verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+        Text(title, style = MaterialTheme.typography.headlineMedium, modifier = Modifier.semantics { heading() })
+        subtitle()
     }
 }
