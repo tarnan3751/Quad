@@ -22,6 +22,8 @@ import com.campusmarket.app.clickDescription
 import com.campusmarket.app.data.respondError
 import com.campusmarket.app.data.respondJson
 import com.campusmarket.app.data.testUser
+import com.campusmarket.app.hasContentDescriptionStartingWith
+import com.campusmarket.app.shows
 import com.campusmarket.app.ui.components.LISTING_GRID_TAG
 import com.campusmarket.app.feature.listing.detail
 import com.campusmarket.app.feature.listing.summary
@@ -123,7 +125,7 @@ class BrowseFlowSmokeTest {
         click("Good")
         click("Show results")
         awaitRequest { it.url.parameters["condition"] == "GOOD" }
-        waitUntil(timeoutMillis = 5_000) { onAllNodesWithText("Campbell Biology").fetchSemanticsNodes().isEmpty() }
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(shows("Campbell Biology")).fetchSemanticsNodes().isEmpty() }
         clickDescription("Remove condition filter")
         awaitText("Campbell Biology")
 
@@ -152,13 +154,13 @@ class BrowseFlowSmokeTest {
         setContent { App() }
         awaitText("Listing item1")
 
-        onNode(hasTestTag(LISTING_GRID_TAG)).performScrollToNode(hasText("Listing item20"))
+        onNode(hasTestTag(LISTING_GRID_TAG)).performScrollToNode(hasContentDescriptionStartingWith("Listing item20,"))
         click("Listing item20")
         awaitText("Buy now")
         clickDescription("Back")
         awaitText("Listing item20")
-        onNode(hasText("Listing item20") and hasClickAction()).assertIsDisplayed()
-        assertTrue(onAllNodesWithText("Listing item1").fetchSemanticsNodes().isEmpty(), "still scrolled down, not back at the top")
+        onNode(hasContentDescriptionStartingWith("Listing item20,") and hasClickAction()).assertIsDisplayed()
+        assertTrue(onAllNodes(hasContentDescriptionStartingWith("Listing item1,")).fetchSemanticsNodes().isEmpty(), "still scrolled down, not back at the top")
     }
 
     @Test

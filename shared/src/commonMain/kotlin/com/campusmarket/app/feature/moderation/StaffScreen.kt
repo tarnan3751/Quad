@@ -31,6 +31,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -166,6 +168,8 @@ private fun MemberGroup(title: String, members: List<StaffMember>, currentUserId
     }
 }
 
+private fun roleActionLabel(m: StaffMember) = if (m.role == UserRole.MODERATOR) "Remove moderator" else "Make moderator"
+
 @Composable
 private fun MemberRow(m: StaffMember, currentUserId: String, onAction: (StaffMember) -> Unit) {
     val isMe = m.user.id == currentUserId
@@ -173,15 +177,17 @@ private fun MemberRow(m: StaffMember, currentUserId: String, onAction: (StaffMem
         Modifier.fillMaxWidth().padding(start = Spacing.lg, end = Spacing.sm, top = Spacing.md, bottom = Spacing.sm),
         horizontalArrangement = Arrangement.spacedBy(Spacing.md),
     ) {
-        Avatar(m.user.avatarImageUrl, m.user.displayName, size = 40.dp)
+        val name = if (isMe) "${m.user.displayName} (you)" else m.user.displayName
+        Avatar(m.user.avatarImageUrl, m.user.displayName, size = 40.dp, contentDescription = null)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(
-                if (isMe) "${m.user.displayName} (you)" else m.user.displayName,
-                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(m.email, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            // Name, email and role are read as one element; the role button below stays its own.
+            Column(
+                Modifier.fillMaxWidth().clearAndSetSemantics { contentDescription = "$name, ${m.email}, ${m.role.label}" },
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(name, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(m.email, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
             // Role and the change sit on their own line so long names and emails aren't squeezed by the button.
             Row(verticalAlignment = Alignment.CenterVertically) {
                 StatusChip(
@@ -191,11 +197,12 @@ private fun MemberRow(m: StaffMember, currentUserId: String, onAction: (StaffMem
                         UserRole.MODERATOR -> ChipTone.Positive
                         UserRole.USER -> ChipTone.Neutral
                     },
+                    Modifier.clearAndSetSemantics { },
                 )
                 Spacer(Modifier.weight(1f))
                 if (canChangeRole(m, currentUserId)) {
                     TextButton(onClick = { onAction(m) }) {
-                        Text(if (m.role == UserRole.MODERATOR) "Remove moderator" else "Make moderator")
+                        Text(roleActionLabel(m))
                     }
                 } else {
                     Spacer(Modifier.height(Spacing.sm))

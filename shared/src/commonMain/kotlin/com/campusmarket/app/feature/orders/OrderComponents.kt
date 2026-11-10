@@ -359,7 +359,7 @@ internal fun AmountBreakdown(order: Order, modifier: Modifier = Modifier) {
 
 @Composable
 private fun AmountLine(label: String, value: String, emphasize: Boolean, muted: Boolean) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { }, verticalAlignment = Alignment.CenterVertically) {
         Text(
             label,
             style = if (emphasize) MaterialTheme.typography.titleSmall else MaterialTheme.typography.bodyMedium,

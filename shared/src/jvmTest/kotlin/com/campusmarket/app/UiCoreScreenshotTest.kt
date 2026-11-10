@@ -180,7 +180,7 @@ class UiCoreScreenshotTest : ScreenshotGallery(settleMillis = 1_600) {
                 shot("b03-profile-loading")
                 // A frame in the middle of the push transition.
                 mainClock.autoAdvance = false
-                val node = onAllNodes(hasText("My listings") and hasClickAction()).onFirst()
+                val node = onAllNodes(hasContentDescriptionStartingWith("My listings") and hasClickAction()).onFirst()
                 runOnUiThread { node.performClick() }
                 mainClock.advanceTimeBy(140)
                 save("b05-push-transition")
