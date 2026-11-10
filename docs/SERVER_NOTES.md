@@ -78,6 +78,46 @@ Decisions made while implementing the server that go beyond `CONTRACT.md`. Clien
   and buying would answer 403 `BLOCKED`); `seller.blockedByMe` says whether the viewer did it. Show an unavailable state
   instead of Buy / Message. Always false on your own listing.
 
+## Performance (measured)
+Synthetic dataset: 300,000 listings on five campuses (the largest has 110,000 ACTIVE ones), 30,000 users, 250,000
+conversations with 2.1 M messages, 106,000 orders, 400,000 favorites; rows in random physical order (worse than a real
+table, which is roughly in posting order). Whole request over loopback, median of 40 after warm-up, best of three
+rounds, page of 20, viewer with 40 blocks. "Before" is the release before the search indexes (V6_listings_1).
+
+| `GET /listings` on the large campus | before | now |
+|---|---|---|
+| `q=a`, `q=t` (nearly everything matches) | 62-69 ms | 1.7 ms |
+| `q=tv`, `q=de`, `q=ik`, `q=4k` | 63-72 ms | 2.8-4.8 ms |
+| `q=zq`, `q=x9`, `q=%` (no match) | 57 ms | 5.9 ms |
+| `q=the`, `q=it` (stop words) | 69-75 ms | 3.4-4.0 ms |
+| `q=tv` page 2 | 69 ms | 2.9 ms |
+| `q=zq&sort=NEWEST` / `PRICE_ASC` | 58 ms | 3.3-3.6 ms |
+| `q=desk`, `q=calc`, `q=textbook`, `q=pickup` (common words) | 22-27 ms | 1.8-3.1 ms |
+| `q=tv stand`, `q=wireless charger`, `q=ikea desk`, `q=mini fridge` | 6-16 ms | 2.8-3.9 ms |
+| `q=zzzz` (rare word) | 3.0 ms | 3.3 ms |
+| `q=a&category=BIKES` | 12.8 ms | 2.4 ms |
+| `q=tv&category=BIKES` / `q=zq&category=BIKES` | 13.3 / 18.3 ms | 7.3 / 11.4 ms |
+| no `q`: every sort, category / condition / price filters, page 1 and 2 | 0.8-1.5 ms | 0.8-1.5 ms |
+
+Other reads, unchanged and all served by an index: favorites, my listings, a seller's listings and profile 1.0-2.7 ms;
+inbox and orders (also for an account with ~3,000 conversations and ~1,500 orders) 1.8-2.3 ms; listing, conversation,
+messages and order pages 0.9-1.6 ms; ratings, blocks, the report and dispute queues and the moderation log 0.9-2.1 ms.
+`GET /categories` reads one index entry per ACTIVE listing of the campus: 20-29 ms at 110,000 of them, in
+proportion for smaller campuses. The admin-only staff list (2.5 ms) and user search (13 ms) read the whole `users` table.
+
+How text search stays quick (see `ListingBrowse.textSearch`):
+- Each relevance class is first looked for among the next 1,000 listings of the campus in order (newest first, or by
+  price); a text that matches often fills the page long before that. Only when it doesn't are the class's matches
+  fetched through an index: `listings_search_idx` / `listings_title_search_idx` for full-text queries, and for
+  substring queries the two `search_grams` indexes, which hold every one- and two-character piece of each ACTIVE
+  listing's title and description per campus. A search is one to seven short statements instead of one scan of the
+  campus (which also kept three CPU cores busy for those 60 ms).
+- The weak spot is a text that is rare among the newest listings combined with a filter: the walk has to read until
+  it has seen 1,000 listings that pass the filter (the 7-11 ms rows above).
+- Costs: the gram indexes are 75 MB next to a 211 MB table (26 MB for the full-text index); indexing one listing takes
+  about 0.25 ms for a typical description and 4.5 ms for a 4,000-character one. The migration took 75 s here
+  (185,000 ACTIVE listings on all campuses) and blocks listing writes while it runs.
+
 ## Chat
 - Cursors are opaque; messages come newest-first; conversations ordered by last activity.
 - Send: body trimmed, 1..2000 chars; errors in `fields.body` (or `fields.initialMessage` on start).
