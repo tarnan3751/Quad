@@ -34,6 +34,26 @@ class SessionManagerTest {
 
 
     @Test
+    fun anUnchangedProfileIsNotWrittenAgain() = runTest {
+        val h = Harness { error("no request") }
+        var saves = 0
+        val tokens = object : TokenStore by h.tokens {
+            override fun save(session: StoredSession) {
+                saves++
+                h.tokens.save(session)
+            }
+        }
+        val sm = SessionManager(h.api, tokens, backgroundScope)
+
+        sm.updateUser(testUser.copy())
+        assertEquals(0, saves)
+
+        sm.updateUser(testUser.copy(bio = "Selling my old desk"))
+        assertEquals(1, saves)
+        assertEquals("Selling my old desk", sm.currentUser?.bio)
+    }
+
+    @Test
     fun restoresSignedInStateSynchronouslyFromStorage() = runTest {
         val h = Harness { error("no request") }
         val sm = SessionManager(h.api, h.tokens, backgroundScope)
