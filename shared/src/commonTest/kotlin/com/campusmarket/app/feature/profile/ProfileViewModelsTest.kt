@@ -3,6 +3,7 @@ package com.campusmarket.app.feature.profile
 import com.campusmarket.app.data.Harness
 import com.campusmarket.app.data.SessionManager
 import com.campusmarket.app.data.SessionState
+import com.campusmarket.app.data.awaitCondition
 import com.campusmarket.app.data.awaitValue
 import com.campusmarket.app.data.jsonBody
 import com.campusmarket.app.data.respondError
@@ -21,16 +22,16 @@ import com.campusmarket.core.UserPrivate
 import com.campusmarket.core.UserPublic
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.test.runTest
-import kotlinx.serialization.builtins.ListSerializer
-import kotlinx.serialization.json.JsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.json.JsonPrimitive
 
 class EditProfileViewModelTest {
 
@@ -276,11 +277,11 @@ class BlockedUsersAndBlockTest {
 
         var done = 0
         controller.submit("u2", block = true) { done++ }
-        controller.state.awaitValue { !it.loading && done == 1 }
+        awaitCondition { done == 1 && !controller.state.value.loading }
         assertEquals(HttpMethod.Post, h.requests.last().method)
 
         controller.submit("u2", block = false) { done++ }
-        controller.state.awaitValue { !it.loading && done == 2 }
+        awaitCondition { done == 2 && !controller.state.value.loading }
         assertEquals(HttpMethod.Delete, h.requests.last().method)
 
         fail = true
