@@ -40,9 +40,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -282,7 +282,8 @@ internal fun StatusTimeline(steps: List<TimelineStep>, times: TimeFormat, modifi
                 Modifier
                     .fillMaxWidth()
                     .height(IntrinsicSize.Min)
-                    .semantics(mergeDescendants = true) { contentDescription = "${step.title}, $stateWord" },
+                    // Title and time are read from the texts; the state is the value (a description would repeat the title).
+                    .semantics(mergeDescendants = true) { stateDescription = stateWord },
             ) {
                 Column(Modifier.width(28.dp).fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally) {
                     StepDot(step.state)

@@ -33,6 +33,7 @@ import com.campusmarket.app.di.coreModule
 import com.campusmarket.app.di.featureModules
 import com.campusmarket.app.feature.chat.FakeLiveChat
 import com.campusmarket.app.feature.chat.LiveChat
+import com.campusmarket.app.hasContentDescriptionStartingWith
 import com.campusmarket.app.platform.AppEnvironment
 import com.campusmarket.app.platform.DeepLinks
 import com.campusmarket.app.platform.PlatformKind
@@ -324,8 +325,10 @@ class ChatOrdersGalleryTest {
 
     // ------------------------------------------------------------------------------------------------ driving
 
-    private fun SkikoComposeUiTest.await(text: String, timeout: Long = 8_000) =
-        waitUntil(timeoutMillis = timeout) { onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
+    /** Rows and chat bubbles are read as one summary, so their texts are found in the content description. */
+    private fun SkikoComposeUiTest.await(text: String, timeout: Long = 8_000) = waitUntil(timeoutMillis = timeout) {
+        onAllNodes(hasText(text, substring = true) or hasContentDescription(text, substring = true)).fetchSemanticsNodes().isNotEmpty()
+    }
 
     private fun SkikoComposeUiTest.clickNode(matcher: SemanticsMatcher) {
         waitUntil(timeoutMillis = 8_000) { onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty() }
@@ -335,7 +338,8 @@ class ChatOrdersGalleryTest {
         waitForIdle()
     }
 
-    private fun SkikoComposeUiTest.click(text: String, substring: Boolean = false) = clickNode(hasText(text, substring = substring) and hasClickAction())
+    private fun SkikoComposeUiTest.click(text: String, substring: Boolean = false) =
+        clickNode((hasText(text, substring = substring) or hasContentDescriptionStartingWith(text)) and hasClickAction())
     private fun SkikoComposeUiTest.clickDesc(desc: String) = clickNode(hasContentDescription(desc, substring = true) and hasClickAction())
     private fun SkikoComposeUiTest.back() = clickDesc("Back")
 

@@ -7,4 +7,5 @@ import androidx.compose.ui.window.DialogProperties
 @Composable
 actual fun StatusBarIcons(darkIcons: Boolean) = Unit
 
-actual fun edgeToEdgeDialogProperties(): DialogProperties = DialogProperties(usePlatformDefaultWidth = false)
+actual fun edgeToEdgeDialogProperties(): DialogProperties =
+    DialogProperties(usePlatformDefaultWidth = false, usePlatformInsets = false)

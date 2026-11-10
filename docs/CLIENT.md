@@ -21,9 +21,11 @@ Read `docs/CONTRACT.md` first: endpoints, wire types (`core/`) and the product s
 | Android | `./gradlew :androidApp:installDebug`. The emulator reaches the host at `http://10.0.2.2:8080` (the default). |
 | Android, release code | `./gradlew :androidApp:installBenchmark`: the `benchmark` build type is `release` (R8, resource shrinking, not debuggable) signed with the local debug key and allowed to reach the HTTP dev server. Use it to measure performance (debug Compose is several times slower) and to check R8 keep rules before a release. Never distribute it. |
 | Android, store build | `./gradlew :androidApp:assembleRelease` / `:androidApp:bundleRelease` (AAB). R8 full mode + resource shrinking, English resources only, HTTPS only. Unsigned until an upload key is set up (docs/RELEASE.md); the R8 mapping is in `androidApp/build/outputs/mapping/release/`. |
-| iOS | Open `iosApp/iosApp.xcodeproj` in Xcode (not on the dev machine yet). The simulator uses `http://localhost:8080`. |
+| iOS | Open `iosApp/iosApp.xcodeproj` in Xcode and run the `iosApp` scheme, or `xcodebuild -project iosApp/iosApp.xcodeproj -scheme iosApp -destination 'platform=iOS Simulator,name=iPhone 17' build` then `xcrun simctl install booted <…/Debug-iphonesimulator/Quad.app>`. The simulator uses `http://localhost:8080`. Keep code signing on (the simulator default, no team needed): a `CODE_SIGNING_ALLOWED=NO` build has no Keychain access, so the session is lost on every relaunch (debug builds print `Quad token store: …`). |
 | Other server (e.g. phone on LAN) | Debug builds only: Welcome screen → "Dev server · …" (or Settings → API server). The override is persisted. |
 | Deep links | Android: `adb shell am start -a android.intent.action.VIEW -d "campusmarket://orders/<id>"`. Desktop: `./gradlew :desktopApp:run --args="campusmarket://orders/<id>"`. iOS: `xcrun simctl openurl booted campusmarket://payouts`. |
+| iOS UI tests | `xcodebuild test -project iosApp/iosApp.xcodeproj -scheme iosApp -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:iosAppUITests/QuadFlowTests` (needs the dev server). `iosAppUITests/QuadFlowTests.swift` finds Compose elements by their accessibility labels (fields are `textViews`). |
+| Drive the iOS app by hand | `scripts/ios-drive.sh start`, then `scripts/ios-drive.sh tree` / `tap "Sign in"` / `type …` / `back` / `@safari tap "Pay $12"` (commands in `iosAppUITests/QuadDriver.swift`). It runs a UI test that executes commands from a directory, so taps, typing, swipes, rotation and other apps (Safari, Settings) can be scripted from a shell; screenshots with `xcrun simctl io booted screenshot`. |
 
 Photo / avatar URLs from the server are absolute and built from the server's `PUBLIC_BASE_URL`, which defaults to `http://localhost:8080` and can't be reached from the emulator. `ServerConfig.resolve()` rewrites loopback origins to the app's base URL. `RemoteImage` and `ExternalLinks` do this for you, so never load server URLs any other way.
 
@@ -261,8 +263,11 @@ are code identifiers, like the `com.campusmarket` packages.)
 - **Voice.** Warm and short. The wordmark is lowercase `quad`; UI copy is normal sentence case and says "Quad" when it
   names the product.
 - Spacing: `Spacing.xs/sm/md/lg/xl/xxl` and `Spacing.screen` (16 dp horizontal screen padding). Shapes come from the theme (`MaterialTheme.shapes.medium` for cards).
-- Status bar: a full-screen dialog that should reach under the system bars uses `edgeToEdgeDialogProperties()` (in `platform/`; Android `decorFitsSystemWindows = false`) and pads its controls with the bar insets. A screen that draws its own colour under the status bar calls `StatusBarIcons(darkIcons = …)` (in
-  `platform/`); leaving the screen restores the system default. Only the Welcome hero does this today.
+- Status bar: a screen that draws its own colour under the status bar calls `StatusBarIcons(darkIcons = …)` (in
+  `platform/`); leaving the screen restores the system default. The Welcome hero (dark icons) and the photo viewer
+  (light icons) do this. A dialog that should cover the whole screen, status bar and home indicator included, uses
+  `edgeToEdgeDialogProperties()` (Android `decorFitsSystemWindows = false`; iOS `usePlatformInsets = false`, since a
+  plain `Dialog` stops at the safe area) and pads its controls with the bar insets.
 - **Motion.** Screen changes are Material's shared-axis X, kept short (300 ms): a pushed screen slides in a little and
   fades in, back reverses it; switching tabs is a quick cross-fade. Both NavHosts in `AppNavigation` set this; don't add
   per-route transitions. Haptics go through Compose's `LocalHapticFeedback` (no-op on desktop): tab switches, filter
@@ -296,7 +301,11 @@ are code identifiers, like the `com.campusmarket` packages.)
 
 - **Android:** `CampusMarketApp` calls `initCampusMarket(context)`. `MainActivity` is `singleTask` and forwards `campusmarket://` intents (cold start + `onNewIntent`) to `DeepLinks`. Cleartext HTTP is allowed only in the debug and benchmark builds (`src/debug/res/xml/network_security_config.xml`, `src/benchmark/…`). Images come from the system photo picker, so the app needs no media permissions. The window theme (`Theme.Quad`, `res/values*/themes.xml`) paints the warm-white / after-dark background behind Compose and the Android 12+ splash, so launch never flashes white in dark mode (and sets `windowLightStatusBar` per theme for the window before Compose takes over). Predictive back is on (`android:enableOnBackInvokedCallback`), so handle back with `BackHandler` (never `onBackPressed`); in-app back animations need Android 14+.
   Release and benchmark builds run R8 (keep rules beyond the libraries' own: `androidApp/proguard-rules.pro`): after adding a library that reflects (or a serializable type looked up by name), run `installBenchmark` and walk the flow it touches.
-- **iOS:** `MainViewController()` starts Koin. `iOSApp.swift` forwards `.onOpenURL` to `MainViewControllerKt.handleDeepLink(url:)`. `Info.plist` registers the `campusmarket` scheme, has photo/camera/local-network usage strings, sets `NSAllowsLocalNetworking` (HTTP to localhost/.local only), and sets `UIViewControllerBasedStatusBarAppearance` to NO so `StatusBarIcons` can set the app-wide status bar style (the SwiftUI host never asks the Compose view controller). The display name comes from `APP_NAME` in `Configuration/Config.xcconfig`. The launch screen is the `LaunchBackground` colour from the asset catalog (warm white / after dark). The Kotlin side compiles (`./gradlew :shared:compileKotlinIosSimulatorArm64`). Swift and linking need Xcode.
+- **iOS:** `MainViewController()` starts Koin. `iOSApp.swift` forwards `.onOpenURL` to `MainViewControllerKt.handleDeepLink(url:)`. `Info.plist` registers the `campusmarket` scheme, has photo/camera/local-network usage strings, sets `NSAllowsLocalNetworking` (HTTP to localhost/.local only), requires `arm64`, and sets `UIViewControllerBasedStatusBarAppearance` to NO so `StatusBarIcons` can set the app-wide status bar style (the SwiftUI host never asks the Compose view controller). `PrivacyInfo.xcprivacy` declares no tracking and the required-reason APIs in the binary (user defaults, file timestamps). The display name comes from `APP_NAME` in `Configuration/Config.xcconfig`. The launch screen is the `LaunchBackground` colour from the asset catalog (warm white / after dark).
+  - Built and run on the iPhone 17 simulator (iOS 26.5, Xcode 26.6); every flow was walked through there, light and dark. Not yet run on a device.
+  - iOS-only glue in `MainViewController.kt`: a tap outside a text field clears focus and hides the keyboard (number and decimal pads have no return key), and `FollowDynamicType` (`platform/DynamicType.kt`) applies a text-size change while the app runs (Compose reads it only at launch; same category → scale steps as Compose). In `AppNavigation`, the iOS edge swipe does nothing on the Sell / Inbox / Profile roots instead of popping to Browse; on pushed screens it is Back (and goes through `BackHandler`s, e.g. the unsaved-listing prompts).
+  - Typing from a hardware keyboard (or XCUITest `typeText`) into the text field of a `ModalBottomSheet` (the report sheet) can drop or reorder characters; the on-screen keyboard works. Use the on-screen keyboard (`scripts/ios-drive.sh keys …`) when testing sheets.
+  - Compose exposes at most the first few texts of a merged node to VoiceOver, and none of the clipped ones, so a list row whose meaning is in several texts should set one summary with `clearAndSetSemantics { contentDescription = … }` (inbox rows and chat bubbles do). UI tests find such rows by content description (`hasContentDescriptionStartingWith` in jvmTest).
 - **Desktop:** dev harness only. URL opening uses `java.awt.Desktop`. There's no URL-scheme registration, so pass a deep link as a program argument instead.
 
 ## Token storage
@@ -306,7 +315,7 @@ are code identifiers, like the `com.campusmarket` packages.)
 | Platform | `SecretStorage` | Notes |
 |---|---|---|
 | Android | `KeystoreSecretStorage` | AES-256-GCM, non-exportable Android Keystore key; `iv || ciphertext` in the private prefs file `campusmarket_secure_session`, excluded from backup and device transfer (`androidApp` `backup_rules.xml` / `data_extraction_rules.xml`). |
-| iOS | `KeychainSecretStorage` | `kSecClassGenericPassword`, `AfterFirstUnlockThisDeviceOnly`, not iCloud-synced. |
+| iOS | `KeychainSecretStorage` | `kSecClassGenericPassword`, `AfterFirstUnlockThisDeviceOnly`, not iCloud-synced. Verified on the simulator: the session survives a relaunch (`QuadFlowTests.testSessionSurvivesRelaunchUntilSignOut`). Needs a signed build (see Running). |
 | Desktop | `SettingsSecretStorage` | **NOT SECURE**: plain java.util.prefs, dev harness only. |
 
 - Unreadable / undecryptable / corrupt stored data (e.g. invalidated Keystore key) clears the stored session and the app starts signed out; no crash. A failed write keeps the session in memory only.
@@ -315,6 +324,6 @@ are code identifiers, like the `com.campusmarket` packages.)
 
 ## Pre-release TODOs (not blocking feature work)
 
-- ~~Token storage hardening~~ (done, see "Token storage" below). On-device check of the iOS Keychain path is still pending (no Xcode on the dev machine yet; it only compiles).
+- ~~Token storage hardening~~ (done, see "Token storage" below; the iOS Keychain path is verified on the simulator, not yet on a device).
 - Release base URL / HTTPS server config (currently debug defaults + override).
 - String resources and localisation if needed.

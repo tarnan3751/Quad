@@ -6,6 +6,7 @@ import com.campusmarket.app.data.respondJson
 import com.campusmarket.app.data.testUser
 import com.campusmarket.app.feature.awaitMatch
 import com.campusmarket.app.feature.withMainDispatcher
+import com.campusmarket.app.ui.Format
 import com.campusmarket.app.ui.state.UiState
 import com.campusmarket.app.ui.state.UserMessages
 import com.campusmarket.core.ApiRoutes
@@ -57,6 +58,13 @@ class ProfileStatsTest {
         assertEquals(0.5f, b.share(5))
         assertEquals(0f, b.share(3))
         assertEquals(0f, RatingBreakdown.of(emptyList(), complete = true).share(5))
+    }
+
+    @Test
+    fun ratingStatIsSpokenWithTheRightPlural() {
+        assertEquals("Rated ${Format.rating(4.0)} out of 5 from 1 rating", ratingStat(4.0, 1) {}.description)
+        assertEquals("Rated ${Format.rating(4.5)} out of 5 from 2 ratings", ratingStat(4.5, 2) {}.description)
+        assertEquals("No ratings yet", ratingStat(null, 0) {}.description)
     }
 
     @Test

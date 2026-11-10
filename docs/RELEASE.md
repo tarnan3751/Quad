@@ -12,7 +12,7 @@ Later-scope checklist. Nothing here is done yet. Review store policy pages again
 
 ## 2. Signing and builds
 - [ ] Android: create an upload key, enrol in Play App Signing, build a release AAB (`bundleRelease`) with minify/shrink verified, keep the keystore backed up outside the repo.
-- [ ] iOS: App ID, distribution certificate, provisioning profile (or automatic signing), archive in Xcode, upload via Xcode/Transporter. Needs a machine with Xcode (the dev machine has none yet, so iOS has never been compiled here).
+- [ ] iOS: App ID, distribution certificate, provisioning profile (or automatic signing), archive in Xcode, upload via Xcode/Transporter. Set `TEAM_ID` in `iosApp/Configuration/Config.xcconfig`. The app builds and runs on the simulator; it hasn't been archived or run on a device yet.
 - [ ] Set production server URL in the clients; release builds must use https only (no cleartext/ATS exceptions).
 - [ ] CI job for release builds with secrets in the CI secret store.
 - App version: bump `APP_VERSION_NAME` / `APP_VERSION_CODE` in `gradle.properties` (the single source of truth: Android `versionName`/`versionCode`, generated `BuildInfo` for the Settings "About" row), then run `./gradlew syncIosVersion` to update `iosApp/Configuration/Config.xcconfig` (a test fails if they drift).
@@ -20,12 +20,12 @@ Later-scope checklist. Nothing here is done yet. Review store policy pages again
 - [ ] Test on real devices and the lowest supported OS versions (Android minSdk 24).
 
 ## 3. Privacy and data disclosures
-- [ ] Apple privacy manifest (`PrivacyInfo.xcprivacy`) covering our code and every SDK/framework (required-reason APIs such as file timestamps, user defaults); App Privacy "nutrition labels" in App Store Connect.
+- [ ] Apple privacy manifest: `iosApp/iosApp/PrivacyInfo.xcprivacy` declares no tracking and the required-reason APIs found in the binary (user defaults CA92.1, file timestamps C617.1 / 3B52.1). Still to do: add `NSPrivacyCollectedDataTypes` to match the App Privacy "nutrition labels" in App Store Connect, and re-scan after adding SDKs.
 - [ ] Google Play Data safety form. Data we handle: email, name, user-generated photos/text/messages, purchase and payout information (through Stripe), user ids, crash/diagnostic data if added.
 - [ ] Privacy policy that matches the above, including retention and deletion, and Stripe's role as processor.
 - [ ] Photo handling: we only use the photo picker / camera on user action; no location is collected. Confirm permission strings (`NSCameraUsageDescription`, `NSPhotoLibraryUsageDescription` when needed) are accurate.
 - [ ] Age rating questionnaire (marketplace, user-generated content, chat). Decide the minimum age; campus emails are not proof of age.
-- [ ] Encryption export compliance answers (standard HTTPS only).
+- [ ] Encryption export compliance answers (standard HTTPS only); then add `ITSAppUsesNonExemptEncryption` = NO to `Info.plist` so uploads don't ask each time.
 
 ## 4. Marketplace and user-generated-content requirements
 Both stores require these for apps with UGC and marketplaces. The server already provides them; verify the apps expose them and that reviewers can find them.
@@ -57,7 +57,7 @@ Both stores require these for apps with UGC and marketplaces. The server already
 - [ ] Single-node limits: the chat hub is in-process and the payments sweep (checkout expiry, suspended-seller holds, 72 h auto-release) runs in-process, so run one instance until those are externalised. The sweep is safe to run twice (claims and idempotency keys), but two instances double the processor calls. Alert on repeated "Couldn't auto-release order" warnings: a payout that keeps failing is retried every minute.
 - [ ] Managed PostgreSQL 17 with a dedicated least-privilege user; migrations run on boot, so review each release's migration first.
 - [ ] Logging/metrics/alerting, error reporting, uptime check on `/api/v1/health`.
-- [x] Client token storage hardening (Keychain / Android Keystore) is implemented; still verify the iOS Keychain path on a real device/simulator once Xcode is available.
+- [x] Client token storage hardening (Keychain / Android Keystore) is implemented; the iOS Keychain path is verified on the simulator (still check on a device).
 - [ ] Rate limits confirmed for register/login/verify/resend behind the proxy: set `TRUSTED_PROXY_HOPS` to the number of proxies that append to `X-Forwarded-For` (usually 1), otherwise every client shares the proxy's budget.
 
 ## 7. Backups and recovery

@@ -45,7 +45,12 @@ fun coreModule(environment: AppEnvironment): Module = module {
     // SecretStorage comes from the platform module (Keychain / Keystore; plain settings on the desktop harness).
     single<TokenStore> {
         val secrets = get<SecretStorage>()
-        SecureTokenStore(secrets, legacy = if (secrets.isSecure) get<Settings>() else null)
+        SecureTokenStore(
+            secrets,
+            legacy = if (secrets.isSecure) get<Settings>() else null,
+            // Otherwise silent: e.g. an unsigned iOS simulator build has no Keychain access, so sessions don't persist.
+            onError = { what, e -> if (environment.isDebug) println("Quad token store: $what: ${e.message}") },
+        )
     }
     single<HttpClient> { createPlatformHttpClient { installCampusMarketDefaults(debugLogging = environment.isDebug) } }
     single { ApiClient(get(), get(), get()) }

@@ -38,4 +38,4 @@ The demo data is two campuses of students with 44 listings, chats, orders, ratin
 | `androidApp/`, `iosApp/`, `desktopApp/` | Platform shells |
 | `docs/` | API contract, client notes, release checklist |
 
-The iOS app has not been built or run yet. Server settings are documented in [`.env.example`](.env.example).
+The iOS app builds and runs on the simulator: open `iosApp/iosApp.xcodeproj` in Xcode (or see `docs/CLIENT.md` for `xcodebuild` and the UI tests). It has not been run on a device yet. Server settings are documented in [`.env.example`](.env.example).

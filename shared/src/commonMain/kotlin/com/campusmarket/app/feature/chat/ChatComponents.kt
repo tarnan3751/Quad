@@ -230,7 +230,7 @@ internal fun MessageBubble(
                             Modifier
                         },
                     )
-                    .semantics(mergeDescendants = true) { contentDescription = spoken },
+                    .clearAndSetSemantics { contentDescription = spoken },
             ) {
                 Column(Modifier.widthIn(min = 48.dp).padding(start = 14.dp, end = 14.dp, top = 8.dp, bottom = if (showTime) 6.dp else 8.dp)) {
                     Text(row.body, style = MaterialTheme.typography.bodyLarge)

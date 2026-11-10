@@ -33,7 +33,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -55,6 +54,7 @@ import com.campusmarket.app.ui.components.RemoteImage
 import com.campusmarket.app.ui.components.StatusChip
 import com.campusmarket.app.ui.components.avatarImageUrl
 import com.campusmarket.app.ui.components.listImageUrl
+import com.campusmarket.app.ui.label
 import com.campusmarket.app.ui.theme.Spacing
 import com.campusmarket.core.Conversation
 import com.campusmarket.core.ListingStatus
@@ -115,12 +115,22 @@ private fun ConversationRow(conversation: Conversation, stamp: String, onClick: 
     val other = conversation.otherUser
     val scheme = MaterialTheme.colorScheme
     val preview = conversation.lastMessagePreview
+    // One summary for screen readers: merged, the row read the name twice and VoiceOver dropped the message preview
+    // and the unread count.
+    val spoken = buildString {
+        append(other.displayName)
+        if (other.blockedByMe) append(", blocked")
+        append(", ").append(conversation.listing.title)
+        if (conversation.listing.status != ListingStatus.ACTIVE) append(", ").append(conversation.listing.status.label)
+        append(". ").append(preview ?: "No messages yet").append(", ").append(stamp)
+        if (unread) append(if (conversation.unreadCount == 1) ", 1 unread message" else ", ${conversation.unreadCount} unread messages")
+    }
     Row(
         Modifier
             .fillMaxWidth()
             .background(if (unread) scheme.primaryContainer.copy(alpha = 0.28f) else scheme.surface)
             .clickable(onClickLabel = "Open conversation", onClick = onClick)
-            .semantics(mergeDescendants = true) { }
+            .clearAndSetSemantics { contentDescription = spoken }
             .padding(horizontal = Spacing.screen, vertical = Spacing.md),
         verticalAlignment = Alignment.CenterVertically,
     ) {

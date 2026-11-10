@@ -200,7 +200,7 @@ private fun ConversationTopBar(
                     .padding(end = Spacing.sm),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Avatar(other.avatarImageUrl, other.displayName, size = 38.dp)
+                Avatar(other.avatarImageUrl, other.displayName, size = 38.dp, contentDescription = null)
                 Spacer(Modifier.width(Spacing.md))
                 Column {
                     Text(other.displayName, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)

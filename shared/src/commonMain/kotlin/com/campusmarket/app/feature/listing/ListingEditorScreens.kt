@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -64,6 +65,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
@@ -98,10 +100,13 @@ fun SellScreen(nav: NavController) {
     var confirmClear by rememberSaveable { mutableStateOf(false) }
     var confirmLeave by rememberSaveable { mutableStateOf(false) }
     val scroll = rememberScrollState()
+    val focus = LocalFocusManager.current
 
     CollectEvents(vm.events.flow) { event ->
         if (event is ListingEditorEvent.Created) {
-            // The form is reset for the next listing: start it from the top, not where "Post listing" was.
+            // The form is reset for the next listing: start it from the top, not where "Post listing" was. A field
+            // left focused would scroll itself back into view when the tab is shown again.
+            focus.clearFocus()
             scroll.scrollTo(0)
             nav.navigate(ListingDetailRoute(event.listingId))
         }
@@ -130,7 +135,7 @@ fun SellScreen(nav: NavController) {
             intro = "Students on your campus see it right away. Buyers pay in the app and you hand the item over in person.",
             submitLabel = "Post listing",
             submittingLabel = "Posting…",
-            modifier = Modifier.padding(padding),
+            modifier = Modifier.padding(padding).consumeWindowInsets(padding),
             scroll = scroll,
         )
     }
@@ -199,7 +204,7 @@ fun EditListingScreen(route: EditListingRoute, nav: NavController) {
                     intro = null,
                     submitLabel = "Save changes",
                     submittingLabel = "Saving…",
-                    modifier = Modifier.padding(padding),
+                    modifier = Modifier.padding(padding).consumeWindowInsets(padding),
                 )
             }
         }
