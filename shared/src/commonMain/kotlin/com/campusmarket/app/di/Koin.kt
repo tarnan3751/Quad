@@ -17,6 +17,7 @@ import com.campusmarket.app.feature.orders.ordersModule
 import com.campusmarket.app.feature.profile.profileModule
 import com.campusmarket.app.platform.AppEnvironment
 import com.campusmarket.app.platform.ExternalLinks
+import com.campusmarket.app.platform.NetworkMonitor
 import com.campusmarket.app.platform.createPlatformHttpClient
 import com.campusmarket.app.ui.state.UserMessages
 import com.russhwolf.settings.Settings
@@ -24,6 +25,8 @@ import io.ktor.client.HttpClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.launch
 import org.koin.core.context.startKoin
 import org.koin.core.module.Module
 import org.koin.core.qualifier.named
@@ -47,7 +50,7 @@ fun coreModule(environment: AppEnvironment): Module = module {
     single<HttpClient> { createPlatformHttpClient { installCampusMarketDefaults(debugLogging = environment.isDebug) } }
     single { ApiClient(get(), get(), get()) }
     single { SessionManager(get(), get(), get(AppScope)) }
-    single { ChatSocket(get(), get(), get(), get(), get(AppScope)) }
+    single { ChatSocket(get(), get(), get(), get(), get(AppScope), getOrNull<NetworkMonitor>()?.available() ?: emptyFlow()) }
     single { UserMessages() }
     single { ExternalLinks(get(), get()) }
 }
@@ -66,7 +69,16 @@ val featureModules: List<Module> = listOf(
 /** Starts Koin once per process. Called by the platform entry points (`initCampusMarket*`). */
 fun initKoin(environment: AppEnvironment, platformModule: Module) {
     if (KoinPlatformTools.defaultContext().getOrNull() != null) return
-    startKoin {
+    val koin = startKoin {
         modules(listOf(platformModule, coreModule(environment)) + featureModules)
+    }.koin
+    // The first frame needs the session (a Keystore / Keychain read) and the HTTP client behind it. Build them off the
+    // main thread while the platform creates the window; the UI then finds them ready (Koin singletons are created
+    // once, under a lock). A failure here is ignored: the UI's own lookup creates them and reports it.
+    koin.get<CoroutineScope>(AppScope).launch {
+        runCatching {
+            koin.get<SessionManager>()
+            koin.get<ChatSocket>()
+        }
     }
 }
