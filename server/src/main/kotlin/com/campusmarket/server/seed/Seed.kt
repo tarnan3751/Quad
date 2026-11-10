@@ -6,7 +6,13 @@ import com.campusmarket.server.AppConfig
 import com.campusmarket.server.Db
 import com.campusmarket.server.query
 import com.campusmarket.server.queryOne
+import com.campusmarket.server.photos.LocalPhotoStorage
+import com.campusmarket.server.photos.PhotoVariants
 import com.campusmarket.server.update
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.runBlocking
 import java.io.File
 import java.sql.Connection
 import java.time.Instant
@@ -111,6 +117,11 @@ object Seed {
             val f = File(uploads, p.storageKey)
             if (!f.exists()) f.writeBytes(p.image.bytes)
         }
+        // size variants, like an upload gets (existing variant files are reused)
+        val photoVariants = PhotoVariants(LocalPhotoStorage(uploads.toPath()), permits = 4)
+        val variants = runBlocking(Dispatchers.IO) {
+            allPhotos.map { p -> async { p.storageKey to photoVariants.make(p.storageKey) } }.awaitAll().toMap()
+        }
 
         val userIds = HashMap<String, UUID>()
         val listingIds = HashMap<String, UUID>()
@@ -132,13 +143,17 @@ object Seed {
             }
             for (p in allPhotos) {
                 // upsert, so a re-run picks up replaced photo files without --reset
+                val v = variants.getValue(p.storageKey)
                 c.update(
-                    """INSERT INTO photos (id, owner_id, storage_key, content_type, size_bytes, width, height, created_at)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """INSERT INTO photos (id, owner_id, storage_key, content_type, size_bytes, width, height, created_at,
+                                          thumb_key, display_key, variants_done)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, true)
                        ON CONFLICT (id) DO UPDATE SET storage_key = EXCLUDED.storage_key, size_bytes = EXCLUDED.size_bytes,
-                                                      width = EXCLUDED.width, height = EXCLUDED.height""",
+                                                      width = EXCLUDED.width, height = EXCLUDED.height,
+                                                      thumb_key = EXCLUDED.thumb_key, display_key = EXCLUDED.display_key,
+                                                      variants_done = true""",
                     p.id, userIds[p.ownerKey]!!, p.storageKey, p.image.contentType, p.image.bytes.size.toLong(),
-                    p.image.width, p.image.height, p.created,
+                    p.image.width, p.image.height, p.created, v.thumb, v.display,
                 )
             }
 
@@ -311,9 +326,17 @@ object Seed {
         }
     }
 
-    /** Deletes seed photo files (`seed-*`) that no `photos` row references any more, e.g. after --reset or a photo change. */
+    /**
+     * Deletes seed photo files (`seed-*`, originals and their variants) that no `photos` row references any more, e.g.
+     * after --reset or a photo change.
+     */
     private fun pruneSeedFiles(db: Db, uploads: File) {
-        val live = db.txBlocking { c -> c.query("SELECT storage_key FROM photos WHERE storage_key LIKE 'seed-%'") { it.getString(1) } }.toSet()
+        val live = db.txBlocking { c ->
+            c.query(
+                """SELECT k FROM photos, LATERAL (VALUES (storage_key), (thumb_key), (display_key)) v(k)
+                   WHERE k LIKE 'seed-%'""",
+            ) { it.getString(1) }
+        }.toSet()
         uploads.listFiles { f -> f.isFile && f.name.startsWith("seed-") && f.name !in live }?.forEach { it.delete() }
     }
 

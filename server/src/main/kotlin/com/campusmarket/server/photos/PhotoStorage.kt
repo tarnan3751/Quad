@@ -4,11 +4,13 @@ import io.ktor.util.cio.readChannel
 import io.ktor.utils.io.ByteReadChannel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.InputStream
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.nio.file.attribute.PosixFilePermissions
+import java.time.Instant
 import java.util.UUID
 
 /**
@@ -28,8 +30,19 @@ interface PhotoStorage {
     suspend fun delete(key: String)
 }
 
-class StoredPhoto(val format: ImageFormat, val size: Long, private val channel: () -> ByteReadChannel) {
-    fun readChannel(): ByteReadChannel = channel()
+/** A stored object: [size] bytes, last written at [lastModified] (keys are never rewritten with different bytes). */
+class StoredPhoto(
+    val format: ImageFormat,
+    val size: Long,
+    val lastModified: Instant,
+    private val channel: (LongRange) -> ByteReadChannel,
+    private val stream: () -> InputStream,
+) {
+    /** The bytes in [range] (all of them by default), read lazily. */
+    fun readChannel(range: LongRange = 0 until size): ByteReadChannel = channel(range)
+
+    /** Blocking reader for image decoding; the caller closes it. */
+    fun inputStream(): InputStream = stream()
 }
 
 /** Storage keys: `<32 hex chars>.<ext>` for new uploads; older/fixture keys may contain dashes. */
@@ -84,7 +97,13 @@ class LocalPhotoStorage(root: Path) : PhotoStorage {
         val format = PhotoKeys.formatOf(key) ?: return@withContext null
         val path = resolve(key) ?: return@withContext null
         if (!Files.isRegularFile(path)) return@withContext null
-        StoredPhoto(format, Files.size(path)) { path.toFile().readChannel() }
+        StoredPhoto(
+            format,
+            Files.size(path),
+            Files.getLastModifiedTime(path).toInstant(),
+            channel = { range -> path.toFile().readChannel(range.first, range.last) },
+            stream = { Files.newInputStream(path) },
+        )
     }
 
     override suspend fun delete(key: String) = withContext(Dispatchers.IO) {

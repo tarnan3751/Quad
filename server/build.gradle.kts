@@ -43,6 +43,8 @@ dependencies {
 tasks.test {
     useJUnitPlatform()
     environment("BCRYPT_COST", "4")
+    // tests that need the photo variant backfill run it directly
+    environment("PHOTO_VARIANT_BACKFILL", "false")
     testLogging { events("failed"); showStandardStreams = false; exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL }
 }
 

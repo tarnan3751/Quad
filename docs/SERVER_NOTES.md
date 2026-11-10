@@ -33,6 +33,15 @@ Decisions made while implementing the server that go beyond `CONTRACT.md`. Clien
 ## Photos
 - Multipart part name `file`; the part **must include a filename** in Content-Disposition and the request must have a Content-Length (no chunked upload) or the server answers 411.
 - > 8 MB → 413 `VALIDATION` (`fields.file`); unsupported / corrupt → 400 (`fields.file`). JPEG/PNG/WebP only. Downscale/compress large photos client-side to JPEG before upload where practical.
+- **Variants.** Every photo also gets server-made JPEGs (upright, no metadata, transparency on white, never upscaled):
+  `Photo.thumbnailUrl` (480 px on the short side, at most 1280 px on the long side) and `Photo.displayUrl` (at most
+  1280 px on the long side). They are made during the upload (the response carries them) and, for photos stored before
+  variants existed, by a background pass at server start (`PHOTO_VARIANT_BACKFILL=false` turns it off). A variant URL
+  may equal `url` when the original is already a small upright JPEG. They are null when there is none (WebP originals:
+  the JDK can't decode WebP; corrupt or CMYK JPEGs): fall back to `url`.
+- `GET /uploads/{key}` (originals and variants): `Cache-Control: public, max-age=31536000, immutable`, strong `ETag`,
+  `Last-Modified`, 304 for `If-None-Match` / `If-Modified-Since`, single byte ranges (206; 416 when unsatisfiable;
+  `If-Range` honoured), `HEAD`.
 
 ## Listings
 - `GET /listings` params: `q`; `category`, `condition` (enum names, comma-separated); `minPrice`, `maxPrice` (cents, inclusive); `sort` (`NEWEST|PRICE_ASC|PRICE_DESC|RELEVANCE`; default RELEVANCE with `q`, else NEWEST); `limit`; `cursor`.
@@ -124,4 +133,5 @@ Password `password123`: `admin@state.edu` (ADMIN), `moderator@state.edu` (MODERA
   all concern tyler@, who asks buyers to pay off-app.
 - Ids derive from stable keys, so re-running is a no-op (after changing listing keys, reseed with `--reset`). Seed photo
   files are named `seed-<photo id>-<content hash>.jpg`, so a replaced photo gets a new URL despite the immutable cache
-  headers; unreferenced `seed-*` files in `UPLOADS_DIR` are deleted at the end of each run (other uploads are left alone).
+  headers; the seed makes their variants too (`…-t.jpg`; the bundled photos are already display-sized). Unreferenced
+  `seed-*` files in `UPLOADS_DIR` are deleted at the end of each run (other uploads are left alone).
