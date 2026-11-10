@@ -32,7 +32,9 @@ import coil3.ImageLoader
 import coil3.PlatformContext
 import coil3.compose.AsyncImage
 import coil3.compose.AsyncImagePainter
+import coil3.compose.LocalPlatformContext
 import coil3.disk.DiskCache
+import coil3.request.ImageRequest
 import coil3.network.ktor3.KtorNetworkFetcherFactory
 import coil3.request.crossfade
 import com.campusmarket.app.platform.imageDiskCacheDirectory
@@ -68,6 +70,20 @@ val Photo.screenImageUrl: String get() = displayUrl ?: url
 
 /** Small previews (the listing editor's photo strip). */
 val Photo.smallImageUrl: String get() = thumbnailUrl ?: url
+
+/**
+ * Coil model for the resolved [url] that, while it loads, shows the image of [placeholderUrl] straight from the memory
+ * cache: a smaller copy that's already been on screen (the grid tile's thumbnail under the listing photo, the
+ * pager's photo under the zoomable original). Without one in memory it behaves like a plain URL.
+ */
+@Composable
+fun rememberImageModel(url: String?, placeholderUrl: String?): Any? {
+    if (url == null || placeholderUrl == null || placeholderUrl == url) return url
+    val context = LocalPlatformContext.current
+    return remember(context, url, placeholderUrl) {
+        ImageRequest.Builder(context).data(url).placeholderMemoryCacheKey(placeholderUrl).build()
+    }
+}
 
 /**
  * The app's one Coil [ImageLoader] (installed by `App()`): decoded images in a platform-sized memory cache, downloads

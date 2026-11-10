@@ -434,6 +434,7 @@ private fun PhotoPager(listing: ListingDetail, onPhotoClick: (Int) -> Unit, modi
         HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize(), key = { photos[it].id }) { page ->
             ListingImage(
                 url = photos[page].screenImageUrl,
+                placeholderUrl = photos[page].thumbnailUrl,
                 contentDescription = "${listing.title}, photo ${page + 1} of ${photos.size}",
                 modifier = Modifier.fillMaxSize().clickable(onClickLabel = "View full screen") { onPhotoClick(page) },
                 iconSize = 56.dp,
