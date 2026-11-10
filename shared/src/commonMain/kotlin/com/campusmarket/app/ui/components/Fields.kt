@@ -220,33 +220,6 @@ fun Modifier.onFocusLost(action: () -> Unit): Modifier {
 }
 
 /**
- * Dollar amount input. Keep the raw text in state and convert with `Format.parsePriceCents(text)`;
- * initialise from cents with `Format.priceInput(cents)`.
- */
-@Composable
-fun PriceField(
-    value: String,
-    onValueChange: (String) -> Unit,
-    modifier: Modifier = Modifier,
-    label: String = "Price",
-    error: String? = null,
-    supportingText: String? = null,
-    imeAction: ImeAction = ImeAction.Next,
-) {
-    AppTextField(
-        value = value,
-        onValueChange = { text -> onValueChange(text.filter { it.isDigit() || it == '.' || it == ',' }) },
-        label = label,
-        modifier = modifier,
-        error = error,
-        supportingText = supportingText,
-        placeholder = "0.00",
-        prefix = { Text("$") },
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = imeAction),
-    )
-}
-
-/**
  * One-time code input: [length] boxes that fill as you type (digits only), with the number keyboard and the
  * one-time-code autofill hint. [onDone] runs from the keyboard's Done key. [error] outlines the boxes in red and
  * shows the message below.

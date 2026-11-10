@@ -84,11 +84,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.campusmarket.app.feature.listing.FavoritesRoute
 import com.campusmarket.app.feature.listing.ListingDetailRoute
-import com.campusmarket.app.feature.listing.ListingIcons
-import com.campusmarket.app.feature.listing.ListingTile
-import com.campusmarket.app.feature.listing.PagedListingGrid
+import com.campusmarket.app.ui.components.ListingIcons
+import com.campusmarket.app.ui.components.ListingTile
+import com.campusmarket.app.ui.components.PagedListingGrid
 import com.campusmarket.app.feature.listing.PriceInput
-import com.campusmarket.app.feature.listing.icon
+import com.campusmarket.app.ui.components.icon
 import com.campusmarket.app.navigation.LocalCurrentUser
 import com.campusmarket.app.navigation.OnTabReselected
 import com.campusmarket.app.navigation.TopLevelTab

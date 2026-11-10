@@ -45,7 +45,7 @@ import com.campusmarket.app.ui.components.ErrorState
 import com.campusmarket.app.ui.components.InfoBanner
 import com.campusmarket.app.ui.components.InlineError
 import com.campusmarket.app.ui.components.ListRowSkeleton
-import com.campusmarket.app.ui.components.ListingCardSkeleton
+import com.campusmarket.app.ui.components.ListingTileSkeleton
 import com.campusmarket.app.ui.components.PrimaryButton
 import com.campusmarket.app.ui.components.QuadIcons
 import com.campusmarket.app.ui.components.RemoteImage
@@ -243,7 +243,7 @@ class UiCoreScreenshotTest : ScreenshotGallery(settleMillis = 1_600) {
                 Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
                     RemoteImage(null, null, Modifier.width(72.dp).height(72.dp))
                     RemoteImage("http://127.0.0.1:1/missing.jpg", null, Modifier.width(72.dp).height(72.dp))
-                    ListingCardSkeleton(Modifier.width(140.dp))
+                    ListingTileSkeleton(Modifier.width(140.dp))
                 }
                 ListRowSkeleton(leading = SkeletonLeading.Avatar)
                 InlineError("Wrong email or password", Modifier.fillMaxWidth())

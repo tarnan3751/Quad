@@ -237,7 +237,6 @@ class OrderDetailViewModel(
         }
     }
 
-    fun clearError() = _ui.update { it.copy(error = null) }
 
     fun onAction(action: OrderAction) {
         val o = _order.value.valueOrNull ?: return

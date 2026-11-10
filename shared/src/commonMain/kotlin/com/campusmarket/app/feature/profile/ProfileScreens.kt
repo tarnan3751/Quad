@@ -84,8 +84,8 @@ import com.campusmarket.app.data.ServerConfig
 import com.campusmarket.app.data.isModerator
 import com.campusmarket.app.feature.chat.MessageSellerRoute
 import com.campusmarket.app.feature.listing.ListingDetailRoute
-import com.campusmarket.app.feature.listing.ListingTile
-import com.campusmarket.app.feature.listing.PagedListingGrid
+import com.campusmarket.app.ui.components.ListingTile
+import com.campusmarket.app.ui.components.PagedListingGrid
 import com.campusmarket.app.feature.moderation.ActionRunner
 import com.campusmarket.app.feature.moderation.ModerationActionDialog
 import com.campusmarket.app.feature.moderation.ReportSheet

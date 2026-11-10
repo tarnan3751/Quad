@@ -55,6 +55,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.campusmarket.app.platform.StatusBarIcons
 import com.campusmarket.app.platform.edgeToEdgeDialogProperties
+import com.campusmarket.app.ui.components.ListingImage
 import com.campusmarket.app.ui.theme.Spacing
 import com.campusmarket.core.Photo
 import kotlinx.coroutines.launch

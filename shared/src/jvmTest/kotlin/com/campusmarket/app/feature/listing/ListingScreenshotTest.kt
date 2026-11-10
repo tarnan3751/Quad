@@ -34,6 +34,7 @@ import com.campusmarket.app.data.respondJson
 import com.campusmarket.app.data.testUser
 import com.campusmarket.app.platform.PickedImage
 import com.campusmarket.app.startTestApp
+import com.campusmarket.app.ui.components.LISTING_GRID_TAG
 import com.campusmarket.core.ApiRoutes
 import com.campusmarket.core.CategoryInfo
 import com.campusmarket.core.ErrorCodes
@@ -50,11 +51,8 @@ import com.campusmarket.core.UserPublic
 import com.sun.net.httpserver.HttpServer
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.serialization.builtins.ListSerializer
-import org.koin.core.module.dsl.viewModel
-import org.koin.dsl.module
 import java.awt.BasicStroke
+import java.awt.Color as AwtColor
 import java.awt.Font
 import java.awt.GradientPaint
 import java.awt.RenderingHints
@@ -63,7 +61,10 @@ import java.io.ByteArrayOutputStream
 import java.net.InetSocketAddress
 import javax.imageio.ImageIO
 import kotlin.test.Test
-import java.awt.Color as AwtColor
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.serialization.builtins.ListSerializer
+import org.koin.core.module.dsl.viewModel
+import org.koin.dsl.module
 
 /**
  * Screenshots of every browse / listing screen and state (light and dark, phone and landscape, 1.3x font) against a

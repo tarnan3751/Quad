@@ -388,3 +388,13 @@ fun ListingDetail.editBlockedReason(): String? = when {
     status == ListingStatus.DELETED -> "This listing was deleted."
     else -> null
 }
+
+/** One-line explanation of a condition, shown when picking it and on the listing. */
+internal val ListingCondition.hint: String
+    get() = when (this) {
+        ListingCondition.NEW -> "Never used, may still be in its packaging."
+        ListingCondition.LIKE_NEW -> "Used once or twice. No visible wear."
+        ListingCondition.GOOD -> "Some signs of use. Works perfectly."
+        ListingCondition.FAIR -> "Clear wear or small flaws, but still works."
+        ListingCondition.POOR -> "Doesn't fully work. For parts or repair."
+    }

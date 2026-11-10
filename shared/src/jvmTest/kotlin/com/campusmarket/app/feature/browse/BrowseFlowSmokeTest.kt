@@ -22,7 +22,7 @@ import com.campusmarket.app.clickDescription
 import com.campusmarket.app.data.respondError
 import com.campusmarket.app.data.respondJson
 import com.campusmarket.app.data.testUser
-import com.campusmarket.app.feature.listing.LISTING_GRID_TAG
+import com.campusmarket.app.ui.components.LISTING_GRID_TAG
 import com.campusmarket.app.feature.listing.detail
 import com.campusmarket.app.feature.listing.summary
 import com.campusmarket.app.signedIn

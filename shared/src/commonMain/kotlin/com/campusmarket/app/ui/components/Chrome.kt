@@ -82,18 +82,6 @@ fun BackButton(onClick: () -> Unit) {
     }
 }
 
-/** Section title inside a scrolling screen ("Ratings", "More from this seller"). A heading for screen readers. */
-@Composable
-fun SectionHeader(text: String, modifier: Modifier = Modifier, action: (@Composable () -> Unit)? = null) {
-    Row(
-        modifier.padding(start = Spacing.screen, end = Spacing.sm, top = Spacing.lg, bottom = Spacing.xs),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(text, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f).semantics { heading() })
-        action?.invoke()
-    }
-}
-
 /**
  * Yes/no confirmation. Use [destructive] for deletes / cancellations (confirm button turns red; Cancel stays
  * neutral so the two never look alike). Keep it shown while the action runs by passing [loading].
