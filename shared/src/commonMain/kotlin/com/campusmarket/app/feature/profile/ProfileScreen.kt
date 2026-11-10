@@ -216,7 +216,7 @@ private fun OwnProfileHeader(user: UserPrivate, onEdit: () -> Unit, onPreview: (
             horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
         ) {
             SecondaryButton("Edit profile", onClick = onEdit, icon = Icons.Default.Edit, modifier = Modifier.weight(1f))
-            SecondaryButton("View as others", onClick = onPreview, icon = Glyphs.Visibility, modifier = Modifier.weight(1f))
+            SecondaryButton("Public view", onClick = onPreview, icon = Glyphs.Visibility, modifier = Modifier.weight(1f))
         }
     }
 }

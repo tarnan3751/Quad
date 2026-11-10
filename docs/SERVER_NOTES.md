@@ -101,7 +101,7 @@ Decisions made while implementing the server that go beyond `CONTRACT.md`. Clien
 
 ## Staff management (admins)
 - `ModerationAction.CHANGE_ROLE` is a log-only action appended to the enum (the column is plain text, no migration). It is never valid for resolving a report (400); render it in the moderation log as "Change role" (`ui/Labels.kt`).
-- `GET /mod/staff`, `GET /mod/users/search?q=` and `PUT /mod/users/{id}/role` are **ADMIN only** (moderators get 403). Hide the entry points for non-admins; the app shows a "Staff" button in the moderation queue's app bar for admins.
+- `GET /mod/staff`, `GET /mod/users/search?q=` and `PUT /mod/users/{id}/role` are **ADMIN only** (moderators get 403). Hide the entry points for non-admins; the app shows "Staff" in the profile tab's Moderation group and in the moderation screens' app bars for admins only.
 - Admins are never created or altered through the API: they come from `ADMIN_EMAILS` on verification. The role endpoint can't target an admin (403), can't be pointed at yourself (400) and can't assign `ADMIN` (400). Promote/demote `USER` ↔ `MODERATOR` only.
 - Role changes take effect on the target's next request (no re-login needed); the audit row (`moderator_id` = the admin, note `"<old> -> <new>"`) shows up in `/mod/log`.
 - `StaffMember.email` is returned to admins only; never show it elsewhere.
