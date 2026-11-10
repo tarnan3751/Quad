@@ -11,11 +11,17 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
@@ -83,9 +89,12 @@ import com.campusmarket.app.platform.DeepLinks
 import com.campusmarket.app.platform.PlatformKind
 import com.campusmarket.app.ui.components.AppNavigationBar
 import com.campusmarket.app.ui.components.AppNavigationBarItem
+import com.campusmarket.app.ui.components.AppNavigationRail
+import com.campusmarket.app.ui.components.AppNavigationRailItem
 import com.campusmarket.app.ui.components.AppSnackbar
 import com.campusmarket.app.ui.components.AppSnackbarVisuals
 import com.campusmarket.app.ui.components.QuadIcons
+import com.campusmarket.app.ui.components.isCompactHeight
 import com.campusmarket.app.ui.state.UserMessages
 import com.campusmarket.core.UserPrivate
 import kotlinx.coroutines.flow.Flow
@@ -200,6 +209,7 @@ fun AppNavigation() {
 private fun AuthShell(snackbar: SnackbarHostState) {
     val nav = rememberNavController()
     Scaffold(
+        modifier = Modifier.besideCutouts(),
         snackbarHost = { SnackbarHost(snackbar, Modifier.aboveSystemBars()) { AppSnackbar(it) } },
         contentWindowInsets = WindowInsets(0),
     ) { padding ->
@@ -231,59 +241,79 @@ private fun SignedInShell(snackbar: SnackbarHostState) {
     val unread = rememberInboxUnread()
     val reselections = remember { MutableSharedFlow<TopLevelTab>(extraBufferCapacity = 1) }
     val clearance = remember { SnackbarClearance() }
+    // A phone in landscape has no height to spare for the bottom bar: the tabs go to a rail at the side.
+    val compact = isCompactHeight()
+    val showBar = onTabRoot && !compact
+    val showRail = onTabRoot && compact
+    val tabs: @Composable (@Composable (TopLevelTab, Boolean, () -> Unit, Int, String) -> Unit) -> Unit = { item ->
+        TopLevelTab.entries.forEach { tab ->
+            val selected = tab == currentTab
+            val badge = if (tab == TopLevelTab.Inbox) unread else 0
+            item(
+                tab,
+                selected,
+                { if (selected) reselections.tryEmit(tab) else nav.navigateToTab(tab) },
+                badge,
+                if (badge == 1) "1 unread conversation" else "$badge unread conversations",
+            )
+        }
+    }
 
-    Scaffold(
-        // On tab roots the bottom bar already lifts the snackbar above the navigation bar; elsewhere a screen's pinned
-        // bar (see keepSnackbarsAbove) or the system bars do.
-        snackbarHost = {
-            val above = when {
-                onTabRoot -> Modifier
-                clearance.bottomPx > 0 -> Modifier.padding(bottom = with(LocalDensity.current) { clearance.bottomPx.toDp() })
-                else -> Modifier.aboveSystemBars()
-            }
-            SnackbarHost(snackbar, above) { AppSnackbar(it) }
-        },
-        contentWindowInsets = WindowInsets(0),
-        bottomBar = {
-            if (onTabRoot) {
-                AppNavigationBar {
-                    TopLevelTab.entries.forEach { tab ->
-                        val selected = tab == currentTab
-                        val badge = if (tab == TopLevelTab.Inbox) unread else 0
-                        AppNavigationBarItem(
-                            selected = selected,
-                            onClick = { if (selected) reselections.tryEmit(tab) else nav.navigateToTab(tab) },
-                            icon = if (selected) tab.selectedIcon else tab.icon,
-                            label = tab.label,
-                            badgeCount = badge,
-                            badgeDescription = if (badge == 1) "1 unread conversation" else "$badge unread conversations",
-                        )
-                    }
+    val sides = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)
+    // The rail's own colour runs under a cutout on its side; everything else stays clear of it.
+    Row(Modifier.fillMaxSize().windowInsetsPadding(if (showRail) sides.only(WindowInsetsSides.End) else sides)) {
+        if (showRail) {
+            AppNavigationRail(windowInsets = sides.only(WindowInsetsSides.Start).union(WindowInsets.systemBars.only(WindowInsetsSides.Vertical))) {
+                tabs { tab, selected, onClick, badge, badgeDescription ->
+                    AppNavigationRailItem(selected, onClick, if (selected) tab.selectedIcon else tab.icon, tab.label, badgeCount = badge, badgeDescription = badgeDescription)
                 }
             }
-        },
-    ) { padding ->
-        CompositionLocalProvider(LocalTabReselected provides reselections, LocalSnackbarClearance provides clearance) {
-            NavHost(
-                nav,
-                startDestination = BrowseRoute,
-                modifier = Modifier.padding(padding).consumeWindowInsets(padding),
-                enterTransition = EnterScreen,
-                exitTransition = ExitScreen,
-                popEnterTransition = PopEnterScreen,
-                popExitTransition = PopExitScreen,
-            ) {
-                browseGraph(nav)
-                listingGraph(nav)
-                chatGraph(nav)
-                ordersGraph(nav)
-                profileGraph(nav)
-                moderationGraph(nav)
+        }
+        Scaffold(
+            modifier = Modifier.weight(1f).consumeWindowInsets(sides),
+            // On tab roots the bottom bar already lifts the snackbar above the navigation bar; elsewhere a screen's
+            // pinned bar (see keepSnackbarsAbove) or the system bars do.
+            snackbarHost = {
+                val above = when {
+                    showBar -> Modifier
+                    clearance.bottomPx > 0 -> Modifier.padding(bottom = with(LocalDensity.current) { clearance.bottomPx.toDp() })
+                    else -> Modifier.aboveSystemBars()
+                }
+                SnackbarHost(snackbar, above) { AppSnackbar(it) }
+            },
+            contentWindowInsets = WindowInsets(0),
+            bottomBar = {
+                if (showBar) {
+                    AppNavigationBar {
+                        tabs { tab, selected, onClick, badge, badgeDescription ->
+                            AppNavigationBarItem(selected, onClick, if (selected) tab.selectedIcon else tab.icon, tab.label, badgeCount = badge, badgeDescription = badgeDescription)
+                        }
+                    }
+                }
+            },
+        ) { padding ->
+            CompositionLocalProvider(LocalTabReselected provides reselections, LocalSnackbarClearance provides clearance) {
+                NavHost(
+                    nav,
+                    startDestination = BrowseRoute,
+                    modifier = Modifier.padding(padding).consumeWindowInsets(padding),
+                    enterTransition = EnterScreen,
+                    exitTransition = ExitScreen,
+                    popEnterTransition = PopEnterScreen,
+                    popExitTransition = PopExitScreen,
+                ) {
+                    browseGraph(nav)
+                    listingGraph(nav)
+                    chatGraph(nav)
+                    ordersGraph(nav)
+                    profileGraph(nav)
+                    moderationGraph(nav)
+                }
+                // iOS has no "back" between tabs: the edge swipe would otherwise pop Sell / Inbox / Profile to Browse.
+                // Registered after the NavHost so it goes first; a screen's own handler (e.g. Sell's unsaved form) still
+                // comes before it.
+                if (ios) BackHandler(enabled = onTabRoot && currentTab != TopLevelTab.Browse) { }
             }
-            // iOS has no "back" between tabs: the edge swipe would otherwise pop Sell / Inbox / Profile to Browse.
-            // Registered after the NavHost so it goes first; a screen's own handler (e.g. Sell's unsaved form) still
-            // comes before it.
-            if (ios) BackHandler(enabled = onTabRoot && currentTab != TopLevelTab.Browse) { }
         }
     }
 }
@@ -304,6 +334,13 @@ private fun NavDestination?.isOn(routeClass: KClass<*>): Boolean =
     this?.hierarchy?.any { it.hasRoute(routeClass) } == true
 
 private fun NavDestination.isTabRoot(): Boolean = TopLevelTab.entries.any { hasRoute(it.routeClass) }
+
+/**
+ * Keeps the app out from under a display cutout or a side navigation bar (landscape). Applied once around each shell,
+ * so screens only deal with the top and bottom insets.
+ */
+@Composable
+private fun Modifier.besideCutouts(): Modifier = windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
 
 /** The shell's Scaffold has no content insets, so keep snackbars clear of the navigation bar and the keyboard. */
 @Composable

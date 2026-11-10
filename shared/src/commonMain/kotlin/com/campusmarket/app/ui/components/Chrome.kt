@@ -3,16 +3,20 @@ package com.campusmarket.app.ui.components
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -31,6 +35,7 @@ import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.heading
@@ -38,6 +43,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.dropUnlessResumed
+import com.campusmarket.app.ui.theme.CampusTheme
 import com.campusmarket.app.ui.theme.Spacing
 
 /**
@@ -86,8 +92,9 @@ fun BackButton(onClick: () -> Unit) {
 }
 
 /**
- * Yes/no confirmation. Use [destructive] for deletes / cancellations (confirm button turns red; Cancel stays
- * neutral so the two never look alike). Keep it shown while the action runs by passing [loading].
+ * Yes/no confirmation. Use [destructive] for deletes / cancellations: the confirm action becomes a solid button in
+ * the theme's error colour (see [DialogConfirmButton]) and Cancel stays a neutral text button, so the two never look
+ * alike. Keep it shown while the action runs by passing [loading].
  */
 @Composable
 fun ConfirmDialog(
@@ -99,9 +106,13 @@ fun ConfirmDialog(
     dismissLabel: String = "Cancel",
     destructive: Boolean = false,
     loading: Boolean = false,
-) = ConfirmDialog(title, confirmLabel, onConfirm, onDismiss, dismissLabel, destructive, loading) { Text(message) }
+    icon: ImageVector? = null,
+) = ConfirmDialog(title, confirmLabel, onConfirm, onDismiss, dismissLabel, destructive, loading, icon = icon) { Text(message) }
 
-/** [ConfirmDialog] with richer [content] (bullets, a field, an `InlineError`) in place of the message. */
+/**
+ * [ConfirmDialog] with richer [content] (bullets, a field, an `InlineError`) in place of the message; it scrolls when
+ * it is taller than the dialog can be (landscape, large text).
+ */
 @Composable
 fun ConfirmDialog(
     title: String,
@@ -112,44 +123,85 @@ fun ConfirmDialog(
     destructive: Boolean = false,
     loading: Boolean = false,
     confirmEnabled: Boolean = true,
+    icon: ImageVector? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val haptics = LocalHapticFeedback.current
     AlertDialog(
         onDismissRequest = { if (!loading) onDismiss() },
+        icon = icon?.let {
+            { Icon(it, contentDescription = null, tint = if (destructive) MaterialTheme.colorScheme.error else LocalContentColor.current) }
+        },
         title = { Text(title) },
-        text = { Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm), content = content) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(Spacing.sm), content = content)
+        },
         confirmButton = {
-            TextButton(
+            DialogConfirmButton(
+                confirmLabel,
                 onClick = {
                     haptics.performHapticFeedback(if (destructive) HapticFeedbackType.LongPress else HapticFeedbackType.Confirm)
                     onConfirm()
                 },
-                enabled = confirmEnabled && !loading,
-                colors = if (destructive) {
-                    ButtonDefaults.textButtonColors(
-                        contentColor = MaterialTheme.colorScheme.error,
-                        disabledContentColor = MaterialTheme.colorScheme.error.copy(alpha = 0.6f),
-                    )
-                } else {
-                    ButtonDefaults.textButtonColors()
-                },
-            ) {
-                if (loading) {
-                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = LocalContentColor.current)
-                    Spacer(Modifier.width(Spacing.sm))
-                }
-                Text(confirmLabel)
-            }
+                destructive = destructive,
+                enabled = confirmEnabled,
+                loading = loading,
+            )
         },
-        dismissButton = {
-            TextButton(
-                onClick = onDismiss,
-                enabled = !loading,
-                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant),
-            ) { Text(dismissLabel) }
-        },
+        dismissButton = { DialogDismissButton(dismissLabel, onDismiss, enabled = !loading) },
     )
+}
+
+/**
+ * The confirm action of a dialog. [destructive] (delete, remove, suspend, cancel an order): a solid pill in the
+ * theme's error colour. A red text button is not enough: the brand's berry text buttons are almost the same colour.
+ * Pair it with [DialogDismissButton].
+ */
+@Composable
+fun DialogConfirmButton(
+    label: String,
+    onClick: () -> Unit,
+    destructive: Boolean = false,
+    enabled: Boolean = true,
+    loading: Boolean = false,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val content: @Composable RowScope.() -> Unit = {
+        if (loading) {
+            CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = LocalContentColor.current)
+            Spacer(Modifier.width(Spacing.sm))
+        }
+        Text(label)
+    }
+    if (destructive) {
+        Button(
+            onClick = onClick,
+            enabled = enabled && !loading,
+            shape = CampusTheme.pill,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = scheme.error,
+                contentColor = scheme.onError,
+                // Working keeps its colour; not yet allowed (e.g. the confirmation word isn't typed) is plainly off.
+                disabledContainerColor = if (loading) scheme.error else scheme.onSurface.copy(alpha = 0.10f),
+                disabledContentColor = if (loading) scheme.onError else scheme.onSurface.copy(alpha = 0.45f),
+            ),
+            elevation = null,
+            contentPadding = PaddingValues(horizontal = 20.dp),
+            content = content,
+        )
+    } else {
+        TextButton(onClick = onClick, enabled = enabled && !loading, content = content)
+    }
+}
+
+/** The way out of a dialog: a neutral text button, so it can't be mistaken for the action. */
+@Composable
+fun DialogDismissButton(label: String, onClick: () -> Unit, enabled: Boolean = true) {
+    TextButton(
+        onClick = onClick,
+        enabled = enabled,
+        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant),
+    ) { Text(label) }
 }
 
 /** What a [UserMessages][com.campusmarket.app.ui.state.UserMessages] snackbar shows; errors get an alert icon. */

@@ -40,10 +40,29 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
 }
 
-// The demo seed's photos are dev-only: `:server:seed`, `:server:run` and the tests read them from the resources
-// directory, but the jar that the distribution and the Docker image ship leaves them out.
+// The demo seed's photos stay out of the server jar. The distribution (and so the Docker image) carries them in a
+// separate jar that only `bin/seed` puts on its classpath.
 tasks.jar {
     exclude("seed/photos/**")
+}
+
+val seedPhotosJar = tasks.register<Jar>("seedPhotosJar") {
+    archiveFileName = "seed-photos.jar"
+    from("src/main/resources") { include("seed/photos/**") }
+}
+
+val seedStartScripts = tasks.register<CreateStartScripts>("seedStartScripts") {
+    applicationName = "seed"
+    mainClass = "com.campusmarket.server.seed.Seed"
+    outputDir = layout.buildDirectory.dir("seedScripts").get().asFile
+    classpath = tasks.startScripts.get().classpath!! + files(seedPhotosJar)
+}
+
+distributions.main {
+    contents {
+        from(seedPhotosJar) { into("lib") }
+        from(seedStartScripts) { into("bin") }
+    }
 }
 
 tasks.test {

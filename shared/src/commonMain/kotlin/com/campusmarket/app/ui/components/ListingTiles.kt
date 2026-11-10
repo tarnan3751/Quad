@@ -301,7 +301,8 @@ const val LISTING_GRID_TAG = "listingGrid"
 /**
  * Paged listing grid with pull-to-refresh and infinite scroll, the grid sibling of [PagedLazyColumn]. [header] (search
  * context, categories, sort) stays visible through the first load (skeleton tiles), a failed first load and the
- * [empty] state, and the footer says when the end is reached.
+ * [empty] state, and the footer says when the end is reached. As many columns as fit at [minTileWidth], so a wide window
+ * (landscape, tablet) gets more of them.
  */
 @Composable
 fun PagedListingGrid(
@@ -310,6 +311,7 @@ fun PagedListingGrid(
     state: LazyGridState = rememberLazyGridState(),
     contentPadding: PaddingValues = PaddingValues(start = Spacing.screen, end = Spacing.screen, top = Spacing.sm, bottom = Spacing.lg),
     endOfList: String? = "You've seen everything for now",
+    minTileWidth: Dp = 160.dp,
     header: LazyGridScope.() -> Unit = {},
     empty: @Composable () -> Unit,
     tile: @Composable LazyGridItemScope.(ListingSummary) -> Unit,
@@ -320,7 +322,7 @@ fun PagedListingGrid(
 
     PullToRefreshBox(isRefreshing = paged.isRefreshing, onRefresh = paginator::refresh, modifier = modifier.fillMaxSize()) {
         LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = 160.dp),
+            columns = GridCells.Adaptive(minSize = minTileWidth),
             state = state,
             contentPadding = contentPadding,
             horizontalArrangement = Arrangement.spacedBy(Spacing.md),

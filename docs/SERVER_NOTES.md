@@ -142,8 +142,10 @@ Decisions made while implementing the server that go beyond `CONTRACT.md`. Clien
 ## Demo data (after `./gradlew :server:seed`)
 Password `password123`: `admin@state.edu` (ADMIN), `moderator@state.edu` (MODERATOR), sellers `maya@ jordan@ priya@ sofia@state.edu`, buyers `liam@ noah@ tyler@state.edu`; `dev@ ava@ ethan@ zoe@tech.edu` on the second campus.
 - 44 listings posted over the last few weeks (newest minutes ago), each with 1-3 real product photos bundled in
-  `server/src/main/resources/seed/photos/` (sources and licences in `CREDITS.md` there; dev-only, so they are left out of
-  the server jar that `installDist` and the Docker image ship). A listing whose file is missing
+  `server/src/main/resources/seed/photos/` (sources and licences in `CREDITS.md` there). They are left out of the server jar; the distribution and the Docker image carry them in
+  `lib/seed-photos.jar`, which only `bin/seed` loads. Seed a container with
+  `docker compose --profile server run --rm --entrypoint /app/bin/seed server` (add `--reset` to wipe first). A
+  listing whose file is missing
   gets a generated placeholder and the seed names it. Eight users have illustrated avatars (shapes on Golden Hour
   gradients, never photos of people); the rest show the app's initials.
 - Orders in every state but awaiting-payment: completed (rated, some 3-4 stars), paid and awaiting handoff (sofia@ buying
