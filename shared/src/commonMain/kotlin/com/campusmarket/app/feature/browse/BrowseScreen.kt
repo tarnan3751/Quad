@@ -50,6 +50,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -62,6 +64,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.backhandler.BackHandler
+import androidx.compose.ui.focus.focusTarget
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
@@ -87,6 +90,7 @@ import com.campusmarket.app.feature.listing.PagedListingGrid
 import com.campusmarket.app.feature.listing.PriceInput
 import com.campusmarket.app.feature.listing.icon
 import com.campusmarket.app.navigation.LocalCurrentUser
+import com.campusmarket.app.navigation.OnTabReselected
 import com.campusmarket.app.navigation.TopLevelTab
 import com.campusmarket.app.navigation.navigateToTab
 import com.campusmarket.app.ui.Format
@@ -126,9 +130,21 @@ fun BrowseScreen(nav: NavController) {
         keyboard?.hide()
     }
     val searching = state.query.q != null
+    // Back from search results goes back to everything on campus, rather than out of the app.
+    BackHandler(enabled = searching && !showRecents) {
+        recentsDismissed = true
+        vm.clearSearch()
+    }
     // A fresh grid state per query: new results start at the top. Coming back from a listing (or from recent searches)
     // restores it.
     val gridState = rememberSaveable(state.query, saver = LazyGridState.Saver) { LazyGridState() }
+    OnTabReselected(TopLevelTab.Browse) {
+        if (showRecents) {
+            recentsDismissed = true
+            keyboard?.hide()
+        }
+        gridState.animateScrollToItem(0)
+    }
 
     Scaffold(
         topBar = {
@@ -142,7 +158,10 @@ fun BrowseScreen(nav: NavController) {
             )
         },
     ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding)) {
+        // A focus target ahead of the search field: when another screen's focused text field goes away (e.g. back
+        // from a half-filled Sell form), Android hands focus to the first focusable thing on screen. Without this it's
+        // the search field, which pops the keyboard and recent searches open on its own.
+        Column(Modifier.fillMaxSize().padding(padding).focusTarget()) {
             SearchBarRow(
                 text = state.searchText,
                 onTextChange = {
@@ -158,6 +177,8 @@ fun BrowseScreen(nav: NavController) {
                     if (it && !searchFocused) recentsDismissed = false
                     searchFocused = it
                 },
+                // The field usually keeps its focus after a search or Back (see above), so a tap is what reopens them.
+                onTap = { recentsDismissed = false },
                 filterCount = state.filters.filterCount,
                 onOpenFilters = {
                     keyboard?.hide()
@@ -265,9 +286,14 @@ private fun SearchBarRow(
     onSearch: () -> Unit,
     onClear: () -> Unit,
     onFocusChange: (Boolean) -> Unit,
+    onTap: () -> Unit,
     filterCount: Int,
     onOpenFilters: () -> Unit,
 ) {
+    val interactions = remember { MutableInteractionSource() }
+    LaunchedEffect(interactions) {
+        interactions.interactions.collect { if (it is PressInteraction.Release) onTap() }
+    }
     Row(
         Modifier.fillMaxWidth().padding(start = Spacing.screen, end = Spacing.xs, top = Spacing.xs, bottom = Spacing.xs),
         verticalAlignment = Alignment.CenterVertically,
@@ -292,6 +318,7 @@ private fun SearchBarRow(
             ),
             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, imeAction = ImeAction.Search),
             keyboardActions = KeyboardActions(onSearch = { onSearch() }),
+            interactionSource = interactions,
         )
         IconButton(onClick = onOpenFilters) {
             BadgedBox(

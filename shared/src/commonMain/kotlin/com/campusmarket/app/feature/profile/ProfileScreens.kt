@@ -83,6 +83,8 @@ import com.campusmarket.app.data.ServerConfig
 import com.campusmarket.app.data.isModerator
 import com.campusmarket.app.feature.chat.MessageSellerRoute
 import com.campusmarket.app.feature.listing.ListingDetailRoute
+import com.campusmarket.app.feature.listing.ListingTile
+import com.campusmarket.app.feature.listing.PagedListingGrid
 import com.campusmarket.app.feature.moderation.ActionRunner
 import com.campusmarket.app.feature.moderation.ModerationActionDialog
 import com.campusmarket.app.feature.moderation.ReportSheet
@@ -99,9 +101,7 @@ import com.campusmarket.app.ui.components.ConfirmDialog
 import com.campusmarket.app.ui.components.EmptyState
 import com.campusmarket.app.ui.components.ErrorState
 import com.campusmarket.app.ui.components.InlineError
-import com.campusmarket.app.ui.components.ListingCard
 import com.campusmarket.app.ui.components.PagedLazyColumn
-import com.campusmarket.app.ui.components.PagedLazyGrid
 import com.campusmarket.app.ui.components.PrimaryButton
 import com.campusmarket.app.ui.components.RatingStars
 import com.campusmarket.app.ui.components.ServerSettingsDialog
@@ -350,12 +350,13 @@ fun UserProfileScreen(route: UserProfileRoute, nav: NavController) {
                             )
                         }
                     } else if (tab == 0) {
-                        PagedLazyGrid(
+                        // The storefront's grid and tile, so listings look the same here as in Browse (even rows).
+                        PagedListingGrid(
                             vm.listings,
-                            key = { it.id },
                             // No top padding and a full-bleed header, so the header and tab row sit exactly where they
                             // do on the Ratings tab (a list without side padding) instead of jumping when switching tabs.
-                            contentPadding = PaddingValues(start = GridSidePadding, end = GridSidePadding, bottom = Spacing.md),
+                            contentPadding = PaddingValues(start = GridSidePadding, end = GridSidePadding, bottom = Spacing.lg),
+                            endOfList = null,
                             header = {
                                 item(key = "header", span = { GridItemSpan(maxLineSpan) }) {
                                     Box(Modifier.ignoreHorizontalPadding(GridSidePadding)) { header() }
@@ -371,7 +372,7 @@ fun UserProfileScreen(route: UserProfileRoute, nav: NavController) {
                                 )
                             },
                         ) { listing ->
-                            ListingCard(listing, onClick = { nav.navigate(ListingDetailRoute(listing.id)) })
+                            ListingTile(listing, onClick = { nav.navigate(ListingDetailRoute(listing.id)) })
                         }
                     } else {
                         PagedLazyColumn(
@@ -478,7 +479,7 @@ private class ProfileActions(
     val onEdit: () -> Unit,
 )
 
-private val GridSidePadding = Spacing.md
+private val GridSidePadding = Spacing.screen
 
 /** Lets a full-span grid item extend over the grid's horizontal content padding ([padding] on each side). */
 private fun Modifier.ignoreHorizontalPadding(padding: Dp): Modifier = layout { measurable, constraints ->

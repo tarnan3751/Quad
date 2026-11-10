@@ -39,7 +39,10 @@ internal fun PriceInput(
         placeholder = placeholder,
         prefix = { Text("$") },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, autoCorrectEnabled = false, imeAction = imeAction),
-        keyboardActions = KeyboardActions(onAny = { onImeAction() }),
+        keyboardActions = KeyboardActions(onAny = {
+            onImeAction()
+            defaultKeyboardAction(imeAction)
+        }),
         visualTransformation = PriceGrouping,
     )
 }

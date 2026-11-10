@@ -226,7 +226,7 @@ class OrderDetailViewModel(
                         _ui.update { it.copy(paymentCheck = null) }
                         when (fresh.status) {
                             OrderStatus.PAID -> userMessages.show("Payment received. Quad holds it until you confirm pickup.")
-                            OrderStatus.CANCELLED -> userMessages.show("Checkout expired, so this order was cancelled. You weren't charged.")
+                            OrderStatus.CANCELLED -> userMessages.show("Checkout ended without a payment, so this order was cancelled. You weren't charged.")
                             else -> Unit
                         }
                         return@launch

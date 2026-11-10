@@ -51,6 +51,7 @@ import com.campusmarket.app.ui.theme.Spacing
 import com.campusmarket.core.ListingDetail
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
+import com.campusmarket.app.navigation.keepSnackbarsAbove
 
 /**
  * Buy flow, step 1: review the item and how payment works, then "Continue to payment" creates the order, opens
@@ -73,7 +74,7 @@ fun CheckoutScreen(route: CheckoutRoute, nav: NavController) {
         topBar = { AppTopBar("Review purchase", onBack = { nav.popBackStack() }) },
         bottomBar = {
             if (listing != null && ui.problem == null) {
-                Surface(color = MaterialTheme.colorScheme.surfaceContainerLow) {
+                Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.keepSnackbarsAbove()) {
                     Column(
                         Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = Spacing.screen, vertical = Spacing.md),
                         verticalArrangement = Arrangement.spacedBy(Spacing.sm),

@@ -96,6 +96,7 @@ import com.campusmarket.core.UserPublic
 import kotlinx.coroutines.launch
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
+import com.campusmarket.app.navigation.keepSnackbarsAbove
 
 /**
  * Listing detail: photo pager (side by side with the details on wide windows), price and title, scannable facts,
@@ -146,7 +147,7 @@ fun ListingDetailScreen(route: ListingDetailRoute, nav: NavController) {
             )
         },
         bottomBar = {
-            if (listing != null) {
+            if (listing != null) Box(Modifier.keepSnackbarsAbove()) {
                 DetailActionBar(
                     listing = listing,
                     unblocking = ui.unblocking,
@@ -191,11 +192,8 @@ fun ListingDetailScreen(route: ListingDetailRoute, nav: NavController) {
         ReportSheet(
             targetType = ReportTargetType.LISTING,
             targetId = route.listingId,
+            // The sheet confirms with its own "Report sent" page, so no snackbar here.
             onDismiss = { reporting = false },
-            onReported = {
-                reporting = false
-                vm.onReported()
-            },
         )
     }
     val photos = listing?.photos.orEmpty()

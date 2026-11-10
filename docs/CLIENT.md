@@ -90,9 +90,9 @@ Composable screen ── koinViewModel() ──▶ ViewModel ──▶ ApiClient
 | Cursor list (`Page<T>`) | `val items = Paginator(viewModelScope, key = { it.id }) { cursor, limit -> api.xxx(cursor = cursor, limit = limit) }` and render with `PagedLazyColumn(vm.items, key = { it.id }) { … }` / `PagedLazyGrid`. It starts the first load (skeleton rows / listing-card skeletons; override with `loading = { … }`), handles pull-to-refresh, infinite scroll, retry footer and empty state. New query: `reset()`. Local edits: `items.update { list -> … }`. |
 | Form | Immutable `XxxState(fields…, fieldErrors: Map<String,String>, formError: String?, submitting)`. Validate locally with `Validate.*` + `fieldErrorsOf(...)`, then call the API and map failures with `e.toFormErrors(codeToField)`. Show errors with `AppTextField(error = state.fieldErrors["title"])` and `InlineError(state.formError)`. Flag a field as soon as the user leaves it with `Modifier.onFocusLost(vm::checkTitle)` (skip empty fields). Pass `loading = state.submitting` to the submit button and return early from `submit()` while submitting (double taps). See `feature/auth/AuthViewModels.kt`. |
 | One-off event (navigate after save, open URL) | `val events = EventQueue<MyEvent>()`, `events.send(...)` in the VM, `CollectEvents(vm.events.flow) { … }` in the screen. |
-| Snackbar / toast | Inject `UserMessages`: `messages.show("Listing deleted")`, `messages.show("Removed", "Undo") { … }` or `messages.showError(e)` / `showError("Couldn't save", "Retry") { … }` (errors get an alert icon, stay longer and can be closed). It survives navigation. Keep the text short and plain. |
+| Snackbar / toast | Inject `UserMessages`: `messages.show("Listing deleted")`, `messages.show("Removed", "Undo") { … }` or `messages.showError(e)` / `showError("Couldn't save", "Retry") { … }` (errors get an alert icon, stay longer and can be closed). It survives navigation. Keep the text short and plain. On a screen with a pinned bottom bar (action bar, chat composer) put `Modifier.keepSnackbarsAbove()` (`navigation/`) on it so snackbars show above it, not over it. |
 | Inbox tab badge | `UnreadConversations` (Koin single, `feature/chat/`): the shell collects `count` (conversations with unread messages) for the Inbox tab; it follows the chat socket while collected and re-syncs on resume. |
-| Scroll to top when the current tab is tapped again | `OnTabReselected(TopLevelTab.Browse) { gridState.animateScrollToItem(0) }` in the tab's root screen. |
+| Scroll to top when the current tab is tapped again | `OnTabReselected(TopLevelTab.Browse) { gridState.animateScrollToItem(0) }` in the tab's root screen (Browse, Inbox and Profile do this). |
 
 ## Calling the API
 
@@ -118,7 +118,7 @@ Auth calls (`register / verifyEmail / resendCode / login / logout`) are used thr
 - It reconnects with backoff (1 s → 30 s). On a policy-violation close it refreshes the token first. `chatSocket.status` exposes `Idle / Connecting / Connected / Reconnecting` for a "Reconnecting…" hint.
 - **Send with REST** (`api.sendMessage`) to get the created `Message` and typed errors (`BLOCKED`). The server echoes it as `MessageCreated` on the socket too, so **de-duplicate by `message.id`**. `chatSocket.markRead(id)` / `api.markConversationRead(id)` mark a conversation read. `chatSocket.reconnectNow()` skips the backoff wait.
 - **Unread total (Inbox tab badge):** `UnreadConversations` (`feature/chat/`, Koin single) exposes `count: StateFlow<Int>`, the number of conversations with unread messages (0 when signed out). Collect it where the badge is drawn: `koinInject<UnreadConversations>().count.collectAsStateWithLifecycle()`. While collected it syncs the first page of `GET /conversations`, follows socket events (polling while the socket is down; collecting keeps the socket open, stopping 5 s after the last collector) and takes what the inbox / conversation screens report, so badge and list agree. `refresh()` re-syncs on demand.
-- **Clock times:** chat and order screens format times with `rememberTimeFormat()` (`feature/chat/TimeFormat.kt`), which follows the device's 12/24-hour setting (Android `DateFormat.is24HourFormat`, iOS `j` skeleton, desktop locale) and words dates the way people say them ("Yesterday", "Thu, Nov 12 at 9:24 AM", "in 2 days, 4 hours"). Tests pin it with `LocalUse24HourClock` or construct `TimeFormat(use24h, tz, now)` directly.
+- **Clock times:** chat, order and moderation screens format times with `rememberTimeFormat()` (`feature/chat/TimeFormat.kt`), which follows the device's 12/24-hour setting (Android `DateFormat.is24HourFormat`, iOS `j` skeleton, desktop locale) and words dates the way people say them ("Yesterday", "Thu, Nov 12 at 9:24 AM", "in 2 days, 4 hours"). On Android the setting is re-read on every resume (it's changed in the Settings app). Don't hand-format clock times. Tests pin it with `LocalUse24HourClock` or construct `TimeFormat(use24h, tz, now)` directly.
 
 ## Navigation
 
@@ -201,7 +201,7 @@ Route args are primitives/strings. Use enum *names* as strings if you need an en
 
 Also: `Format.price / relativeTime / date / dateTime / memberSince / rating`, enum labels (`ListingStatus.label`, `OrderStatus.label`, `ReportStatus.label`, `ModerationAction.label`, …; `ListingCategory`, `ListingCondition`, `ReportReason` already have `.label` in core), and `Validate.*` for `Limits`-based checks.
 
-Storefront pieces that live in `feature/listing/` (feature-local for now, used by browse and the listing screens; promote
+Storefront pieces that live in `feature/listing/` (feature-local for now, used by browse, the listing screens and public profiles; promote
 them to `ui/components` if another feature needs them):
 
 | Piece | Use |
@@ -211,7 +211,7 @@ them to `ui/components` if another feature needs them):
 | `ListingImage` | Photo with a pulse while loading, a photo outline when missing and a crossed-out photo when it fails |
 | `FavoriteButton` | 48 dp heart toggle (pops and gives haptic feedback when it fills) |
 | `PriceInput` | Dollar field: decimal keypad, `$` prefix, thousands separators while typing, at most two decimals |
-| `PhotoViewer`, `PageDots` | Full-screen photos on black: swipe, pinch / double-tap zoom, pan |
+| `PhotoViewer`, `PageDots` | Full-screen photos on black, edge to edge (`edgeToEdgeDialogProperties()` + light status-bar icons): swipe, pinch / double-tap zoom, pan |
 | `ListingIcons`, `ListingCategory.icon`, `ListingCondition.hint`, `timeAgo` | Line icons for categories and facts, condition explanations, "2h ago" |
 
 
@@ -256,7 +256,7 @@ are code identifiers, like the `com.campusmarket` packages.)
 - **Voice.** Warm and short. The wordmark is lowercase `quad`; UI copy is normal sentence case and says "Quad" when it
   names the product.
 - Spacing: `Spacing.xs/sm/md/lg/xl/xxl` and `Spacing.screen` (16 dp horizontal screen padding). Shapes come from the theme (`MaterialTheme.shapes.medium` for cards).
-- Status bar: a screen that draws its own colour under the status bar calls `StatusBarIcons(darkIcons = …)` (in
+- Status bar: a full-screen dialog that should reach under the system bars uses `edgeToEdgeDialogProperties()` (in `platform/`; Android `decorFitsSystemWindows = false`) and pads its controls with the bar insets. A screen that draws its own colour under the status bar calls `StatusBarIcons(darkIcons = …)` (in
   `platform/`); leaving the screen restores the system default. Only the Welcome hero does this today.
 - **Motion.** Screen changes are Material's shared-axis X, kept short (300 ms): a pushed screen slides in a little and
   fades in, back reverses it; switching tabs is a quick cross-fade. Both NavHosts in `AppNavigation` set this; don't add
@@ -288,7 +288,7 @@ are code identifiers, like the `com.campusmarket` packages.)
 
 ## Platform notes
 
-- **Android:** `CampusMarketApp` calls `initCampusMarket(context)`. `MainActivity` is `singleTask` and forwards `campusmarket://` intents (cold start + `onNewIntent`) to `DeepLinks`. Cleartext HTTP is allowed only in debug (`src/debug/res/xml/network_security_config.xml`). Images come from the system photo picker, so the app needs no media permissions. The window theme (`Theme.Quad`, `res/values*/themes.xml`) paints the warm-white / after-dark background behind Compose and the Android 12+ splash, so launch never flashes white in dark mode.
+- **Android:** `CampusMarketApp` calls `initCampusMarket(context)`. `MainActivity` is `singleTask` and forwards `campusmarket://` intents (cold start + `onNewIntent`) to `DeepLinks`. Cleartext HTTP is allowed only in debug (`src/debug/res/xml/network_security_config.xml`). Images come from the system photo picker, so the app needs no media permissions. The window theme (`Theme.Quad`, `res/values*/themes.xml`) paints the warm-white / after-dark background behind Compose and the Android 12+ splash, so launch never flashes white in dark mode (and sets `windowLightStatusBar` per theme for the window before Compose takes over). Predictive back is on (`android:enableOnBackInvokedCallback`), so handle back with `BackHandler` (never `onBackPressed`); in-app back animations need Android 14+.
 - **iOS:** `MainViewController()` starts Koin. `iOSApp.swift` forwards `.onOpenURL` to `MainViewControllerKt.handleDeepLink(url:)`. `Info.plist` registers the `campusmarket` scheme, has photo/camera/local-network usage strings, sets `NSAllowsLocalNetworking` (HTTP to localhost/.local only), and sets `UIViewControllerBasedStatusBarAppearance` to NO so `StatusBarIcons` can set the app-wide status bar style (the SwiftUI host never asks the Compose view controller). The display name comes from `APP_NAME` in `Configuration/Config.xcconfig`. The launch screen is the `LaunchBackground` colour from the asset catalog (warm white / after dark). The Kotlin side compiles (`./gradlew :shared:compileKotlinIosSimulatorArm64`). Swift and linking need Xcode.
 - **Desktop:** dev harness only. URL opening uses `java.awt.Desktop`. There's no URL-scheme registration, so pass a deep link as a program argument instead.
 

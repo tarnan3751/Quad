@@ -28,6 +28,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -66,6 +67,8 @@ fun RowScope.AppNavigationBarItem(
     val progress by animateFloatAsState(if (selected) 1f else 0f, label = "tabIndicator")
     val brush = CampusTheme.actionGradient
     val haptics = LocalHapticFeedback.current
+    val hasBadge = badgeCount > 0 || badgeDot
+    val badgeText = badgeDescription ?: if (badgeCount > 0) "$badgeCount new" else "New"
     NavigationBarItem(
         selected = selected,
         onClick = {
@@ -76,13 +79,13 @@ fun RowScope.AppNavigationBarItem(
         icon = {
             BadgedBox(
                 badge = {
-                    if (badgeCount > 0 || badgeDot) {
-                        val description = badgeDescription ?: if (badgeCount > 0) "$badgeCount new" else "New"
+                    if (hasBadge) {
+                        // Material clears the icon's semantics when the label shows, so the label carries the badge.
                         CountBadge(
                             count = badgeCount,
                             modifier = Modifier
                                 .border(1.5.dp, scheme.surfaceContainer, CampusTheme.pill)
-                                .clearAndSetSemantics { contentDescription = description },
+                                .clearAndSetSemantics { },
                         )
                     }
                 },
@@ -110,6 +113,7 @@ fun RowScope.AppNavigationBarItem(
         label = {
             Text(
                 label,
+                modifier = if (hasBadge) Modifier.semantics { contentDescription = "$label, $badgeText" } else Modifier,
                 fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,

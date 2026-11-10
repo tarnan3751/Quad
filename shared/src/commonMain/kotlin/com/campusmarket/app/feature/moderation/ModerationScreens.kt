@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import com.campusmarket.app.feature.chat.rememberTimeFormat
 import com.campusmarket.app.feature.listing.ListingDetailRoute
 import com.campusmarket.app.feature.profile.Chevron
 import com.campusmarket.app.feature.profile.Glyphs
@@ -472,7 +473,7 @@ private fun ReportBody(report: Report, nav: NavController, onOpenDialog: (ModDia
                 Avatar(report.reporter.avatarUrl, report.reporter.displayName, size = 28.dp)
                 Column(Modifier.weight(1f)) {
                     Text("Reported by ${report.reporter.displayName}", style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(Format.dateTime(report.createdAt), style = MaterialTheme.typography.labelSmall, color = scheme.onSurfaceVariant)
+                    Text(rememberTimeFormat().dateTime(report.createdAt), style = MaterialTheme.typography.labelSmall, color = scheme.onSurfaceVariant)
                 }
                 Chevron()
             }
@@ -576,7 +577,8 @@ private fun ReportBody(report: Report, nav: NavController, onOpenDialog: (ModDia
         ContentCard {
             Column(Modifier.padding(Spacing.lg), verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
                 report.resolutionAction?.let { ActionChip(it) } ?: ReportStatusChip(report.status)
-                val by = listOfNotNull(report.resolvedBy?.displayName?.let { "by $it" }, report.resolvedAt?.let(Format::dateTime))
+                val times = rememberTimeFormat()
+                val by = listOfNotNull(report.resolvedBy?.displayName?.let { "by $it" }, report.resolvedAt?.let(times::dateTime))
                 if (by.isNotEmpty()) Text(by.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant)
                 QuoteBlock(report.resolutionNote, "No note was left.")
             }
@@ -696,7 +698,8 @@ private val ModerationLogEntry.targetText: String
         val noun = targetType.noun
         val article = if (noun.first() in "aeiou") "an" else "a"
         return when {
-            reportId != null -> "from $article $noun report"
+            // The target is what the action hit (a warning hits the account even when a listing was reported).
+            reportId != null -> "on $article $noun · from a report"
             targetType == ReportTargetType.ORDER -> "on a disputed order"
             else -> "on $article $noun"
         }
@@ -723,7 +726,7 @@ private fun LogRow(entry: ModerationLogEntry, onClick: () -> Unit) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(entry.moderator.displayName, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                Text(timeOfDay(entry.createdAt), style = MaterialTheme.typography.labelMedium, color = scheme.onSurfaceVariant)
+                Text(rememberTimeFormat().time(entry.createdAt), style = MaterialTheme.typography.labelMedium, color = scheme.onSurfaceVariant)
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
                 ActionChip(entry.action)
@@ -735,7 +738,3 @@ private fun LogRow(entry: ModerationLogEntry, onClick: () -> Unit) {
     }
 }
 
-private fun timeOfDay(epochMillis: Long): String {
-    val d = Instant.fromEpochMilliseconds(epochMillis).toLocalDateTime(TimeZone.currentSystemDefault())
-    return "${d.hour.toString().padStart(2, '0')}:${d.minute.toString().padStart(2, '0')}"
-}

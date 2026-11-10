@@ -6,6 +6,8 @@ import android.content.ContextWrapper
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.DialogWindowProvider
 import androidx.core.view.WindowCompat
 
 @Composable
@@ -13,7 +15,8 @@ actual fun StatusBarIcons(darkIcons: Boolean) {
     val view = LocalView.current
     if (view.isInEditMode) return
     DisposableEffect(view, darkIcons) {
-        val window = view.context.findActivity()?.window
+        // Inside a dialog (the photo viewer) it's the dialog's own window that sits over the bars.
+        val window = (view.parent as? DialogWindowProvider)?.window ?: view.context.findActivity()?.window
         if (window == null) {
             onDispose { }
         } else {
@@ -25,6 +28,9 @@ actual fun StatusBarIcons(darkIcons: Boolean) {
         }
     }
 }
+
+actual fun edgeToEdgeDialogProperties(): DialogProperties =
+    DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
 
 private tailrec fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this

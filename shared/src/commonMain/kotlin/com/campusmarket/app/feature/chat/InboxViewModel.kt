@@ -63,13 +63,19 @@ class InboxViewModel(
             return
         }
         live.reconnectNow()
-        viewModelScope.launch { syncFirstPage() }
+        viewModelScope.launch { catchUp() }
     }
 
     /** "Retry" on the connection banner: skip the backoff wait and catch up over REST meanwhile. */
     fun retryConnection() {
         live.reconnectNow()
-        viewModelScope.launch { syncFirstPage() }
+        viewModelScope.launch { catchUp() }
+    }
+
+    /** Catch up after a reconnect or a resume. A first load that failed (e.g. opened offline) is tried again. */
+    private suspend fun catchUp() {
+        val s = conversations.state.value
+        if (!s.loaded && s.error != null) conversations.retry() else syncFirstPage()
     }
 
     internal fun onEvent(event: ChatEvent) {
@@ -144,7 +150,7 @@ class InboxViewModel(
                 ChatSocket.Status.Connected -> if (wasDown) {
                     // Events sent while we were disconnected are gone: catch up once.
                     wasDown = false
-                    syncFirstPage()
+                    catchUp()
                 }
                 ChatSocket.Status.Connecting, ChatSocket.Status.Reconnecting -> {
                     if (status == ChatSocket.Status.Reconnecting) wasDown = true

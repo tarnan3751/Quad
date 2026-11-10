@@ -76,6 +76,11 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
+import com.campusmarket.app.navigation.keepSnackbarsAbove
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.ui.platform.LocalDensity
 
 private const val LOAD_OLDER_THRESHOLD = 5
 
@@ -118,23 +123,32 @@ fun ConversationScreen(route: ConversationRoute, nav: NavController) {
                 Box(Modifier.weight(1f)) { BubbleSkeletons(Modifier.align(Alignment.BottomCenter)) }
             }
             is UiState.Error -> ErrorState(s.error, body, onRetry = vm::loadConversation)
-            is UiState.Content -> Column(body) {
-                val c = s.value
-                val state by vm.state.collectAsStateWithLifecycle()
-                val mine = c.listing.sellerId == vm.myId
-                ListingStrip(
-                    c.listing,
-                    mine = mine,
-                    showBuy = !mine && c.listing.status == ListingStatus.ACTIVE && state.restriction == null,
-                    onOpen = { nav.navigate(ListingDetailRoute(c.listing.id)) },
-                    onBuy = { nav.navigate(CheckoutRoute(c.listing.id)) },
-                )
-                val connection by vm.connection.collectAsStateWithLifecycle()
-                ConnectionBanner(connection, onRetry = vm::retryConnection)
-                Box(Modifier.weight(1f)) {
-                    MessageList(vm, c, onReportMessage = { reportMessageId = it })
+            is UiState.Content -> BoxWithConstraints(body) {
+                // Typing in landscape leaves only a strip above the keyboard: give it to the messages and the composer.
+                val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+                val roomForStrip = !imeVisible || maxHeight >= CompactChatHeight
+                Column(Modifier.fillMaxSize()) {
+                    val c = s.value
+                    val state by vm.state.collectAsStateWithLifecycle()
+                    val mine = c.listing.sellerId == vm.myId
+                    if (roomForStrip) {
+                        ListingStrip(
+                            c.listing,
+                            mine = mine,
+                            showBuy = !mine && c.listing.status == ListingStatus.ACTIVE && state.restriction == null,
+                            onOpen = { nav.navigate(ListingDetailRoute(c.listing.id)) },
+                            onBuy = { nav.navigate(CheckoutRoute(c.listing.id)) },
+                        )
+                    }
+                    val connection by vm.connection.collectAsStateWithLifecycle()
+                    ConnectionBanner(connection, onRetry = vm::retryConnection)
+                    Box(Modifier.weight(1f)) {
+                        MessageList(vm, c, onReportMessage = { reportMessageId = it })
+                    }
+                    Box(Modifier.keepSnackbarsAbove()) {
+                        ComposerArea(vm, c, isBuyer = !mine, onUnblock = { blockDialog = true })
+                    }
                 }
-                ComposerArea(vm, c, isBuyer = !mine, onUnblock = { blockDialog = true })
             }
         }
     }
@@ -145,7 +159,6 @@ fun ConversationScreen(route: ConversationRoute, nav: NavController) {
                 ReportTargetType.USER,
                 conversation.otherUser.id,
                 onDismiss = { reportUser = false },
-                onReported = { reportUser = false; vm.onReported() },
             )
         }
         reportMessageId?.let { id ->
@@ -153,7 +166,6 @@ fun ConversationScreen(route: ConversationRoute, nav: NavController) {
                 ReportTargetType.MESSAGE,
                 id,
                 onDismiss = { reportMessageId = null },
-                onReported = { reportMessageId = null; vm.onReported() },
             )
         }
         if (blockDialog) {
@@ -385,3 +397,6 @@ fun MessageSellerScreen(route: MessageSellerRoute, nav: NavController) {
         }
     }
 }
+
+/** Below this height (above the keyboard) the listing strip makes way for the messages and the composer. */
+private val CompactChatHeight = 320.dp
