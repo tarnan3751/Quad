@@ -46,7 +46,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.campusmarket.app.feature.chat.TimeFormat
+import com.campusmarket.app.ui.TimeFormat
 import com.campusmarket.app.ui.Format
 import com.campusmarket.app.ui.components.OrderStatusChip
 import com.campusmarket.app.ui.components.PriceText

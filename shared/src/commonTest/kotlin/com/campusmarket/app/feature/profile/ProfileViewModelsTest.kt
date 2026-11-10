@@ -3,12 +3,13 @@ package com.campusmarket.app.feature.profile
 import com.campusmarket.app.data.Harness
 import com.campusmarket.app.data.SessionManager
 import com.campusmarket.app.data.SessionState
+import com.campusmarket.app.data.awaitCondition
+import com.campusmarket.app.data.awaitValue
+import com.campusmarket.app.data.jsonBody
 import com.campusmarket.app.data.respondError
 import com.campusmarket.app.data.respondJson
 import com.campusmarket.app.data.testUser
-import com.campusmarket.app.feature.awaitMatch
-import com.campusmarket.app.feature.jsonBody
-import com.campusmarket.app.feature.withMainDispatcher
+import com.campusmarket.app.data.withMainDispatcher
 import com.campusmarket.app.platform.PickedImage
 import com.campusmarket.app.ui.state.UiState
 import com.campusmarket.app.ui.state.UserMessages
@@ -21,16 +22,16 @@ import com.campusmarket.core.UserPrivate
 import com.campusmarket.core.UserPublic
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.test.runTest
-import kotlinx.serialization.builtins.ListSerializer
-import kotlinx.serialization.json.JsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.json.JsonPrimitive
 
 class EditProfileViewModelTest {
 
@@ -73,7 +74,7 @@ class EditProfileViewModelTest {
             vm.onBio("Hello")
             assertTrue(vm.state.value.dirty)
             vm.save()
-            vm.state.awaitMatch { !it.saving && h.requests.isNotEmpty() }
+            vm.state.awaitValue { !it.saving && h.requests.isNotEmpty() }
             vm.saved.flow.first()
 
             val body = h.requests.single().jsonBody()
@@ -93,7 +94,7 @@ class EditProfileViewModelTest {
             val (vm, _) = edit(h, backgroundScope)
             vm.onDisplayName("Valid name")
             vm.save()
-            val s = vm.state.awaitMatch { it.fieldErrors.isNotEmpty() }
+            val s = vm.state.awaitValue { it.fieldErrors.isNotEmpty() }
             assertEquals("That name isn't allowed", s.fieldErrors["displayName"])
             assertNull(s.formError)
         }
@@ -111,7 +112,7 @@ class EditProfileViewModelTest {
             val (vm, session) = edit(h, backgroundScope)
 
             vm.onAvatarPicked(listOf(PickedImage(byteArrayOf(1, 2, 3), "me.jpg", "image/jpeg")))
-            val afterUpload = vm.state.awaitMatch { it.pendingAvatarPhotoId == "p1" && !it.uploadingAvatar }
+            val afterUpload = vm.state.awaitValue { it.pendingAvatarPhotoId == "p1" && !it.uploadingAvatar }
             assertEquals("http://x/uploads/p1.jpg", afterUpload.avatarUrl)
 
             vm.save()
@@ -186,7 +187,7 @@ class SettingsViewModelTest {
             vm.startDelete(); vm.continueDelete(); vm.onDeleteText("DELETE")
             vm.confirmDelete()
 
-            vm.state.awaitMatch { it.deleteStep == DeleteStep.None && !it.deleting && h.requests.isNotEmpty() }
+            vm.state.awaitValue { it.deleteStep == DeleteStep.None && !it.deleting && h.requests.isNotEmpty() }
             assertEquals(SessionState.SignedOut, session.state.value)
             assertNull(h.tokens.current())
         }
@@ -202,7 +203,7 @@ class SettingsViewModelTest {
             vm.startDelete(); vm.continueDelete(); vm.onDeleteText("DELETE")
             vm.confirmDelete()
 
-            val s = vm.state.awaitMatch { it.deleteStep == DeleteStep.BlockedByOrders && !it.deleting }
+            val s = vm.state.awaitValue { it.deleteStep == DeleteStep.BlockedByOrders && !it.deleting }
             assertNull(s.deleteError)
             assertIs<SessionState.SignedIn>(session.state.value)
         }
@@ -216,7 +217,7 @@ class SettingsViewModelTest {
             vm.startDelete(); vm.continueDelete(); vm.onDeleteText("DELETE")
             vm.confirmDelete()
 
-            val s = vm.state.awaitMatch { it.deleteError != null }
+            val s = vm.state.awaitValue { it.deleteError != null }
             assertEquals(DeleteStep.Confirm, s.deleteStep)
             assertEquals("Server exploded", s.deleteError)
             assertIs<SessionState.SignedIn>(session.state.value)
@@ -237,11 +238,11 @@ class BlockedUsersAndBlockTest {
                 }
             }
             val vm = BlockedUsersViewModel(h.api, UserMessages())
-            val loaded = vm.state.awaitMatch { it is UiState.Content }
+            val loaded = vm.state.awaitValue { it is UiState.Content }
             assertEquals(listOf(someone), (loaded as UiState.Content).value)
 
             vm.unblock(someone)
-            val after = vm.state.awaitMatch { it is UiState.Content && it.value.isEmpty() }
+            val after = vm.state.awaitValue { it is UiState.Content && it.value.isEmpty() }
             assertIs<UiState.Content<List<UserPublic>>>(after)
             val call = h.requestsTo(ApiRoutes.userBlock("u2")).single()
             assertEquals(HttpMethod.Delete, call.method)
@@ -254,13 +255,13 @@ class BlockedUsersAndBlockTest {
             var blocks = listOf(someone)
             val h = Harness { respondJson(ListSerializer(UserPublic.serializer()), blocks) }
             val vm = BlockedUsersViewModel(h.api, UserMessages())
-            vm.state.awaitMatch { it is UiState.Content }
+            vm.state.awaitValue { it is UiState.Content }
             vm.onResume() // first resume: nothing to do
             assertEquals(1, h.requests.size)
 
             blocks = emptyList() // unblocked on their profile
             vm.onResume() // back on the list
-            vm.state.awaitMatch { it is UiState.Content && it.value.isEmpty() }
+            vm.state.awaitValue { it is UiState.Content && it.value.isEmpty() }
             assertEquals(2, h.requests.size)
         }
     }
@@ -276,16 +277,16 @@ class BlockedUsersAndBlockTest {
 
         var done = 0
         controller.submit("u2", block = true) { done++ }
-        controller.state.awaitMatch { !it.loading && done == 1 }
+        awaitCondition { done == 1 && !controller.state.value.loading }
         assertEquals(HttpMethod.Post, h.requests.last().method)
 
         controller.submit("u2", block = false) { done++ }
-        controller.state.awaitMatch { !it.loading && done == 2 }
+        awaitCondition { done == 2 && !controller.state.value.loading }
         assertEquals(HttpMethod.Delete, h.requests.last().method)
 
         fail = true
         controller.submit("u2", block = true) { done++ }
-        val failed = controller.state.awaitMatch { it.error != null }
+        val failed = controller.state.awaitValue { it.error != null }
         assertEquals("You can't block yourself", failed.error)
         assertEquals(2, done)
     }

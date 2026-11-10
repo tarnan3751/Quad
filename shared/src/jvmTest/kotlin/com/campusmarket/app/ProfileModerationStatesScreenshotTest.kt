@@ -1,65 +1,27 @@
 package com.campusmarket.app
 
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.Surface
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.remember
-import androidx.compose.ui.InternalComposeUiApi
-import androidx.compose.ui.LocalSystemTheme
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.SystemTheme
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.toAwtImage
-import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SkikoComposeUiTest
-import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
-import androidx.compose.ui.test.onLast
-import androidx.compose.ui.test.onRoot
-import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
-import androidx.compose.ui.test.performTouchInput
-import androidx.compose.ui.test.swipeUp
-import androidx.compose.ui.test.v2.runSkikoComposeUiTest
-import androidx.compose.ui.unit.Density
-import androidx.navigation.NavHostController
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.rememberNavController
 import com.campusmarket.app.data.InMemoryTokenStore
-import com.campusmarket.app.data.ServerConfig
 import com.campusmarket.app.data.StoredSession
-import com.campusmarket.app.data.TokenStore
-import com.campusmarket.app.data.installCampusMarketDefaults
 import com.campusmarket.app.data.respondError
 import com.campusmarket.app.data.respondJson
-import com.campusmarket.app.di.coreModule
-import com.campusmarket.app.di.featureModules
 import com.campusmarket.app.feature.moderation.DisputeDetailRoute
 import com.campusmarket.app.feature.moderation.ModerationLogRoute
 import com.campusmarket.app.feature.moderation.ModerationQueueRoute
 import com.campusmarket.app.feature.moderation.ReportDetailRoute
 import com.campusmarket.app.feature.moderation.StaffRoute
-import com.campusmarket.app.feature.moderation.moderationGraph
 import com.campusmarket.app.feature.profile.BlockedUsersRoute
 import com.campusmarket.app.feature.profile.EditProfileRoute
 import com.campusmarket.app.feature.profile.ProfileRoute
 import com.campusmarket.app.feature.profile.SettingsRoute
 import com.campusmarket.app.feature.profile.UserProfileRoute
-import com.campusmarket.app.feature.profile.profileGraph
-import com.campusmarket.app.navigation.LocalCurrentUser
-import com.campusmarket.app.platform.AppEnvironment
-import com.campusmarket.app.platform.PlatformKind
-import com.campusmarket.app.platform.PlatformUrlLauncher
-import com.campusmarket.app.ui.components.LocalUrlResolver
-import com.campusmarket.app.ui.theme.CampusMarketTheme
 import com.campusmarket.core.ApiRoutes
 import com.campusmarket.core.DisputeCase
 import com.campusmarket.core.DisputeOutcome
@@ -85,20 +47,10 @@ import com.campusmarket.core.StaffMember
 import com.campusmarket.core.UserPrivate
 import com.campusmarket.core.UserPublic
 import com.campusmarket.core.UserRole
-import com.russhwolf.settings.PreferencesSettings
-import com.russhwolf.settings.Settings
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.mock.MockEngine
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.serialization.builtins.ListSerializer
-import org.koin.compose.koinInject
-import org.koin.core.context.startKoin
-import org.koin.core.context.stopKoin
-import org.koin.dsl.module
-import java.io.File
-import javax.imageio.ImageIO
 import kotlin.test.Test
 
 /**
@@ -110,33 +62,28 @@ import kotlin.test.Test
  * ```
  * Photo avatars use a.jpg / b.jpg / c.jpg / d.jpg from `CAMPUS_MARKET_SHOT_PHOTOS` when given (initials otherwise).
  */
-@OptIn(ExperimentalTestApi::class, InternalComposeUiApi::class)
-class ProfileModerationStatesScreenshotTest {
-    private val dir: File? = System.getenv("CAMPUS_MARKET_SCREENSHOTS")?.takeIf { it.isNotBlank() }?.let(::File)
-    private val photos: File? = System.getenv("CAMPUS_MARKET_SHOT_PHOTOS")?.takeIf { it.isNotBlank() }?.let(::File)
-    private val fontScale: Float = System.getenv("CAMPUS_MARKET_FONT_SCALE")?.toFloatOrNull() ?: 1f
+@OptIn(ExperimentalTestApi::class)
+class ProfileModerationStatesScreenshotTest : ScreenshotGallery(settleMillis = 1_500) {
 
     private val now = System.currentTimeMillis()
     private val hour = 3_600_000L
     private val day = 24 * hour
 
-    private fun photo(name: String): String? = photos?.let { File(it, name) }?.takeIf { it.exists() }?.toURI()?.toString()
-
     private val me = UserPrivate(
         id = "me", email = "ada@state.edu", displayName = "Ada Okafor", bio = "Junior, CS. Usually around the library after 4pm.",
-        avatarUrl = photo("c.jpg"), campusDomain = "state.edu", role = UserRole.ADMIN, ratingAverage = 4.8, ratingCount = 12,
+        avatarUrl = photoUrl("c.jpg"), campusDomain = "state.edu", role = UserRole.ADMIN, ratingAverage = 4.8, ratingCount = 12,
         payoutsEnabled = true, joinedAt = now - 400 * day,
     )
     private val sam = UserPublic(
         "sam", "Sam Rivera", bio = "Selling my dorm stuff before graduation. Pickups by the student union.",
-        avatarUrl = photo("a.jpg"), campusDomain = "state.edu", ratingAverage = 4.6, ratingCount = 23, joinedAt = now - 700 * day,
+        avatarUrl = photoUrl("a.jpg"), campusDomain = "state.edu", ratingAverage = 4.6, ratingCount = 23, joinedAt = now - 700 * day,
     )
     private val blocked = UserPublic("blk", "Jordan Reyes", campusDomain = "state.edu", ratingAverage = 3.0, ratingCount = 2, joinedAt = now - 90 * day, blockedByMe = true)
     private val deleted = UserPublic("gone", "Deleted user", campusDomain = "state.edu", joinedAt = now - 90 * day)
     private val raters = listOf(
-        UserPublic("r1", "Liam O'Connor", avatarUrl = photo("b.jpg"), campusDomain = "state.edu", joinedAt = 1L),
+        UserPublic("r1", "Liam O'Connor", avatarUrl = photoUrl("b.jpg"), campusDomain = "state.edu", joinedAt = 1L),
         UserPublic("r2", "Noah Williams", campusDomain = "state.edu", joinedAt = 1L),
-        UserPublic("r3", "Priya Patel", avatarUrl = photo("d.jpg"), campusDomain = "state.edu", joinedAt = 1L),
+        UserPublic("r3", "Priya Patel", avatarUrl = photoUrl("d.jpg"), campusDomain = "state.edu", joinedAt = 1L),
         UserPublic("r4", "Sofia Alvarez", campusDomain = "state.edu", joinedAt = 1L),
         UserPublic("r5", "Maya Chen", campusDomain = "state.edu", joinedAt = 1L),
     )
@@ -159,7 +106,7 @@ class ProfileModerationStatesScreenshotTest {
 
     private fun listing(id: String, title: String, cents: Int, img: String?, seller: UserPublic = sam, status: ListingStatus = ListingStatus.ACTIVE, age: Long = 2 * day) =
         ListingSummary(id, title, cents, category = ListingCategory.OTHER, condition = ListingCondition.GOOD, status = status,
-            thumbnailUrl = photo(img ?: ""), sellerId = seller.id, sellerName = seller.displayName, createdAt = now - age)
+            thumbnailUrl = photoUrl(img ?: ""), sellerId = seller.id, sellerName = seller.displayName, createdAt = now - age)
 
     private val samListings = listOf(
         listing("l1", "Acoustic guitar with soft case", 12000, "a.jpg"),
@@ -213,9 +160,8 @@ class ProfileModerationStatesScreenshotTest {
     )
 
     private fun startApp() {
-        val env = AppEnvironment(isDebug = true, defaultBaseUrl = "http://test.local", platform = PlatformKind.DESKTOP)
         val users = (listOf(sam, blocked, deleted) + raters).associateBy { it.id }
-        val engine = MockEngine { req ->
+        val server = FakeServer { req ->
             val path = req.url.encodedPath
             when {
                 path == ApiRoutes.ME -> respondJson(UserPrivate.serializer(), me)
@@ -251,105 +197,18 @@ class ProfileModerationStatesScreenshotTest {
                 else -> respondError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
             }
         }
-        startKoin {
-            modules(
-                listOf(
-                    module { single<PlatformUrlLauncher> { PlatformUrlLauncher { true } } },
-                    coreModule(env),
-                    module {
-                        single<Settings> { PreferencesSettings(java.util.prefs.Preferences.userRoot().node("campusmarket-profile-states").also { it.clear() }) }
-                        single<TokenStore> { InMemoryTokenStore(StoredSession("a1", "r1", now + hour, me)) }
-                        single<HttpClient> { HttpClient(engine) { installCampusMarketDefaults(debugLogging = false) } }
-                    },
-                ) + featureModules,
-            )
-        }
-    }
-
-    private lateinit var nav: NavHostController
-
-    @Composable
-    private fun Harness(start: Any) {
-        val server: ServerConfig = koinInject()
-        val resolver = remember(server) { { url: String? -> server.resolve(url) } }
-        CampusMarketTheme {
-            CompositionLocalProvider(LocalUrlResolver provides resolver, LocalCurrentUser provides me) {
-                Surface(Modifier.fillMaxSize()) {
-                    val controller = rememberNavController()
-                    nav = controller
-                    NavHost(controller, startDestination = start) {
-                        profileGraph(controller)
-                        moderationGraph(controller)
-                    }
-                }
-            }
-        }
-    }
-
-    private fun ComposeUiTest.awaitText(text: String) =
-        waitUntil(timeoutMillis = 10_000) { onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
-
-    private fun ComposeUiTest.click(text: String, last: Boolean = false, substring: Boolean = false) {
-        val matcher = hasText(text, substring = substring) and hasClickAction()
-        waitUntil(timeoutMillis = 10_000) { onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty() }
-        val node = if (last) onAllNodes(matcher).onLast() else onAllNodes(matcher).onFirst()
-        runCatching { node.performScrollTo() }
-        runOnUiThread { node.performClick() }
-        waitForIdle()
-    }
-
-    private fun ComposeUiTest.go(route: Any) {
-        runOnUiThread { nav.navigate(route) }
-        waitForIdle()
-    }
-
-    private fun ComposeUiTest.back() {
-        runOnUiThread { nav.popBackStack() }
-        waitForIdle()
-    }
-
-    private fun ComposeUiTest.scrollDown(times: Int = 1) = repeat(times) {
-        onRoot().performTouchInput { swipeUp() }
-        waitForIdle()
-    }
-
-    private var prefix = ""
-
-    private fun SkikoComposeUiTest.shot(name: String) {
-        repeat(15) {
-            Thread.sleep(100)
-            runCatching { waitForIdle() }
-        }
-        dir!!.mkdirs()
-        ImageIO.write(captureToImage().toAwtImage(), "png", File(dir, "$prefix-$name.png"))
+        startTestApp(server, InMemoryTokenStore(StoredSession("a1", "r1", now + hour, me)))
     }
 
     private fun run(dark: Boolean, start: Any, block: SkikoComposeUiTest.() -> Unit) {
         startApp()
-        prefix = (if (dark) "dark" else "light") + if (fontScale != 1f) "-x$fontScale" else ""
-        try {
-            runSkikoComposeUiTest(size = Size(412f * 2, 892f * 2), density = Density(2f, fontScale)) {
-                setContent {
-                    CompositionLocalProvider(LocalSystemTheme provides if (dark) SystemTheme.Dark else SystemTheme.Light) { Harness(start) }
-                }
-                try {
-                    block()
-                } catch (e: Throwable) {
-                    runCatching { shot("failure") }
-                    throw e
-                }
-            }
-        } finally {
-            stopKoin()
-        }
+        prefix = (if (dark) "dark" else "light") + (if (fontScale != 1f) "-x$fontScale" else "") + "-"
+        screens(dark, content = { Destinations(me, start) }, block = block)
     }
 
     @Test
     fun stateScreenshots() {
-        if (dir == null) {
-            println("ProfileModerationStatesScreenshotTest skipped: set CAMPUS_MARKET_SCREENSHOTS")
-            return
-        }
+        if (!enabled()) return
         for (dark in listOf(false, true)) {
             run(dark, ProfileRoute) {
                 awaitText("Ada Okafor")
@@ -369,28 +228,28 @@ class ProfileModerationStatesScreenshotTest {
                 shot("s05-public-ratings")
                 scrollDown(1)
                 shot("s06-public-ratings-scrolled")
-                back() // the header scrolled out of the lazy list: open the profile afresh
+                pop() // the header scrolled out of the lazy list: open the profile afresh
                 go(UserProfileRoute("sam"))
                 awaitText("Acoustic guitar")
                 click("Message")
                 awaitText("Which one are you asking about")
                 shot("s07-message-sheet")
-                back()
+                pop()
                 go(UserProfileRoute("blk"))
                 awaitText("You blocked Jordan Reyes")
                 shot("s08-public-blocked")
-                back()
+                pop()
                 go(UserProfileRoute("gone"))
                 awaitText("This account has been deleted")
                 shot("s09-public-deleted")
-                back()
+                pop()
                 go(UserProfileRoute("slow"))
                 shot("s10-public-loading")
-                back()
+                pop()
                 go(UserProfileRoute("broken"))
                 awaitText("Try again")
                 shot("s11-public-error")
-                back()
+                pop()
                 go(UserProfileRoute("sam"))
                 awaitText("Sam Rivera")
                 click("Report")
@@ -405,7 +264,7 @@ class ProfileModerationStatesScreenshotTest {
                 awaitText("You already reported this account")
                 shot("s14-report-duplicate")
                 click("Done")
-                back()
+                pop()
                 go(EditProfileRoute)
                 awaitText("Display name")
                 shot("s15-edit-profile")
@@ -413,14 +272,14 @@ class ProfileModerationStatesScreenshotTest {
                 onAllNodes(hasSetTextAction() and hasText("Display name")).onFirst().performTextInput("A")
                 awaitText("Use at least")
                 shot("s16-edit-profile-invalid")
-                clickBack()
+                back()
                 awaitText("Discard your changes?")
                 shot("s17-edit-profile-discard")
                 click("Discard")
                 go(BlockedUsersRoute)
                 awaitText("Noah Williams")
                 shot("s18-blocked-users")
-                back()
+                pop()
                 go(SettingsRoute)
                 awaitText("Sign out")
                 shot("s19-settings")
@@ -443,24 +302,24 @@ class ProfileModerationStatesScreenshotTest {
                 awaitText("How long")
                 shot("s34-suspend-dialog")
                 click("Cancel")
-                back()
+                pop()
                 go(ReportDetailRoute("rp2"))
                 awaitText("tell everyone")
                 shot("s35-report-message")
-                back()
+                pop()
                 go(ReportDetailRoute("rp4"))
                 awaitText("store website")
                 scrollDown(2)
                 shot("s36-report-reserved-listing")
-                back()
+                pop()
                 go(ReportDetailRoute("rc1"))
                 awaitText("abusive")
                 scrollDown(2)
                 shot("s37-report-closed")
-                back()
+                pop()
                 go(ReportDetailRoute("slow"))
                 shot("s38-report-loading")
-                back()
+                pop()
                 go(DisputeDetailRoute("ord1"))
                 awaitText("doesn't get cold")
                 shot("s40-dispute-open")
@@ -472,16 +331,16 @@ class ProfileModerationStatesScreenshotTest {
                 awaitText("Reason for the decision")
                 shot("s43-dispute-release-dialog")
                 click("Cancel")
-                back()
+                pop()
                 go(DisputeDetailRoute("ord2"))
                 awaitText("doesn't get cold")
                 scrollDown(4)
                 shot("s44-dispute-closed")
-                back()
+                pop()
                 go(ModerationLogRoute)
                 awaitText("Seller admitted")
                 shot("s50-log")
-                back()
+                pop()
                 go(StaffRoute)
                 awaitText("Morgan Moderator")
                 shot("s60-staff")
@@ -493,11 +352,5 @@ class ProfileModerationStatesScreenshotTest {
                 shot("s62-staff-promote")
             }
         }
-    }
-
-    private fun ComposeUiTest.clickBack() {
-        val node = onAllNodes(hasContentDescription("Back") and hasClickAction()).onFirst()
-        runOnUiThread { node.performClick() }
-        waitForIdle()
     }
 }

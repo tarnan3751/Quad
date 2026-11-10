@@ -36,13 +36,4 @@ class ListingFormattingTest {
         }
     }
 
-    @Test
-    fun ageReadsLikeABuyerWouldSayIt() {
-        val now = 1_700_000_000_000L
-        assertEquals("just now", timeAgo(now - 20_000, now))
-        assertEquals("5m ago", timeAgo(now - 5 * 60_000, now))
-        assertEquals("2h ago", timeAgo(now - 2 * 3_600_000, now))
-        assertEquals("3d ago", timeAgo(now - 3 * 86_400_000L, now))
-        assertTrue(!timeAgo(now - 30 * 86_400_000L, now).endsWith("ago"), "older listings show a date")
-    }
 }

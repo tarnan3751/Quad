@@ -80,15 +80,6 @@ class FormatTest {
         assertEquals("12.50", Format.priceInput(1250))
         assertEquals("12", Format.priceInput(1200))
     }
-
-    @Test
-    fun relativeTime() {
-        val now = 1_700_000_000_000L
-        assertEquals("just now", Format.relativeTime(now - 10_000, now))
-        assertEquals("5m", Format.relativeTime(now - 5 * 60_000, now))
-        assertEquals("3h", Format.relativeTime(now - 3 * 3_600_000, now))
-        assertEquals("2d", Format.relativeTime(now - 2 * 86_400_000, now))
-    }
 }
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)

@@ -46,23 +46,17 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
-import com.campusmarket.app.feature.chat.rememberTimeFormat
 import com.campusmarket.app.feature.listing.ListingDetailRoute
 import com.campusmarket.app.feature.profile.Chevron
-import com.campusmarket.app.feature.profile.Glyphs
 import com.campusmarket.app.feature.profile.ListingLine
-import com.campusmarket.app.feature.profile.PersonLine
 import com.campusmarket.app.feature.profile.MenuDivider
 import com.campusmarket.app.feature.profile.MenuGroup
 import com.campusmarket.app.feature.profile.MenuRow
-import com.campusmarket.app.feature.profile.SkeletonBlock
+import com.campusmarket.app.feature.profile.PersonLine
 import com.campusmarket.app.feature.profile.UserProfileRoute
-import com.campusmarket.app.feature.profile.ago
 import com.campusmarket.app.navigation.LocalCurrentUser
-import com.campusmarket.app.ui.Format
 import com.campusmarket.app.ui.components.AppTab
 import com.campusmarket.app.ui.components.AppTopBar
 import com.campusmarket.app.ui.components.Avatar
@@ -71,13 +65,18 @@ import com.campusmarket.app.ui.components.CollectEvents
 import com.campusmarket.app.ui.components.EmptyState
 import com.campusmarket.app.ui.components.ErrorState
 import com.campusmarket.app.ui.components.FilterChip
+import com.campusmarket.app.ui.components.OnResume
 import com.campusmarket.app.ui.components.PagedLazyColumn
+import com.campusmarket.app.ui.components.QuadIcons
 import com.campusmarket.app.ui.components.RemoteImage
 import com.campusmarket.app.ui.components.ReportStatusChip
+import com.campusmarket.app.ui.components.ShimmerGroup
+import com.campusmarket.app.ui.components.SkeletonBox
 import com.campusmarket.app.ui.components.StatusChip
 import com.campusmarket.app.ui.components.avatarImageUrl
 import com.campusmarket.app.ui.components.listImageUrl
 import com.campusmarket.app.ui.label
+import com.campusmarket.app.ui.rememberTimeFormat
 import com.campusmarket.app.ui.state.UiState
 import com.campusmarket.app.ui.theme.Spacing
 import com.campusmarket.core.ListingStatus
@@ -87,12 +86,9 @@ import com.campusmarket.core.Report
 import com.campusmarket.core.ReportStatus
 import com.campusmarket.core.ReportTargetType
 import com.campusmarket.core.UserRole
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toLocalDateTime
+import kotlin.time.Clock
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
-import kotlin.time.Clock
-import kotlin.time.Instant
 
 // ---------------------------------------------------------------------------------------------------- queue
 
@@ -120,10 +116,7 @@ private fun QueueContent(nav: NavController) {
 
     // Coming back from a report that was just resolved: reload. The flag lives in the view model: this composable
     // leaves the composition while the detail is open, so a `remember`ed one would always look like the first resume.
-    LifecycleResumeEffect(vm) {
-        vm.onResume()
-        onPauseOrDispose {}
-    }
+    OnResume(vm, vm::onResume)
 
     Scaffold(
         topBar = {
@@ -165,36 +158,30 @@ private fun QueueContent(nav: NavController) {
 @Composable
 internal fun ModerationToolLinks(nav: NavController, current: Any) {
     if (current != ModerationQueueRoute) {
-        IconButton(onClick = { nav.navigate(ModerationQueueRoute) { launchSingleTop = true } }) { Icon(Glyphs.Flag, contentDescription = "Reports") }
+        IconButton(onClick = { nav.navigate(ModerationQueueRoute) { launchSingleTop = true } }) { Icon(QuadIcons.Flag, contentDescription = "Reports") }
     }
     if (current != DisputesRoute) {
-        IconButton(onClick = { nav.navigate(DisputesRoute) { launchSingleTop = true } }) { Icon(Glyphs.Gavel, contentDescription = "Disputes") }
+        IconButton(onClick = { nav.navigate(DisputesRoute) { launchSingleTop = true } }) { Icon(QuadIcons.Gavel, contentDescription = "Disputes") }
     }
     if (current != ModerationLogRoute) {
-        IconButton(onClick = { nav.navigate(ModerationLogRoute) { launchSingleTop = true } }) { Icon(Glyphs.History, contentDescription = "Moderation log") }
+        IconButton(onClick = { nav.navigate(ModerationLogRoute) { launchSingleTop = true } }) { Icon(QuadIcons.History, contentDescription = "Moderation log") }
     }
     if (current != StaffRoute && LocalCurrentUser.current.role == UserRole.ADMIN) {
-        IconButton(onClick = { nav.navigate(StaffRoute) { launchSingleTop = true } }) { Icon(Glyphs.Group, contentDescription = "Staff") }
+        IconButton(onClick = { nav.navigate(StaffRoute) { launchSingleTop = true } }) { Icon(QuadIcons.Group, contentDescription = "Staff") }
     }
 }
 
 @Composable
 private fun QueueEmpty(status: ReportStatus, type: ReportTargetType?) {
-    val kind = when (type) {
-        null -> ""
-        ReportTargetType.LISTING -> "listing "
-        ReportTargetType.USER -> "account "
-        ReportTargetType.MESSAGE -> "message "
-        ReportTargetType.ORDER -> "order "
-    }
+    val kind = type?.let { "${it.noun} " }.orEmpty()
     when (status) {
         ReportStatus.OPEN -> EmptyState(
             if (type == null) "The queue is clear" else "No open ${kind}reports",
             message = "New reports from students land here, oldest first.",
             icon = Icons.Default.CheckCircle,
         )
-        ReportStatus.RESOLVED -> EmptyState("No resolved ${kind}reports yet", message = "Reports closed with a warning, removal or suspension show up here.", icon = Glyphs.History)
-        ReportStatus.DISMISSED -> EmptyState("No dismissed ${kind}reports yet", message = "Reports closed without action show up here.", icon = Glyphs.History)
+        ReportStatus.RESOLVED -> EmptyState("No resolved ${kind}reports yet", message = "Reports closed with a warning, removal or suspension show up here.", icon = QuadIcons.History)
+        ReportStatus.DISMISSED -> EmptyState("No dismissed ${kind}reports yet", message = "Reports closed without action show up here.", icon = QuadIcons.History)
     }
 }
 
@@ -264,7 +251,7 @@ private fun ReportRow(report: Report, onClick: () -> Unit) {
 /** "9h" for a fresh report; anything waiting a day or more is flagged so the oldest get picked up first. */
 @Composable
 private fun AgeLabel(epochMillis: Long, waiting: Boolean) {
-    val age = Format.relativeTime(epochMillis)
+    val age = rememberTimeFormat().age(epochMillis)
     val overADay = Clock.System.now().toEpochMilliseconds() - epochMillis >= 24 * 3_600_000L
     if (waiting && overADay) StatusChip("Waiting $age", ChipTone.Warning)
     else Text(age, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -317,7 +304,7 @@ private fun ReportDetailContent(route: ReportDetailRoute, nav: NavController) {
                                 if (loaded.targetUser != null) {
                                     DropdownMenuItem(
                                         text = { Text("Lift suspension…") },
-                                        leadingIcon = { Icon(Glyphs.Undo, contentDescription = null) },
+                                        leadingIcon = { Icon(QuadIcons.Undo, contentDescription = null) },
                                         onClick = { menuOpen = false; open(ModDialog.Unsuspend) },
                                     )
                                 }
@@ -429,7 +416,8 @@ private fun ReportDetailContent(route: ReportDetailRoute, nav: NavController) {
     }
 }
 
-private val ReportTargetType.noun: String
+/** What was reported, in a sentence: "listing", "account", "message", "order". */
+internal val ReportTargetType.noun: String
     get() = when (this) {
         ReportTargetType.LISTING -> "listing"
         ReportTargetType.USER -> "account"
@@ -454,12 +442,12 @@ private fun ReportBody(report: Report, nav: NavController, onOpenDialog: (ModDia
         Column(Modifier.padding(Spacing.lg), verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
             Row(horizontalArrangement = Arrangement.spacedBy(Spacing.md), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(40.dp).background(scheme.primaryContainer, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
-                    Icon(Glyphs.Flag, contentDescription = null, tint = scheme.onPrimaryContainer, modifier = Modifier.size(20.dp))
+                    Icon(QuadIcons.Flag, contentDescription = null, tint = scheme.onPrimaryContainer, modifier = Modifier.size(20.dp))
                 }
                 Column(Modifier.weight(1f)) {
                     Text(report.reason.label, style = MaterialTheme.typography.titleMedium)
                     Text(
-                        "${report.targetType.label} report · ${ago(report.createdAt)}",
+                        "${report.targetType.label} report · ${rememberTimeFormat().ago(report.createdAt)}",
                         style = MaterialTheme.typography.bodySmall,
                         color = scheme.onSurfaceVariant,
                     )
@@ -570,7 +558,7 @@ private fun ReportBody(report: Report, nav: NavController, onOpenDialog: (ModDia
                 }
                 if (ModerationAction.SUSPEND_USER in actions) {
                     if (ModerationAction.REMOVE_LISTING in actions) MenuDivider()
-                    MenuRow(Glyphs.Gavel, "Suspend user", "$name is signed out everywhere until it ends.", onClick = { onOpenDialog(ModDialog.Suspend) }, destructive = true)
+                    MenuRow(QuadIcons.Gavel, "Suspend user", "$name is signed out everywhere until it ends.", onClick = { onOpenDialog(ModDialog.Suspend) }, destructive = true)
                 }
             }
         }
@@ -595,8 +583,8 @@ private fun ReportBody(report: Report, nav: NavController, onOpenDialog: (ModDia
                     if (showRestore) add { MenuRow(Icons.Default.Refresh, "Restore listing", "Make it active and visible again", onClick = { onOpenDialog(ModDialog.Restore) }) }
                     if (showRemove) add { MenuRow(Icons.Default.Delete, "Remove listing", "Take it off Quad", onClick = { onOpenDialog(ModDialog.DirectRemove) }, destructive = true) }
                     if (targetUser != null) {
-                        add { MenuRow(Glyphs.Undo, "Lift suspension", "If $name is suspended, let them sign in again", onClick = { onOpenDialog(ModDialog.Unsuspend) }) }
-                        add { MenuRow(Glyphs.Gavel, "Suspend user", "Needs a reason; this report stays closed", onClick = { onOpenDialog(ModDialog.DirectSuspend) }, destructive = true) }
+                        add { MenuRow(QuadIcons.Undo, "Lift suspension", "If $name is suspended, let them sign in again", onClick = { onOpenDialog(ModDialog.Unsuspend) }) }
+                        add { MenuRow(QuadIcons.Gavel, "Suspend user", "Needs a reason; this report stays closed", onClick = { onOpenDialog(ModDialog.DirectSuspend) }, destructive = true) }
                     }
                 }
                 rows.forEachIndexed { i, row ->
@@ -630,12 +618,14 @@ private fun MissingTarget(summary: String, note: String) {
 /** First-load stand-in for a report or dispute: a header card and two content cards. */
 @Composable
 internal fun DetailSkeleton(modifier: Modifier = Modifier) {
-    Column(modifier.fillMaxWidth().padding(Spacing.screen), verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
-        SkeletonBlock(Modifier.fillMaxWidth().height(150.dp), MaterialTheme.shapes.medium)
-        SkeletonBlock(Modifier.width(120.dp).height(14.dp))
-        SkeletonBlock(Modifier.fillMaxWidth().height(72.dp), MaterialTheme.shapes.medium)
-        SkeletonBlock(Modifier.width(120.dp).height(14.dp))
-        SkeletonBlock(Modifier.fillMaxWidth().height(72.dp), MaterialTheme.shapes.medium)
+    ShimmerGroup {
+        Column(modifier.fillMaxWidth().padding(Spacing.screen), verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
+            SkeletonBox(Modifier.fillMaxWidth().height(150.dp), MaterialTheme.shapes.medium)
+            SkeletonBox(Modifier.width(120.dp).height(14.dp))
+            SkeletonBox(Modifier.fillMaxWidth().height(72.dp), MaterialTheme.shapes.medium)
+            SkeletonBox(Modifier.width(120.dp).height(14.dp))
+            SkeletonBox(Modifier.fillMaxWidth().height(72.dp), MaterialTheme.shapes.medium)
+        }
     }
 }
 
@@ -647,6 +637,7 @@ fun ModerationLogScreen(nav: NavController) {
     ModeratorGate("Moderation log", nav) {
         val vm = koinViewModel<ModerationLogViewModel>()
         val paged by vm.entries.state.collectAsStateWithLifecycle()
+        val times = rememberTimeFormat()
         Scaffold(
             topBar = {
                 AppTopBar("Moderation log", onBack = { nav.popBackStack() }, actions = { ModerationToolLinks(nav, current = ModerationLogRoute) })
@@ -656,13 +647,12 @@ fun ModerationLogScreen(nav: NavController) {
                 vm.entries,
                 key = { it.id },
                 modifier = Modifier.padding(padding),
-                empty = { EmptyState("No moderation actions yet", message = "Every decision on a report, dispute or staff role is recorded here.", icon = Glyphs.History) },
+                empty = { EmptyState("No moderation actions yet", message = "Every decision on a report, dispute or staff role is recorded here.", icon = QuadIcons.History) },
             ) { entry ->
                 val index = paged.items.indexOfFirst { it.id == entry.id }
-                val day = dayLabel(entry.createdAt)
-                if (index <= 0 || dayLabel(paged.items[index - 1].createdAt) != day) {
+                if (index <= 0 || !times.sameDay(paged.items[index - 1].createdAt, entry.createdAt)) {
                     Text(
-                        day,
+                        times.dayLabel(entry.createdAt),
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.fillMaxWidth().padding(start = Spacing.screen, top = Spacing.lg, bottom = Spacing.xs),
@@ -671,18 +661,6 @@ fun ModerationLogScreen(nav: NavController) {
                 LogRow(entry, onClick = logTarget(entry, nav))
             }
         }
-    }
-}
-
-/** "Today", "Yesterday", or a date. */
-private fun dayLabel(epochMillis: Long): String {
-    val tz = TimeZone.currentSystemDefault()
-    val day = Instant.fromEpochMilliseconds(epochMillis).toLocalDateTime(tz).date
-    val today = Clock.System.now().toLocalDateTime(tz).date
-    return when (today.toEpochDays() - day.toEpochDays()) {
-        0L -> "Today"
-        1L -> "Yesterday"
-        else -> Format.date(epochMillis)
     }
 }
 

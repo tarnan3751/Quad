@@ -1,6 +1,8 @@
 package com.campusmarket.app.feature.browse
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -50,8 +52,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -84,11 +84,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.campusmarket.app.feature.listing.FavoritesRoute
 import com.campusmarket.app.feature.listing.ListingDetailRoute
-import com.campusmarket.app.feature.listing.ListingIcons
-import com.campusmarket.app.feature.listing.ListingTile
-import com.campusmarket.app.feature.listing.PagedListingGrid
 import com.campusmarket.app.feature.listing.PriceInput
-import com.campusmarket.app.feature.listing.icon
 import com.campusmarket.app.navigation.LocalCurrentUser
 import com.campusmarket.app.navigation.OnTabReselected
 import com.campusmarket.app.navigation.TopLevelTab
@@ -97,8 +93,13 @@ import com.campusmarket.app.ui.Format
 import com.campusmarket.app.ui.components.AppTopBar
 import com.campusmarket.app.ui.components.EmptyState
 import com.campusmarket.app.ui.components.FilterChip
+import com.campusmarket.app.ui.components.ListingIcons
+import com.campusmarket.app.ui.components.ListingTile
+import com.campusmarket.app.ui.components.PagedListingGrid
 import com.campusmarket.app.ui.components.PrimaryButton
+import com.campusmarket.app.ui.components.QuadIcons
 import com.campusmarket.app.ui.components.SecondaryButton
+import com.campusmarket.app.ui.components.icon
 import com.campusmarket.app.ui.state.UiState
 import com.campusmarket.app.ui.theme.Spacing
 import com.campusmarket.core.CategoryInfo
@@ -330,7 +331,7 @@ private fun SearchBarRow(
                     }
                 },
             ) {
-                Icon(TuneIcon, contentDescription = if (filterCount > 0) "Filters, $filterCount active" else "Filters")
+                Icon(QuadIcons.Tune, contentDescription = if (filterCount > 0) "Filters, $filterCount active" else "Filters")
             }
         }
     }
@@ -551,7 +552,7 @@ private fun NoResults(
                 "Nothing matches these filters",
                 modifier = Modifier.fillMaxWidth(),
                 message = "Try a wider price range or more conditions.",
-                icon = TuneIcon,
+                icon = QuadIcons.Tune,
                 actionLabel = "Clear filters",
                 onAction = onClearAll,
             )

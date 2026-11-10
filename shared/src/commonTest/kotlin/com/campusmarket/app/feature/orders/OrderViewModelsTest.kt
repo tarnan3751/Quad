@@ -1,11 +1,12 @@
 package com.campusmarket.app.feature.orders
 
 import com.campusmarket.app.data.BASE
+import com.campusmarket.app.data.Harness
+import com.campusmarket.app.data.bodyText
 import com.campusmarket.app.data.respondError
 import com.campusmarket.app.data.respondJson
+import com.campusmarket.app.data.session
 import com.campusmarket.app.data.testUser
-import com.campusmarket.app.feature.chat.VmHarness
-import com.campusmarket.app.feature.chat.bodyText
 import com.campusmarket.app.feature.chat.close
 import com.campusmarket.app.feature.chat.listingSummary
 import com.campusmarket.app.feature.chat.publicUser
@@ -65,9 +66,9 @@ class OrderDetailViewModelTest {
     private var actionError: Pair<HttpStatusCode, String>? = null
     private val conversations = mutableListOf<Conversation>()
 
-    private fun TestScope.setUp(user: UserPrivate = testUser, fromCheckout: Boolean = false): Pair<OrderDetailViewModel, VmHarness> {
+    private fun TestScope.setUp(user: UserPrivate = testUser, fromCheckout: Boolean = false): Pair<OrderDetailViewModel, Harness> {
         mainOnTestScheduler()
-        val h = VmHarness(this, user) { req ->
+        val h = Harness(session(user = user), scope = this) { req ->
             val err = actionError
             when (req.url.encodedPath) {
                 ApiRoutes.order("o1") -> respondJson(Order.serializer(), current)
@@ -99,7 +100,7 @@ class OrderDetailViewModelTest {
             }
         }
         val updates = OrderUpdates()
-        return OrderDetailViewModel(OrderDetailRoute("o1", fromCheckout), h.api, h.links, updates, h.userMessages, testScheduler.timeSource) to h
+        return OrderDetailViewModel(OrderDetailRoute("o1", fromCheckout), h.api, h.links, updates, h.messages, testScheduler.timeSource) to h
     }
 
     @AfterTest
@@ -395,9 +396,9 @@ class CheckoutViewModelTest {
         seller = sellerUser, isMine = isMine, createdAt = 0, updatedAt = 0,
     )
 
-    private fun TestScope.setUp(): Triple<CheckoutViewModel, VmHarness, OrderUpdates> {
+    private fun TestScope.setUp(): Triple<CheckoutViewModel, Harness, OrderUpdates> {
         mainOnTestScheduler()
-        val h = VmHarness(this) { req ->
+        val h = Harness(scope = this) { req ->
             when (req.url.encodedPath) {
                 ApiRoutes.listing("l1") -> respondJson(ListingDetail.serializer(), listing)
                 ApiRoutes.ORDERS -> if (req.method == HttpMethod.Post) {
@@ -410,7 +411,7 @@ class CheckoutViewModelTest {
             }
         }
         val updates = OrderUpdates()
-        return Triple(CheckoutViewModel(CheckoutRoute("l1"), h.api, h.links, updates, h.userMessages), h, updates)
+        return Triple(CheckoutViewModel(CheckoutRoute("l1"), h.api, h.links, updates, h.messages), h, updates)
     }
 
     @AfterTest
@@ -508,9 +509,9 @@ class CheckoutViewModelTest {
 class RateOrderViewModelTest {
     private var rateStatus: Pair<HttpStatusCode, String>? = null
 
-    private fun TestScope.setUp(stars: Int = 0): Pair<RateOrderViewModel, VmHarness> {
+    private fun TestScope.setUp(stars: Int = 0): Pair<RateOrderViewModel, Harness> {
         mainOnTestScheduler()
-        val h = VmHarness(this) { req ->
+        val h = Harness(scope = this) { req ->
             when (req.url.encodedPath) {
                 ApiRoutes.order("o1") -> respondJson(Order.serializer(), order(OrderStatus.COMPLETED))
                 ApiRoutes.orderRating("o1") -> rateStatus?.let { (s, c) -> respondError(s, c, "Already rated") }
@@ -518,7 +519,7 @@ class RateOrderViewModelTest {
                 else -> respondError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
             }
         }
-        return RateOrderViewModel(RateOrderRoute("o1", stars), h.api, OrderUpdates(), h.userMessages) to h
+        return RateOrderViewModel(RateOrderRoute("o1", stars), h.api, OrderUpdates(), h.messages) to h
     }
 
     @AfterTest
@@ -536,7 +537,7 @@ class RateOrderViewModelTest {
         vm.onComment("  Friendly and on time  ")
         vm.submit()
         advanceUntilIdle()
-        val sent = ApiJson.decodeFromString(CreateRatingRequest.serializer(), h.requests(HttpMethod.Post, ApiRoutes.orderRating("o1")).single().bodyText())
+        val sent = ApiJson.decodeFromString(CreateRatingRequest.serializer(), h.requests(HttpMethod.Post, ApiRoutes.orderRating("o1")).single().bodyText)
         assertEquals(CreateRatingRequest(4, "Friendly and on time"), sent)
         assertEquals(Unit, vm.done.flow.first())
         vm.close()
@@ -581,9 +582,9 @@ class RateOrderViewModelTest {
 class PayoutsViewModelTest {
     private var status = PayoutAccountStatus(hasAccount = false)
 
-    private fun TestScope.setUp(): Pair<PayoutsViewModel, VmHarness> {
+    private fun TestScope.setUp(): Pair<PayoutsViewModel, Harness> {
         mainOnTestScheduler()
-        val h = VmHarness(this) { req ->
+        val h = Harness(scope = this) { req ->
             when (req.url.encodedPath) {
                 ApiRoutes.PAYOUT_ACCOUNT -> respondJson(PayoutAccountStatus.serializer(), status)
                 ApiRoutes.PAYOUT_ONBOARDING -> respondJson(OnboardingLinkResponse.serializer(), OnboardingLinkResponse("http://localhost:8080/api/v1/dev/fake-stripe/onboarding/acct_1"))
@@ -591,7 +592,7 @@ class PayoutsViewModelTest {
                 else -> respondError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
             }
         }
-        return PayoutsViewModel(h.api, h.session, h.links, h.userMessages) to h
+        return PayoutsViewModel(h.api, h.session, h.links, h.messages) to h
     }
 
     @AfterTest
@@ -621,8 +622,8 @@ class PayoutsViewModelTest {
     @Test
     fun loadFailureIsAnErrorState() = runTest {
         mainOnTestScheduler()
-        val h = VmHarness(this) { respondError(HttpStatusCode.InternalServerError, ErrorCodes.INTERNAL) }
-        val vm = PayoutsViewModel(h.api, h.session, h.links, h.userMessages)
+        val h = Harness(scope = this) { respondError(HttpStatusCode.InternalServerError, ErrorCodes.INTERNAL) }
+        val vm = PayoutsViewModel(h.api, h.session, h.links, h.messages)
         advanceUntilIdle()
         assertIs<UiState.Error>(vm.account.value)
         vm.close()
@@ -639,13 +640,13 @@ class OrdersViewModelTest {
     @Test
     fun startsOnTheRequestedTabAndAppliesUpdates() = runTest {
         mainOnTestScheduler()
-        val h = VmHarness(this) { req ->
+        val h = Harness(scope = this) { req ->
             val role = req.url.parameters["role"]
             val items = if (role == "seller") listOf(order(OrderStatus.PAID, OrderRole.SELLER, id = "s1")) else listOf(order(OrderStatus.PAID))
             respondJson(Page.serializer(Order.serializer()), Page(items, null))
         }
         val updates = OrderUpdates()
-        val vm = OrdersViewModel(OrdersRoute(role = "seller"), h.api, updates, h.userMessages)
+        val vm = OrdersViewModel(OrdersRoute(role = "seller"), h.api, updates, h.messages)
         assertEquals(OrderRole.SELLER, vm.tab.value)
         vm.buying.refresh()
         vm.selling.refresh()
@@ -658,7 +659,7 @@ class OrdersViewModelTest {
         assertEquals(listOf("o-new:PENDING_PAYMENT", "o1:COMPLETED"), vm.buying.state.value.items.map { "${it.id}:${it.status}" })
         assertEquals(listOf("s1"), vm.selling.state.value.items.map { it.id })
 
-        assertEquals(OrderRole.BUYER, OrdersViewModel(OrdersRoute(), h.api, updates, h.userMessages).tab.value)
+        assertEquals(OrderRole.BUYER, OrdersViewModel(OrdersRoute(), h.api, updates, h.messages).tab.value)
         vm.close()
     }
 }

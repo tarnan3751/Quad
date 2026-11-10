@@ -3,13 +3,13 @@ package com.campusmarket.app.feature.auth
 import com.campusmarket.app.data.ApiError
 import com.campusmarket.app.data.Harness
 import com.campusmarket.app.data.SessionManager
+import com.campusmarket.app.data.awaitValue
 import com.campusmarket.app.data.bearer
+import com.campusmarket.app.data.jsonBody
 import com.campusmarket.app.data.respondError
 import com.campusmarket.app.data.respondJson
 import com.campusmarket.app.data.testUser
-import com.campusmarket.app.feature.awaitMatch
-import com.campusmarket.app.feature.jsonBody
-import com.campusmarket.app.feature.withMainDispatcher
+import com.campusmarket.app.data.withMainDispatcher
 import com.campusmarket.core.ApiRoutes
 import com.campusmarket.core.ErrorCodes
 import com.campusmarket.core.OkResponse
@@ -48,7 +48,7 @@ class SuspendedAccountTest {
             assertTrue(h.requests.isEmpty(), "nothing sent before the final confirmation")
 
             vm.delete()
-            vm.state.awaitMatch { it.step == DeleteAccountStep.Done }
+            vm.state.awaitValue { it.step == DeleteAccountStep.Done }
             val req = h.requestsTo(ApiRoutes.DELETE_ACCOUNT).single()
             assertNull(req.bearer, "no session is used (a suspended user has none)")
             assertEquals(JsonPrimitive("ada@uni.edu"), req.jsonBody()["email"])
@@ -71,7 +71,7 @@ class SuspendedAccountTest {
             vm.onEmail("ada@uni.edu")
             vm.continueToConfirm()
             vm.delete()
-            val s = vm.state.awaitMatch { it.step == DeleteAccountStep.Credentials && !it.submitting }
+            val s = vm.state.awaitValue { it.step == DeleteAccountStep.Credentials && !it.submitting }
             assertEquals("Incorrect email or password", s.fieldErrors["password"])
         }
     }
@@ -88,7 +88,7 @@ class SuspendedAccountTest {
             vm.onPassword("pw")
             vm.continueToConfirm()
             vm.delete()
-            val s = vm.state.awaitMatch { it.formError != null && !it.submitting }
+            val s = vm.state.awaitValue { it.formError != null && !it.submitting }
             assertEquals(DeleteAccountStep.Confirm, s.step)
             assertTrue(s.formError!!.startsWith("You have orders in progress.") && "released to the seller" in s.formError!!)
             vm.back()
@@ -118,7 +118,7 @@ class SuspendedAccountTest {
             vm.onPassword("pw")
             vm.continueToConfirm()
             vm.delete()
-            vm.state.awaitMatch { it.step == DeleteAccountStep.Done }
+            vm.state.awaitValue { it.step == DeleteAccountStep.Done }
             assertTrue(deleted)
             // the Welcome notice stays until the user closes the "deleted" message
             assertEquals(ErrorCodes.ACCOUNT_SUSPENDED, h.api.sessionEndReason.value?.code)
@@ -137,7 +137,7 @@ class SuspendedAccountTest {
             vm.onEmail("ada@uni.edu")
             vm.onPassword("password1")
             vm.submit()
-            val s = vm.state.awaitMatch { it.suspended != null && !it.submitting }
+            val s = vm.state.awaitValue { it.suspended != null && !it.submitting }
             assertEquals(SUSPENDED, s.suspended)
             assertEquals(SUSPENDED, s.formError)
             assertTrue(s.showSuspended)

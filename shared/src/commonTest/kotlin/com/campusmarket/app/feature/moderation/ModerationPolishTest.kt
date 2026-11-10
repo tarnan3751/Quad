@@ -1,9 +1,9 @@
 package com.campusmarket.app.feature.moderation
 
 import com.campusmarket.app.data.Harness
+import com.campusmarket.app.data.awaitValue
 import com.campusmarket.app.data.respondJson
-import com.campusmarket.app.feature.awaitMatch
-import com.campusmarket.app.feature.withMainDispatcher
+import com.campusmarket.app.data.withMainDispatcher
 import com.campusmarket.app.ui.state.UserMessages
 import com.campusmarket.core.ApiRoutes
 import com.campusmarket.core.DisputeCase
@@ -44,13 +44,13 @@ class QueueKindFilterTest {
             }
             val vm = ModerationQueueViewModel(h.api, UserMessages())
             vm.selectType(ReportTargetType.MESSAGE)
-            val s = vm.reports.state.awaitMatch { it.loaded }
+            val s = vm.reports.state.awaitValue { it.loaded }
             assertEquals(listOf("c"), s.items.map { it.id })
             assertTrue(s.endReached)
             assertEquals(2, h.requests.size)
 
             vm.selectType(null)
-            val all = vm.reports.state.awaitMatch { it.loaded && it.items.size == 2 }
+            val all = vm.reports.state.awaitValue { it.loaded && it.items.size == 2 }
             assertEquals(listOf("a", "b"), all.items.map { it.id })
         }
     }
@@ -66,7 +66,7 @@ class ReportedTargetsTest {
         assertFalse(first.state.value.alreadyReported)
         first.onReason(ReportReason.SCAM)
         first.submit()
-        first.state.awaitMatch { it.submitted }
+        first.state.awaitValue { it.submitted }
 
         assertTrue(ReportFormController(h.api, ReportTargetType.LISTING, "l1", backgroundScope, reported).state.value.alreadyReported)
         assertFalse(ReportFormController(h.api, ReportTargetType.USER, "l1", backgroundScope, reported).state.value.alreadyReported)
@@ -93,7 +93,7 @@ class StaffSearchAsYouTypeTest {
             }
             val vm = StaffViewModel(h.api, UserMessages())
             vm.onQuery("um")
-            val r = vm.search.awaitMatch { it is StaffSearch.Results } as StaffSearch.Results
+            val r = vm.search.awaitValue { it is StaffSearch.Results } as StaffSearch.Results
             assertEquals(listOf(found), r.members)
             assertEquals("um", h.requestsTo(ApiRoutes.MOD_USER_SEARCH).single().url.parameters["q"])
 
@@ -112,11 +112,11 @@ class DisputeQueueResumeTest {
             val h = Harness { respondJson(Page.serializer(DisputeCase.serializer()), Page(emptyList())) }
             val vm = DisputesViewModel(h.api, UserMessages())
             vm.disputes.refresh()
-            vm.disputes.state.awaitMatch { it.loaded }
+            vm.disputes.state.awaitValue { it.loaded }
             vm.onResume()
             assertEquals(1, h.requests.size)
             vm.onResume()
-            vm.disputes.state.awaitMatch { it.loaded && !it.isRefreshing }
+            vm.disputes.state.awaitValue { it.loaded && !it.isRefreshing }
             assertEquals(2, h.requests.size)
         }
     }

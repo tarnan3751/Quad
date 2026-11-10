@@ -58,15 +58,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.campusmarket.app.feature.chat.MessageSellerRoute
@@ -74,19 +71,28 @@ import com.campusmarket.app.feature.moderation.ReportSheet
 import com.campusmarket.app.feature.orders.CheckoutRoute
 import com.campusmarket.app.feature.orders.OrdersRoute
 import com.campusmarket.app.feature.profile.UserProfileRoute
-import com.campusmarket.app.ui.Format
+import com.campusmarket.app.navigation.keepSnackbarsAbove
 import com.campusmarket.app.ui.components.AppTopBar
 import com.campusmarket.app.ui.components.Avatar
 import com.campusmarket.app.ui.components.CollectEvents
 import com.campusmarket.app.ui.components.ConfirmDialog
 import com.campusmarket.app.ui.components.ErrorState
+import com.campusmarket.app.ui.components.FavoriteButton
+import com.campusmarket.app.ui.components.IconBadge
+import com.campusmarket.app.ui.components.ListingIcons
+import com.campusmarket.app.ui.components.ListingImage
 import com.campusmarket.app.ui.components.ListingStatusChip
+import com.campusmarket.app.ui.components.OnResume
 import com.campusmarket.app.ui.components.PriceText
 import com.campusmarket.app.ui.components.PrimaryButton
 import com.campusmarket.app.ui.components.RatingSummary
 import com.campusmarket.app.ui.components.SecondaryButton
+import com.campusmarket.app.ui.components.ShimmerGroup
+import com.campusmarket.app.ui.components.SkeletonBox
 import com.campusmarket.app.ui.components.avatarImageUrl
+import com.campusmarket.app.ui.components.icon
 import com.campusmarket.app.ui.components.screenImageUrl
+import com.campusmarket.app.ui.rememberTimeFormat
 import com.campusmarket.app.ui.state.UiState
 import com.campusmarket.app.ui.theme.CampusTheme
 import com.campusmarket.app.ui.theme.Spacing
@@ -98,7 +104,6 @@ import com.campusmarket.core.UserPublic
 import kotlinx.coroutines.launch
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
-import com.campusmarket.app.navigation.keepSnackbarsAbove
 
 /**
  * Listing detail: photo pager (side by side with the details on wide windows), price and title, scannable facts,
@@ -122,10 +127,7 @@ fun ListingDetailScreen(route: ListingDetailRoute, nav: NavController) {
             ListingDetailEvent.Deleted -> nav.popBackStack()
         }
     }
-    LifecycleResumeEffect(vm) {
-        vm.onResume()
-        onPauseOrDispose { }
-    }
+    OnResume(vm, vm::onResume)
 
     val listing = (state as? UiState.Content)?.value
     val openSales = { nav.navigate(OrdersRoute(role = OrderRole.SELLER.name.lowercase())) }
@@ -304,7 +306,7 @@ private fun DetailContent(listing: ListingDetail, onSellerClick: () -> Unit) {
             Text(listing.title, style = MaterialTheme.typography.titleLarge)
             Text(
                 buildString {
-                    append(listedLabel(listing.createdAt))
+                    append("Listed ${rememberTimeFormat().ago(listing.createdAt)}")
                     if (listing.favoriteCount > 0) {
                         append(" · ")
                         append(if (listing.favoriteCount == 1) "1 favorite" else "${listing.favoriteCount} favorites")
@@ -412,7 +414,7 @@ private fun SellerCard(seller: UserPublic, isMe: Boolean, onClick: () -> Unit) {
                     overflow = TextOverflow.Ellipsis,
                 )
                 RatingSummary(seller.ratingAverage, seller.ratingCount)
-                Text(Format.memberSince(seller.joinedAt), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(rememberTimeFormat().memberSince(seller.joinedAt), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "View profile", tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -470,24 +472,22 @@ private fun PagerArrow(icon: ImageVector, description: String, visible: Boolean,
 @Composable
 private fun DetailSkeleton(modifier: Modifier) {
     BoxWithConstraints(modifier) {
-        val block = MaterialTheme.colorScheme.surfaceContainerHighest
         val photoHeight = if (maxWidth >= 600.dp && maxWidth > maxHeight) maxHeight else minOf(maxWidth, maxHeight * 0.6f, 560.dp)
-        Column {
-            Pulse(Modifier.fillMaxWidth().height(photoHeight), block)
-            Column(Modifier.padding(Spacing.screen), verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
-                SkeletonLine(96.dp, 28.dp, block)
-                SkeletonLine(280.dp, 22.dp, block)
-                SkeletonLine(140.dp, 14.dp, block)
-                Spacer(Modifier.height(Spacing.sm))
-                Pulse(Modifier.fillMaxWidth().height(150.dp).clip(MaterialTheme.shapes.medium), block)
+        val line = RoundedCornerShape(6.dp)
+        ShimmerGroup {
+            Column {
+                SkeletonBox(Modifier.fillMaxWidth().height(photoHeight), RectangleShape)
+                Column(Modifier.padding(Spacing.screen), verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
+                    SkeletonBox(Modifier.width(96.dp).height(28.dp), line)
+                    SkeletonBox(Modifier.width(280.dp).height(22.dp), line)
+                    SkeletonBox(Modifier.width(140.dp).height(14.dp), line)
+                    Spacer(Modifier.height(Spacing.sm))
+                    SkeletonBox(Modifier.fillMaxWidth().height(150.dp), MaterialTheme.shapes.medium)
+                }
             }
         }
     }
 }
-
-@Composable
-private fun SkeletonLine(width: Dp, height: Dp, color: Color) =
-    Pulse(Modifier.width(width).height(height).clip(RoundedCornerShape(6.dp)), color)
 
 // ---------------------------------------------------------------------------------------------------- action bar
 

@@ -16,47 +16,23 @@ import androidx.compose.material3.SnackbarVisuals
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.ui.InternalComposeUiApi
-import androidx.compose.ui.LocalSystemTheme
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.SystemTheme
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.toAwtImage
-import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
-import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SkikoComposeUiTest
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
-import androidx.compose.ui.test.v2.runSkikoComposeUiTest
-import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
-import com.campusmarket.app.data.ApiClient
 import com.campusmarket.app.data.ApiError
-import com.campusmarket.app.data.HOUR
 import com.campusmarket.app.data.InMemoryTokenStore
-import com.campusmarket.app.data.ServerConfig
-import com.campusmarket.app.data.StoredSession
 import com.campusmarket.app.data.TokenStore
-import com.campusmarket.app.data.installCampusMarketDefaults
 import com.campusmarket.app.data.respondError
 import com.campusmarket.app.data.respondJson
 import com.campusmarket.app.data.testUser
-import com.campusmarket.app.data.toStoredSession
-import com.campusmarket.app.di.coreModule
-import com.campusmarket.app.di.featureModules
-import com.campusmarket.app.platform.AppEnvironment
-import com.campusmarket.app.platform.PlatformKind
-import com.campusmarket.app.platform.PlatformUrlLauncher
-import com.campusmarket.app.platform.createPlatformHttpClient
 import com.campusmarket.app.ui.components.AppSnackbar
 import com.campusmarket.app.ui.components.AppSnackbarVisuals
 import com.campusmarket.app.ui.components.Avatar
@@ -69,7 +45,7 @@ import com.campusmarket.app.ui.components.ErrorState
 import com.campusmarket.app.ui.components.InfoBanner
 import com.campusmarket.app.ui.components.InlineError
 import com.campusmarket.app.ui.components.ListRowSkeleton
-import com.campusmarket.app.ui.components.ListingCardSkeleton
+import com.campusmarket.app.ui.components.ListingTileSkeleton
 import com.campusmarket.app.ui.components.PrimaryButton
 import com.campusmarket.app.ui.components.QuadIcons
 import com.campusmarket.app.ui.components.RemoteImage
@@ -79,50 +55,30 @@ import com.campusmarket.app.ui.components.StatusChip
 import com.campusmarket.app.ui.theme.CampusMarketTheme
 import com.campusmarket.app.ui.theme.Spacing
 import com.campusmarket.core.ApiRoutes
-import com.campusmarket.core.AuthResponse
 import com.campusmarket.core.Conversation
 import com.campusmarket.core.ErrorCodes
 import com.campusmarket.core.ListingCategory
 import com.campusmarket.core.ListingCondition
 import com.campusmarket.core.ListingStatus
 import com.campusmarket.core.ListingSummary
-import com.campusmarket.core.LoginRequest
 import com.campusmarket.core.OkResponse
 import com.campusmarket.core.Page
 import com.campusmarket.core.RegisterResponse
 import com.campusmarket.core.UserPrivate
 import com.campusmarket.core.UserPublic
-import com.russhwolf.settings.PreferencesSettings
-import com.russhwolf.settings.Settings
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.mock.MockEngine
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.awaitCancellation
-import kotlinx.coroutines.runBlocking
-import org.koin.core.context.startKoin
-import org.koin.core.context.stopKoin
-import org.koin.dsl.module
-import java.io.File
-import javax.imageio.ImageIO
 import kotlin.test.Test
 
 /**
  * Phone-sized screenshots of the app shell and auth screens (light and dark, plus 1.3× font scale), and a gallery
- * of the shared components, for reviewing the UI. Opt-in:
+ * of the shared components, against a fake server. Opt-in:
  * ```
- * CAMPUS_MARKET_SCREENSHOTS=/some/dir [CAMPUS_MARKET_LIVE=http://127.0.0.1:8080] \
- *   ./gradlew :shared:jvmTest --tests '*UiCoreScreenshotTest*'
+ * CAMPUS_MARKET_SCREENSHOTS=/some/dir ./gradlew :shared:jvmTest --tests '*UiCoreScreenshotTest*'
  * ```
- * The auth screens and the loading / error states use a fake server; the tab roots use the live dev server
- * (read-only: it only signs in and navigates) when `CAMPUS_MARKET_LIVE` is set.
  */
-@OptIn(ExperimentalTestApi::class, InternalComposeUiApi::class)
-class UiCoreScreenshotTest {
-    private val live: String? = System.getenv("CAMPUS_MARKET_LIVE")?.trimEnd('/')?.takeIf { it.isNotBlank() }
-    private val dir: File? = System.getenv("CAMPUS_MARKET_SCREENSHOTS")?.takeIf { it.isNotBlank() }?.let(::File)
-
-    private val farFuture = System.currentTimeMillis() + HOUR
-
+@OptIn(ExperimentalTestApi::class)
+class UiCoreScreenshotTest : ScreenshotGallery(settleMillis = 1_600) {
     private enum class FakeBehaviour { Normal, Suspended, Hang, Offline }
 
     private val unreadConversation = Conversation(
@@ -137,7 +93,7 @@ class UiCoreScreenshotTest {
         createdAt = 0,
     )
 
-    private fun fakeEngine(behaviour: FakeBehaviour) = MockEngine { req ->
+    private fun fakeServer(behaviour: FakeBehaviour) = FakeServer { req ->
         when (req.url.encodedPath) {
             ApiRoutes.REGISTER -> respondJson(RegisterResponse.serializer(), RegisterResponse("ada@uni.edu", devCode = "123456"))
             ApiRoutes.RESEND_CODE -> respondJson(RegisterResponse.serializer(), RegisterResponse("ada@uni.edu", devCode = "123456"))
@@ -163,215 +119,101 @@ class UiCoreScreenshotTest {
         }
     }
 
-    private fun startFake(tokens: TokenStore, behaviour: FakeBehaviour) {
-        val env = AppEnvironment(isDebug = true, defaultBaseUrl = "http://10.0.2.2:8080", platform = PlatformKind.DESKTOP)
-        val engine = fakeEngine(behaviour)
-        startKoin {
-            modules(
-                listOf(
-                    module { single<PlatformUrlLauncher> { PlatformUrlLauncher { true } } },
-                    coreModule(env),
-                    module {
-                        single<Settings> { PreferencesSettings(java.util.prefs.Preferences.userRoot().node("campusmarket-uicore-shots").also { it.clear() }) }
-                        single<TokenStore> { tokens }
-                        single<HttpClient> { HttpClient(engine) { installCampusMarketDefaults(debugLogging = false) } }
-                    },
-                ) + featureModules,
-            )
-        }
+    /** The real App() against the fake server; [tokens] decide whether it starts signed in. */
+    private fun app(dark: Boolean, tokens: TokenStore, behaviour: FakeBehaviour, fontScale: Float = 1f, landscape: Boolean = false, block: SkikoComposeUiTest.() -> Unit) {
+        startTestApp(fakeServer(behaviour), tokens, baseUrl = "http://10.0.2.2:8080")
+        screens(dark, fontScale, landscape, block = block)
     }
 
-    private fun startLive(session: AuthResponse) {
-        val env = AppEnvironment(isDebug = true, defaultBaseUrl = live!!, platform = PlatformKind.DESKTOP)
-        startKoin {
-            modules(
-                listOf(
-                    module { single<PlatformUrlLauncher> { PlatformUrlLauncher { true } } },
-                    coreModule(env),
-                    module {
-                        single<Settings> { PreferencesSettings(java.util.prefs.Preferences.userRoot().node("campusmarket-uicore-shots").also { it.clear() }) }
-                        single<TokenStore> { InMemoryTokenStore(session.toStoredSession()) }
-                    },
-                ) + featureModules,
-            )
-        }
-    }
-
-    private fun liveSession(email: String): AuthResponse = sessions.getOrPut(email) {
-        val env = AppEnvironment(isDebug = true, defaultBaseUrl = live!!, platform = PlatformKind.DESKTOP)
-        val api = ApiClient(createPlatformHttpClient { installCampusMarketDefaults(debugLogging = false) }, ServerConfig(env), InMemoryTokenStore())
-        runBlocking { api.login(LoginRequest(email, "password123")) }
-    }
-
-    private fun ComposeUiTest.awaitText(text: String) =
-        waitUntil(timeoutMillis = 20_000) { onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
-
-    private fun ComposeUiTest.clickNode(matcher: SemanticsMatcher) {
-        waitUntil(timeoutMillis = 20_000) { onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty() }
-        val node = onAllNodes(matcher).onFirst()
-        runCatching { node.performScrollTo() }
-        runOnUiThread { node.performClick() }
-        waitForIdle()
-    }
-
-    private fun ComposeUiTest.click(text: String, substring: Boolean = false) =
-        clickNode(hasText(text, substring = substring) and hasClickAction())
-
-    private fun ComposeUiTest.type(label: String, text: String) =
-        onAllNodes(hasSetTextAction() and hasText(label, substring = true)).onFirst().performTextInput(text)
-
-    private fun SkikoComposeUiTest.shot(name: String) {
-        repeat(20) {
-            Thread.sleep(80)
-            waitForIdle()
-        }
-        dir!!.mkdirs()
-        ImageIO.write(captureToImage().toAwtImage(), "png", File(dir, "$name.png"))
-    }
-
-    private fun render(
-        dark: Boolean,
-        fontScale: Float = 1f,
-        landscape: Boolean = false,
-        start: () -> Unit,
-        content: @Composable () -> Unit = { App() },
-        block: SkikoComposeUiTest.() -> Unit,
-    ) {
-        start()
-        try {
-            val size = if (landscape) Size(892f * 2, 412f * 2) else Size(412f * 2, 892f * 2)
-            runSkikoComposeUiTest(size = size, density = Density(2f, fontScale)) {
-                setContent {
-                    CompositionLocalProvider(LocalSystemTheme provides if (dark) SystemTheme.Dark else SystemTheme.Light) { content() }
-                }
-                try {
-                    block()
-                } catch (e: Throwable) {
-                    runCatching { shot("${if (dark) "dark" else "light"}-failure") }
-                    throw e
-                }
-            }
-        } finally {
-            runCatching { stopKoin() }
-        }
-    }
-
-    private fun signedIn() = InMemoryTokenStore(StoredSession("a1", "r1", farFuture, testUser))
+    private fun gallery(dark: Boolean, content: @Composable () -> Unit, name: String) =
+        screens(dark, fontScale = 1f, content = { CampusMarketTheme { content() } }) { shot(name) }
 
     @Test
     fun uiCoreScreenshots() {
-        if (dir == null) {
-            println("UiCoreScreenshotTest skipped: set CAMPUS_MARKET_SCREENSHOTS")
-            return
-        }
+        if (!enabled()) return
         for (dark in listOf(false, true)) {
-            val t = if (dark) "dark" else "light"
+            prefix = if (dark) "dark-" else "light-"
 
-            render(dark, start = { startFake(InMemoryTokenStore(), FakeBehaviour.Normal) }) {
+            app(dark, InMemoryTokenStore(), FakeBehaviour.Normal) {
                 awaitText("Create account")
-                shot("$t-a01-welcome")
+                shot("a01-welcome")
                 click("Create account")
                 awaitText("Join Quad")
-                shot("$t-a02-register")
+                shot("a02-register")
                 click("Continue")
                 awaitText("Enter your campus email")
-                shot("$t-a03-register-errors")
+                shot("a03-register-errors")
                 type("Campus email", "ada@uni.edu")
                 type("Display name", "Ada")
                 type("Password", "password123")
                 click("Continue")
                 awaitText("Check your email")
-                shot("$t-a04-verify")
+                shot("a04-verify")
                 onAllNodes(hasSetTextAction() and hasContentDescription("Verification code")).onFirst().performTextInput("111111")
                 awaitText("isn't right")
-                shot("$t-a05-verify-error")
+                shot("a05-verify-error")
             }
-            render(dark, start = { startFake(InMemoryTokenStore(), FakeBehaviour.Normal) }) {
+            app(dark, InMemoryTokenStore(), FakeBehaviour.Normal) {
                 awaitText("Create account")
                 click("Sign in")
                 awaitText("Welcome back")
-                shot("$t-a06-login")
+                shot("a06-login")
                 type("Campus email", "ada@uni.edu")
                 type("Password", "wrongpass")
                 clickNode(hasText("Sign in") and hasClickAction())
                 awaitText("Wrong email or password")
-                shot("$t-a07-login-error")
+                shot("a07-login-error")
             }
-            render(dark, start = { startFake(signedIn(), FakeBehaviour.Suspended) }) {
+            app(dark, signedIn(), FakeBehaviour.Suspended) {
                 awaitText("suspended")
-                shot("$t-a08-suspended-dialog")
+                shot("a08-suspended-dialog")
                 click("Close")
-                shot("$t-a09-welcome-suspended")
+                shot("a09-welcome-suspended")
             }
             // Signed-in shell: first loads that never finish (skeletons), the Inbox badge, and offline.
-            render(dark, start = { startFake(signedIn(), FakeBehaviour.Hang) }) {
+            app(dark, signedIn(), FakeBehaviour.Hang) {
                 awaitText("Browse")
-                shot("$t-b01-browse-loading")
+                shot("b01-browse-loading")
                 click("Inbox")
-                shot("$t-b02-inbox-loading")
+                shot("b02-inbox-loading")
                 click("Profile")
-                shot("$t-b03-profile-loading")
+                shot("b03-profile-loading")
                 // A frame in the middle of the push transition.
                 mainClock.autoAdvance = false
                 val node = onAllNodes(hasText("My listings") and hasClickAction()).onFirst()
                 runOnUiThread { node.performClick() }
                 mainClock.advanceTimeBy(140)
-                dir!!.mkdirs()
-                ImageIO.write(captureToImage().toAwtImage(), "png", File(dir, "$t-b05-push-transition.png"))
+                save("b05-push-transition")
                 mainClock.autoAdvance = true
             }
-            render(dark, start = { startFake(signedIn(), FakeBehaviour.Offline) }) {
+            app(dark, signedIn(), FakeBehaviour.Offline) {
                 awaitText("Browse")
-                shot("$t-b04-browse-offline")
+                shot("b04-browse-offline")
             }
-            render(dark, start = {}, content = { CampusMarketTheme { ComponentGallery() } }) {
-                shot("$t-c01-components")
-            }
-            render(dark, start = {}, content = { CampusMarketTheme { StateGallery() } }) {
-                shot("$t-c03-states")
-            }
-            render(dark, start = {}, content = { CampusMarketTheme { DialogGallery() } }) {
-                shot("$t-c02-dialog")
-            }
-
-            val liveLogin = live?.let { runCatching { liveSession("liam@state.edu") }.onFailure { println("Live server unavailable: $it") }.getOrNull() }
-            if (liveLogin != null) {
-                render(dark, start = { startLive(liveLogin) }) {
-                    awaitText("Campbell Biology")
-                    shot("$t-d01-browse")
-                    click("Sell")
-                    awaitText("Post listing")
-                    shot("$t-d02-sell")
-                    click("Inbox")
-                    waitForIdle()
-                    shot("$t-d03-inbox")
-                    click("Profile")
-                    awaitText("My listings")
-                    shot("$t-d04-profile")
-                    click("My listings")
-                    shot("$t-d05-pushed")
-                }
-            }
+            gallery(dark, { ComponentGallery() }, "c01-components")
+            gallery(dark, { StateGallery() }, "c03-states")
+            gallery(dark, { DialogGallery() }, "c02-dialog")
         }
 
+        prefix = "light-"
         // Landscape: the Welcome screen scrolls rather than squashing the hero (here with the suspension notice).
-        render(false, landscape = true, start = { startFake(signedIn(), FakeBehaviour.Suspended) }) {
+        app(false, signedIn(), FakeBehaviour.Suspended, landscape = true) {
             awaitText("suspended")
             click("Close")
-            shot("light-g01-welcome-landscape")
+            shot("g01-welcome-landscape")
         }
 
         // Large text (1.3×), light only.
-        render(false, fontScale = 1.3f, start = { startFake(InMemoryTokenStore(), FakeBehaviour.Normal) }) {
+        app(false, InMemoryTokenStore(), FakeBehaviour.Normal, fontScale = 1.3f) {
             awaitText("Create account")
-            shot("light-f01-welcome-1_3x")
+            shot("f01-welcome-1_3x")
             click("Create account")
             awaitText("Join Quad")
-            shot("light-f02-register-1_3x")
+            shot("f02-register-1_3x")
         }
-        render(false, fontScale = 1.3f, start = { startFake(signedIn(), FakeBehaviour.Hang) }) {
+        app(false, signedIn(), FakeBehaviour.Hang, fontScale = 1.3f) {
             awaitText("Browse")
-            shot("light-f03-tabs-1_3x")
+            shot("f03-tabs-1_3x")
         }
     }
 
@@ -401,7 +243,7 @@ class UiCoreScreenshotTest {
                 Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
                     RemoteImage(null, null, Modifier.width(72.dp).height(72.dp))
                     RemoteImage("http://127.0.0.1:1/missing.jpg", null, Modifier.width(72.dp).height(72.dp))
-                    ListingCardSkeleton(Modifier.width(140.dp))
+                    ListingTileSkeleton(Modifier.width(140.dp))
                 }
                 ListRowSkeleton(leading = SkeletonLeading.Avatar)
                 InlineError("Wrong email or password", Modifier.fillMaxWidth())
@@ -456,9 +298,5 @@ class UiCoreScreenshotTest {
                 destructive = true,
             )
         }
-    }
-
-    companion object {
-        private val sessions = mutableMapOf<String, AuthResponse>()
     }
 }

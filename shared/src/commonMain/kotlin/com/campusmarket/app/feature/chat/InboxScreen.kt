@@ -14,9 +14,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Email
@@ -38,7 +38,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.campusmarket.app.navigation.OnTabReselected
@@ -49,12 +48,14 @@ import com.campusmarket.app.ui.components.Avatar
 import com.campusmarket.app.ui.components.ChipTone
 import com.campusmarket.app.ui.components.EmptyState
 import com.campusmarket.app.ui.components.ListingStatusChip
+import com.campusmarket.app.ui.components.OnResume
 import com.campusmarket.app.ui.components.PagedLazyColumn
 import com.campusmarket.app.ui.components.RemoteImage
 import com.campusmarket.app.ui.components.StatusChip
 import com.campusmarket.app.ui.components.avatarImageUrl
 import com.campusmarket.app.ui.components.listImageUrl
 import com.campusmarket.app.ui.label
+import com.campusmarket.app.ui.rememberTimeFormat
 import com.campusmarket.app.ui.theme.Spacing
 import com.campusmarket.core.Conversation
 import com.campusmarket.core.ListingStatus
@@ -65,12 +66,8 @@ import org.koin.compose.viewmodel.koinViewModel
 fun InboxScreen(nav: NavController) {
     val vm = koinViewModel<InboxViewModel>()
     val connection by vm.connection.collectAsStateWithLifecycle()
-    val paged by vm.conversations.state.collectAsStateWithLifecycle()
     val times = rememberTimeFormat()
-    LifecycleResumeEffect(vm) {
-        vm.onResume()
-        onPauseOrDispose { }
-    }
+    OnResume(vm, vm::onResume)
 
     val listState = rememberLazyListState()
     OnTabReselected(TopLevelTab.Inbox) { listState.animateScrollToItem(0) }
@@ -78,8 +75,7 @@ fun InboxScreen(nav: NavController) {
     Scaffold(topBar = { AppTopBar("Inbox") }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             ConnectionBanner(connection, onRetry = vm::retryConnection)
-            // The view model starts loading on creation; skeleton rows stand in until the first page arrives.
-            if (!paged.loaded && paged.error == null) RowSkeletons() else PagedLazyColumn(
+            PagedLazyColumn(
                 vm.conversations,
                 key = { it.id },
                 state = listState,

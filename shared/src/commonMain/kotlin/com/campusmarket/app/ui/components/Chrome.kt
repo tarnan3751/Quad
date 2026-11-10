@@ -1,5 +1,8 @@
 package com.campusmarket.app.ui.components
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
@@ -82,18 +85,6 @@ fun BackButton(onClick: () -> Unit) {
     }
 }
 
-/** Section title inside a scrolling screen ("Ratings", "More from this seller"). A heading for screen readers. */
-@Composable
-fun SectionHeader(text: String, modifier: Modifier = Modifier, action: (@Composable () -> Unit)? = null) {
-    Row(
-        modifier.padding(start = Spacing.screen, end = Spacing.sm, top = Spacing.lg, bottom = Spacing.xs),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(text, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f).semantics { heading() })
-        action?.invoke()
-    }
-}
-
 /**
  * Yes/no confirmation. Use [destructive] for deletes / cancellations (confirm button turns red; Cancel stays
  * neutral so the two never look alike). Keep it shown while the action runs by passing [loading].
@@ -108,19 +99,33 @@ fun ConfirmDialog(
     dismissLabel: String = "Cancel",
     destructive: Boolean = false,
     loading: Boolean = false,
+) = ConfirmDialog(title, confirmLabel, onConfirm, onDismiss, dismissLabel, destructive, loading) { Text(message) }
+
+/** [ConfirmDialog] with richer [content] (bullets, a field, an `InlineError`) in place of the message. */
+@Composable
+fun ConfirmDialog(
+    title: String,
+    confirmLabel: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+    dismissLabel: String = "Cancel",
+    destructive: Boolean = false,
+    loading: Boolean = false,
+    confirmEnabled: Boolean = true,
+    content: @Composable ColumnScope.() -> Unit,
 ) {
     val haptics = LocalHapticFeedback.current
     AlertDialog(
         onDismissRequest = { if (!loading) onDismiss() },
         title = { Text(title) },
-        text = { Text(message) },
+        text = { Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm), content = content) },
         confirmButton = {
             TextButton(
                 onClick = {
                     haptics.performHapticFeedback(if (destructive) HapticFeedbackType.LongPress else HapticFeedbackType.Confirm)
                     onConfirm()
                 },
-                enabled = !loading,
+                enabled = confirmEnabled && !loading,
                 colors = if (destructive) {
                     ButtonDefaults.textButtonColors(
                         contentColor = MaterialTheme.colorScheme.error,

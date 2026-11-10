@@ -27,6 +27,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
@@ -236,6 +237,15 @@ fun <T> UiStateContent(
 }
 
 /** Collects one-off view-model events (see [com.campusmarket.app.ui.state.EventQueue]) while the screen is shown. */
+/** Runs [action] whenever the screen resumes, the first time included, for as long as [key] stays the same. */
+@Composable
+fun OnResume(key: Any?, action: () -> Unit) {
+    LifecycleResumeEffect(key) {
+        action()
+        onPauseOrDispose { }
+    }
+}
+
 @Composable
 fun <E> CollectEvents(events: Flow<E>, onEvent: suspend (E) -> Unit) {
     val handler by rememberUpdatedState(onEvent)

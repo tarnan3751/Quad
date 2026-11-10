@@ -2,7 +2,7 @@ package com.campusmarket.app.feature.orders
 
 import com.campusmarket.app.data.HOUR
 import com.campusmarket.app.data.NOW
-import com.campusmarket.app.feature.chat.TimeFormat
+import com.campusmarket.app.ui.TimeFormat
 import com.campusmarket.core.DisputeOutcome
 import com.campusmarket.core.DisputeReason
 import com.campusmarket.core.OrderRole

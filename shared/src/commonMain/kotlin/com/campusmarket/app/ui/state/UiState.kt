@@ -61,3 +61,14 @@ class EventQueue<E> {
         channel.trySend(event)
     }
 }
+
+/**
+ * For a view model's `onResume`: false the first time (the screen's first load is already under way), true on every
+ * later resume, i.e. coming back from another screen or the browser. It lives in the view model because the screen
+ * leaves the composition while another one is on top.
+ */
+class ResumeGate {
+    private var resumed = false
+
+    fun isReturn(): Boolean = resumed.also { resumed = true }
+}

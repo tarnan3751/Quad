@@ -1,4 +1,4 @@
-package com.campusmarket.app.feature.chat
+package com.campusmarket.app.ui
 
 import android.text.format.DateFormat
 import androidx.compose.runtime.Composable

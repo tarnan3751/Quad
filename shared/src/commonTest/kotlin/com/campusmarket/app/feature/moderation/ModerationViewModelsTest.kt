@@ -1,20 +1,20 @@
 package com.campusmarket.app.feature.moderation
 
 import com.campusmarket.app.data.Harness
+import com.campusmarket.app.data.awaitValue
+import com.campusmarket.app.data.jsonBody
 import com.campusmarket.app.data.respondError
 import com.campusmarket.app.data.respondJson
-import com.campusmarket.app.feature.awaitMatch
-import com.campusmarket.app.feature.jsonBody
-import com.campusmarket.app.feature.withMainDispatcher
+import com.campusmarket.app.data.withMainDispatcher
 import com.campusmarket.app.ui.state.UiState
 import com.campusmarket.app.ui.state.UserMessages
 import com.campusmarket.core.ApiRoutes
 import com.campusmarket.core.ErrorCodes
+import com.campusmarket.core.Limits
 import com.campusmarket.core.ListingCategory
 import com.campusmarket.core.ListingCondition
 import com.campusmarket.core.ListingStatus
 import com.campusmarket.core.ListingSummary
-import com.campusmarket.core.Limits
 import com.campusmarket.core.ModerationAction
 import com.campusmarket.core.OkResponse
 import com.campusmarket.core.Page
@@ -68,7 +68,7 @@ class ReportFormControllerTest {
         c.onReason(ReportReason.SCAM)
         c.onDetails("  asked me to pay outside the app ")
         c.submit()
-        c.state.awaitMatch { it.submitted }
+        c.state.awaitValue { it.submitted }
 
         val req = h.requests.single()
         assertEquals(ApiRoutes.REPORTS, req.url.encodedPath)
@@ -97,13 +97,13 @@ class ReportFormControllerTest {
         val c = ReportFormController(h.api, ReportTargetType.USER, "me", backgroundScope)
         c.onReason(ReportReason.SPAM)
         c.submit()
-        val failed = c.state.awaitMatch { it.formError != null }
+        val failed = c.state.awaitValue { it.formError != null }
         assertEquals("You can't report yourself", failed.formError)
         assertFalse(failed.submitted)
 
         fail = false
         c.submit()
-        c.state.awaitMatch { it.submitted }
+        c.state.awaitValue { it.submitted }
         assertEquals(2, h.requests.size)
     }
 }
@@ -140,7 +140,7 @@ class ReportDetailViewModelTest {
             var sent: io.ktor.client.request.HttpRequestData? = null
             val h = harness(report(ReportTargetType.USER)) { sent = it }
             val vm = ReportDetailViewModel(ReportDetailRoute("rep1"), h.api, UserMessages())
-            vm.report.awaitMatch { it is UiState.Content }
+            vm.report.awaitValue { it is UiState.Content }
 
             vm.resolve(ModerationAction.SUSPEND_USER, "repeat offender", 30)
             vm.actionDone.flow.first()
@@ -160,7 +160,7 @@ class ReportDetailViewModelTest {
             val bodies = mutableListOf<kotlinx.serialization.json.JsonObject>()
             val h = harness(report(ReportTargetType.USER)) { bodies += it.jsonBody() }
             val vm = ReportDetailViewModel(ReportDetailRoute("rep1"), h.api, UserMessages())
-            vm.report.awaitMatch { it is UiState.Content }
+            vm.report.awaitValue { it is UiState.Content }
 
             vm.resolve(ModerationAction.SUSPEND_USER, "", null)
             vm.actionDone.flow.first()
@@ -174,7 +174,7 @@ class ReportDetailViewModelTest {
             val bodies = mutableListOf<kotlinx.serialization.json.JsonObject>()
             val h = harness(report(ReportTargetType.USER)) { bodies += it.jsonBody() }
             val vm = ReportDetailViewModel(ReportDetailRoute("rep1"), h.api, UserMessages())
-            vm.report.awaitMatch { it is UiState.Content }
+            vm.report.awaitValue { it is UiState.Content }
 
             vm.resolve(ModerationAction.DISMISS, "fine", 7)
             vm.actionDone.flow.first()
@@ -188,10 +188,10 @@ class ReportDetailViewModelTest {
         runTest {
             val h = harness(report(ReportTargetType.USER))
             val vm = ReportDetailViewModel(ReportDetailRoute("rep1"), h.api, UserMessages())
-            vm.report.awaitMatch { it is UiState.Content }
+            vm.report.awaitValue { it is UiState.Content }
 
             vm.resolve(ModerationAction.REMOVE_LISTING, "")
-            val s = vm.runner.state.awaitMatch { it.error != null }
+            val s = vm.runner.state.awaitValue { it.error != null }
             assertFalse(s.submitting)
             assertTrue(h.requestsTo(ApiRoutes.modReportResolve("rep1")).isEmpty())
         }
@@ -205,10 +205,10 @@ class ReportDetailViewModelTest {
                 else respondError(HttpStatusCode.Forbidden, ErrorCodes.FORBIDDEN, "Moderators can't suspend moderators")
             }
             val vm = ReportDetailViewModel(ReportDetailRoute("rep1"), h.api, UserMessages())
-            vm.report.awaitMatch { it is UiState.Content }
+            vm.report.awaitValue { it is UiState.Content }
 
             vm.resolve(ModerationAction.SUSPEND_USER, "x", 7)
-            val s = vm.runner.state.awaitMatch { it.error != null }
+            val s = vm.runner.state.awaitValue { it.error != null }
             assertEquals("Moderators can't suspend moderators", s.error)
             val state = vm.report.value
             assertTrue(state is UiState.Content && state.value.status == ReportStatus.OPEN)
@@ -220,7 +220,7 @@ class ReportDetailViewModelTest {
         runTest {
             val h = harness(report(ReportTargetType.USER, status = ReportStatus.RESOLVED))
             val vm = ReportDetailViewModel(ReportDetailRoute("rep1"), h.api, UserMessages())
-            vm.report.awaitMatch { it is UiState.Content }
+            vm.report.awaitValue { it is UiState.Content }
 
             vm.suspendUser("s1", "scam ring", null)
             vm.actionDone.flow.first()
@@ -240,11 +240,11 @@ class ReportDetailViewModelTest {
             }
             val vm = ModerationQueueViewModel(h.api, UserMessages())
             vm.reports.refresh()
-            vm.reports.state.awaitMatch { it.loaded }
+            vm.reports.state.awaitValue { it.loaded }
             assertEquals("OPEN", h.requests.first().url.parameters["status"])
 
             vm.select(ReportStatus.DISMISSED)
-            vm.reports.state.awaitMatch { it.loaded && it.items.singleOrNull()?.status == ReportStatus.DISMISSED }
+            vm.reports.state.awaitValue { it.loaded && it.items.singleOrNull()?.status == ReportStatus.DISMISSED }
             assertEquals("DISMISSED", h.requests.last().url.parameters["status"])
         }
     }
@@ -256,13 +256,13 @@ class ReportDetailViewModelTest {
             val h = Harness { respondJson(Page.serializer(Report.serializer()), Page(open)) }
             val vm = ModerationQueueViewModel(h.api, UserMessages())
             vm.reports.refresh()
-            vm.reports.state.awaitMatch { it.loaded }
+            vm.reports.state.awaitValue { it.loaded }
             vm.onResume() // first resume: the initial load is enough
             assertEquals(1, h.requests.size)
 
             open = emptyList() // resolved on the detail screen
             vm.onResume() // back on the queue
-            vm.reports.state.awaitMatch { it.loaded && it.items.isEmpty() }
+            vm.reports.state.awaitValue { it.loaded && it.items.isEmpty() }
             assertEquals(2, h.requests.size)
         }
     }

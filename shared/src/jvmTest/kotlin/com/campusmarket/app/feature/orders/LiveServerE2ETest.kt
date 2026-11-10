@@ -31,11 +31,11 @@ import com.campusmarket.core.DisputeOutcome
 import com.campusmarket.core.DisputeReason
 import com.campusmarket.core.DisputeStatus
 import com.campusmarket.core.ErrorCodes
-import com.campusmarket.core.OpenDisputeRequest
 import com.campusmarket.core.ListingCategory
 import com.campusmarket.core.ListingCondition
 import com.campusmarket.core.ListingDetail
 import com.campusmarket.core.ListingStatus
+import com.campusmarket.core.OpenDisputeRequest
 import com.campusmarket.core.OrderRole
 import com.campusmarket.core.OrderStatus
 import io.ktor.client.HttpClient
@@ -61,8 +61,6 @@ import java.awt.image.BufferedImage
 import java.io.ByteArrayOutputStream
 import javax.imageio.ImageIO
 import kotlin.random.Random
-import kotlin.time.Duration.Companion.seconds
-import kotlin.time.TestTimeSource
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -70,6 +68,8 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.test.fail
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TestTimeSource
 
 /**
  * End-to-end check of feature B's data flow against a REAL dev server (fake payment gateway), exercising the actual

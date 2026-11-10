@@ -1,15 +1,9 @@
 package com.campusmarket.app.feature.chat
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
@@ -68,13 +62,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.campusmarket.app.data.ChatSocket
 import com.campusmarket.app.ui.components.FilterChip
 import com.campusmarket.app.ui.components.ListingStatusChip
 import com.campusmarket.app.ui.components.PriceText
 import com.campusmarket.app.ui.components.RemoteImage
+import com.campusmarket.app.ui.components.SkeletonBox
 import com.campusmarket.app.ui.components.listImageUrl
 import com.campusmarket.app.ui.theme.CampusTheme
 import com.campusmarket.app.ui.theme.Spacing
@@ -420,32 +414,6 @@ internal fun HistoryTop(loadingMore: Boolean, failed: Boolean, endReached: Boole
 
 // ---------------------------------------------------------------------------------------------------- skeletons
 
-/** A softly pulsing placeholder block (loading skeletons). */
-@Composable
-internal fun SkeletonBlock(modifier: Modifier, shape: Shape = RoundedCornerShape(6.dp)) {
-    val pulse = rememberInfiniteTransition(label = "skeleton")
-    val alpha by pulse.animateFloat(0.55f, 1f, infiniteRepeatable(tween(800), RepeatMode.Reverse), label = "alpha")
-    Box(modifier.alpha(alpha).background(MaterialTheme.colorScheme.surfaceContainerHighest, shape))
-}
-
-/** Placeholder rows shaped like inbox / order rows while the first page loads. */
-@Composable
-internal fun RowSkeletons(count: Int = 7, thumb: Dp = 56.dp, modifier: Modifier = Modifier) {
-    Column(modifier.fillMaxWidth().clearAndSetSemantics { contentDescription = "Loading" }) {
-        repeat(count) { i ->
-            Row(Modifier.fillMaxWidth().padding(horizontal = Spacing.screen, vertical = Spacing.md), verticalAlignment = Alignment.CenterVertically) {
-                SkeletonBlock(Modifier.size(thumb), MaterialTheme.shapes.small)
-                Spacer(Modifier.width(Spacing.md))
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SkeletonBlock(Modifier.fillMaxWidth(if (i % 2 == 0) 0.45f else 0.6f).height(14.dp))
-                    SkeletonBlock(Modifier.fillMaxWidth(0.35f).height(10.dp))
-                    SkeletonBlock(Modifier.fillMaxWidth(if (i % 3 == 0) 0.8f else 0.7f).height(12.dp))
-                }
-            }
-        }
-    }
-}
-
 /** Placeholder bubbles while a conversation's history loads. */
 @Composable
 internal fun BubbleSkeletons(modifier: Modifier = Modifier) {
@@ -456,7 +424,7 @@ internal fun BubbleSkeletons(modifier: Modifier = Modifier) {
     ) {
         widths.forEach { (w, mine) ->
             Box(Modifier.fillMaxWidth(), contentAlignment = if (mine) Alignment.CenterEnd else Alignment.CenterStart) {
-                SkeletonBlock(Modifier.fillMaxWidth(w).height(40.dp), RoundedCornerShape(20.dp))
+                SkeletonBox(Modifier.fillMaxWidth(w).height(40.dp), RoundedCornerShape(20.dp))
             }
         }
     }

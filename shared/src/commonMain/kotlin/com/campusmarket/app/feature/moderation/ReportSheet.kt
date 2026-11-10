@@ -39,10 +39,10 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.campusmarket.app.data.ApiClient
 import com.campusmarket.app.data.ApiError
-import com.campusmarket.app.feature.profile.Glyphs
 import com.campusmarket.app.ui.components.AppTextField
 import com.campusmarket.app.ui.components.InlineError
 import com.campusmarket.app.ui.components.PrimaryButton
+import com.campusmarket.app.ui.components.QuadIcons
 import com.campusmarket.app.ui.theme.Spacing
 import com.campusmarket.core.CreateReportRequest
 import com.campusmarket.core.Limits
@@ -162,12 +162,7 @@ fun ReportSheet(
     val scope = rememberCoroutineScope()
     val controller = remember(targetType, targetId) { ReportFormController(api, targetType, targetId, scope, reported) }
     val state by controller.state.collectAsStateWithLifecycle()
-    val noun = when (targetType) {
-        ReportTargetType.LISTING -> "listing"
-        ReportTargetType.USER -> "account"
-        ReportTargetType.MESSAGE -> "message"
-        ReportTargetType.ORDER -> "order" // log-only type: orders are reported as a dispute, never through this sheet
-    }
+    val noun = targetType.noun
     val finish = { if (state.submitted) onReported() else onDismiss() }
 
     ModalBottomSheet(
@@ -185,9 +180,9 @@ fun ReportSheet(
                         "Report sent",
                         "Thanks for helping keep Quad safe. A campus moderator will review this $noun against the community guidelines.",
                     )
-                    NextStep(Glyphs.Shield, "A moderator reviews it", "Reports are checked by Quad staff, oldest first.")
-                    NextStep(Glyphs.Gavel, "They act if it breaks the rules", "That can mean removing a listing, a warning, or suspending the account.")
-                    NextStep(Glyphs.Visibility, "You stay anonymous", "Nobody is told who reported them. You won't get a message about the outcome.")
+                    NextStep(QuadIcons.Shield, "A moderator reviews it", "Reports are checked by Quad staff, oldest first.")
+                    NextStep(QuadIcons.Gavel, "They act if it breaks the rules", "That can mean removing a listing, a warning, or suspending the account.")
+                    NextStep(QuadIcons.Visibility, "You stay anonymous", "Nobody is told who reported them. You won't get a message about the outcome.")
                     if (targetType != ReportTargetType.LISTING) {
                         Text(
                             "Don't want to hear from them? You can also block them from their profile.",
