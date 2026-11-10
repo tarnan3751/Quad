@@ -109,6 +109,8 @@ kotlin {
             implementation(libs.navigation.compose)
             implementation(libs.androidx.lifecycle.runtimeCompose)
             implementation(libs.compose.material.icons.core)
+            // Already in the graph via navigation-compose; declared so screens can intercept system back.
+            implementation(libs.compose.ui.backhandler)
 
             implementation(libs.ktor.client.core)
             implementation(libs.ktor.client.content.negotiation)

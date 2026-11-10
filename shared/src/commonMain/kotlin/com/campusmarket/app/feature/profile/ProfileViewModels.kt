@@ -16,10 +16,16 @@ import com.campusmarket.app.ui.state.load
 import com.campusmarket.app.ui.state.updateContent
 import com.campusmarket.app.ui.toFormErrors
 import com.campusmarket.core.ErrorCodes
+import com.campusmarket.core.Limits
+import com.campusmarket.core.ListingStatus
+import com.campusmarket.core.ListingSummary
+import com.campusmarket.core.Page
 import com.campusmarket.core.Rating
 import com.campusmarket.core.UpdateProfileRequest
 import com.campusmarket.core.UserPublic
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -33,18 +39,70 @@ val UserPublic.isDeleted: Boolean get() = displayName == DELETED_USER_NAME
 
 // ---------------------------------------------------------------------------------------------------- profile tab
 
-/** Keeps the cached profile (rating, payouts flag, avatar) fresh when the tab is shown again. */
-class ProfileViewModel(private val session: SessionManager) : ViewModel() {
-    fun refresh() {
-        viewModelScope.launch {
+/** Counts for the profile tab's stats card, from the first [Limits.PAGE_MAX] of my listings. */
+data class MyListingStats(val active: Int, val sold: Int, val capped: Boolean) {
+    fun format(n: Int): String = if (capped) "$n+" else "$n"
+
+    companion object {
+        fun of(page: Page<ListingSummary>) = MyListingStats(
+            active = page.items.count { it.status == ListingStatus.ACTIVE },
+            sold = page.items.count { it.status == ListingStatus.SOLD },
+            capped = page.nextCursor != null,
+        )
+    }
+}
+
+data class ProfileTabState(
+    /** null until the first load (the card shows dashes). */
+    val stats: MyListingStats? = null,
+    val refreshing: Boolean = false,
+    val confirmSignOut: Boolean = false,
+)
+
+/**
+ * Profile tab: keeps the cached profile (rating, payouts flag, avatar) fresh when the tab is shown again, loads the
+ * listing counts for the stats card, and signs out.
+ */
+class ProfileViewModel(private val session: SessionManager, private val api: ApiClient) : ViewModel() {
+    private val _state = MutableStateFlow(ProfileTabState())
+    val state: StateFlow<ProfileTabState> = _state.asStateFlow()
+    private var job: Job? = null
+
+    /** [pulled] = pull-to-refresh (shows the indicator); otherwise a quiet refresh on resume. */
+    fun refresh(pulled: Boolean = false) {
+        if (pulled) _state.update { it.copy(refreshing = true) }
+        if (job?.isActive == true) return
+        job = viewModelScope.launch {
             try {
-                session.refreshUser()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: ApiError) {
-                // keep showing the cached user
+                coroutineScope {
+                    launch {
+                        try {
+                            session.refreshUser()
+                        } catch (e: ApiError) {
+                            // keep showing the cached user
+                        }
+                    }
+                    launch {
+                        try {
+                            val stats = MyListingStats.of(api.myListings(limit = Limits.PAGE_MAX))
+                            _state.update { it.copy(stats = stats) }
+                        } catch (e: ApiError) {
+                            // keep the last counts
+                        }
+                    }
+                }
+            } finally {
+                _state.update { it.copy(refreshing = false) }
             }
         }
+    }
+
+    fun askSignOut() = _state.update { it.copy(confirmSignOut = true) }
+    fun cancelSignOut() = _state.update { it.copy(confirmSignOut = false) }
+
+    fun signOut() {
+        _state.update { it.copy(confirmSignOut = false) }
+        viewModelScope.launch { session.signOut() }
     }
 }
 
@@ -68,6 +126,7 @@ data class EditProfileState(
     val dirty: Boolean
         get() = displayName.trim() != originalName || bio.trim() != originalBio || pendingAvatarPhotoId != null
     val busy: Boolean get() = saving || uploadingAvatar
+    val canSave: Boolean get() = dirty && !busy && fieldErrors.isEmpty()
 }
 
 class EditProfileViewModel(
@@ -91,8 +150,14 @@ class EditProfileViewModel(
     /** Fired after a successful save (or when there was nothing to save). */
     val saved = EventQueue<Unit>()
 
-    fun onDisplayName(v: String) = _state.update { it.copy(displayName = v, fieldErrors = it.fieldErrors - "displayName", formError = null) }
-    fun onBio(v: String) = _state.update { it.copy(bio = v, fieldErrors = it.fieldErrors - "bio", formError = null) }
+    /** Validated as you type, so the problem shows next to the field before Save. */
+    fun onDisplayName(v: String) = _state.update {
+        it.copy(displayName = v, fieldErrors = it.fieldErrors - "displayName" + fieldErrorsOf("displayName" to Validate.displayName(v)), formError = null)
+    }
+
+    fun onBio(v: String) = _state.update {
+        it.copy(bio = v, fieldErrors = it.fieldErrors - "bio" + fieldErrorsOf("bio" to Validate.bio(v.trim())), formError = null)
+    }
 
     /** Uploads the picked photo right away; it becomes the avatar when the form is saved. */
     fun onAvatarPicked(images: List<PickedImage>) {
@@ -172,8 +237,17 @@ class UserProfileViewModel(
     private val _user = MutableStateFlow<UiState<UserPublic>>(UiState.Loading)
     val user: StateFlow<UiState<UserPublic>> = _user.asStateFlow()
 
-    val listings = Paginator(viewModelScope, key = { it.id }) { cursor, limit -> api.userListings(userId, cursor, limit) }
-    val ratings = Paginator<Rating>(viewModelScope, key = { it.id }) { cursor, limit -> api.userRatings(userId, cursor, limit) }
+    // Pulling either tab to refresh reloads its first page; take the header along so name, rating and bio stay current.
+    val listings = Paginator(viewModelScope, key = { it.id }) { cursor, limit ->
+        if (cursor == null) refreshUserQuietly()
+        api.userListings(userId, cursor, limit)
+    }
+
+    /** Big pages: most people's ratings fit in one, which makes the star breakdown exact. */
+    val ratings = Paginator<Rating>(viewModelScope, pageSize = Limits.PAGE_MAX, key = { it.id }) { cursor, limit ->
+        if (cursor == null) refreshUserQuietly()
+        api.userRatings(userId, cursor, limit)
+    }
 
     init {
         load(_user) { api.user(userId) }
@@ -185,12 +259,30 @@ class UserProfileViewModel(
         ratings.reset()
     }
 
+    private fun refreshUserQuietly() {
+        if (_user.value is UiState.Content) load(_user, keepContent = true) { api.user(userId) }
+    }
+
     /** Called after [BlockUserDialog] succeeded. */
     fun onBlockChanged(blocked: Boolean) {
         _user.updateContent { it.copy(blockedByMe = blocked) }
     }
+}
 
-    fun onReported() = messages.show("Thanks. Our moderators will take a look.")
+/**
+ * Star breakdown for a ratings summary: count per star (index 0 = 1 star). [complete] is false while only the newest
+ * page is loaded, so the screen can say what the bars are based on.
+ */
+data class RatingBreakdown(val counts: List<Int>, val total: Int, val complete: Boolean) {
+    fun share(stars: Int): Float = if (total == 0) 0f else counts[stars - 1].toFloat() / total
+
+    companion object {
+        fun of(ratings: List<Rating>, complete: Boolean) = RatingBreakdown(
+            counts = (1..5).map { s -> ratings.count { it.stars == s } },
+            total = ratings.size,
+            complete = complete,
+        )
+    }
 }
 
 // ---------------------------------------------------------------------------------------------------- blocked users
@@ -221,6 +313,15 @@ class BlockedUsersViewModel(private val api: ApiClient, private val messages: Us
         load(_state, keepContent = true) { api.myBlocks() }
     }
 
+    /** Pull-to-refresh: keeps the list on screen while reloading. */
+    val refreshing = MutableStateFlow(false)
+
+    fun refresh() {
+        refreshing.value = true
+        load(_state, keepContent = true) { api.myBlocks() }.invokeOnCompletion { refreshing.value = false }
+    }
+
+    /** Unblocks right away (it's harmless) and offers Undo in the snackbar, which blocks them again. */
     fun unblock(user: UserPublic) {
         if (!inFlight.add(user.id)) return
         _unblocking.value = inFlight.toSet()
@@ -228,7 +329,7 @@ class BlockedUsersViewModel(private val api: ApiClient, private val messages: Us
             try {
                 api.unblockUser(user.id)
                 _state.updateContent { list -> list.filterNot { it.id == user.id } }
-                messages.show("Unblocked ${user.displayName}")
+                messages.show("Unblocked ${user.displayName}", actionLabel = "Undo") { reblock(user) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: ApiError) {
@@ -236,6 +337,19 @@ class BlockedUsersViewModel(private val api: ApiClient, private val messages: Us
             } finally {
                 inFlight.remove(user.id)
                 _unblocking.value = inFlight.toSet()
+            }
+        }
+    }
+
+    private fun reblock(user: UserPublic) {
+        viewModelScope.launch {
+            try {
+                api.blockUser(user.id)
+                _state.updateContent { list -> if (list.any { it.id == user.id }) list else list + user.copy(blockedByMe = true) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: ApiError) {
+                messages.showError(e)
             }
         }
     }
