@@ -162,7 +162,7 @@ Type-safe navigation-compose (2.9). Routes are `@Serializable` objects/classes i
 | `FavoritesRoute` | | A | `feature/listing/MyListingsScreens.kt` | |
 | `MyListingsRoute` | | A | 〃 | |
 | `InboxRoute` | | B | `feature/chat/InboxScreen.kt` | **Tab** |
-| `ConversationRoute` | `conversationId` | B | `feature/chat/ConversationScreen.kt` | |
+| `ConversationRoute` | `conversationId` | B | `feature/chat/ConversationScreen.kt` | Short window (`isCompactHeight()`): the listing strip folds into the top bar (`ListingChip`: photo, title, price, Buy) |
 | `MessageSellerRoute` | `listingId` | B | 〃 | `startConversation` then replace itself with `ConversationRoute` |
 | `CheckoutRoute` | `listingId` | B | `feature/orders/OrderScreens.kt` | Buy flow |
 | `OrdersRoute` | `role?` (`"buyer"`/`"seller"`) | B | 〃 | |

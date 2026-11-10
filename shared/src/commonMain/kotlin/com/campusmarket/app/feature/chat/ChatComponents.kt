@@ -152,6 +152,31 @@ internal fun ListingStrip(listing: ListingSummary, mine: Boolean, showBuy: Boole
     }
 }
 
+/** [ListingStrip] folded to fit a top bar (short windows): photo, title and price, and "Buy" while it can be bought. */
+@Composable
+internal fun ListingChip(listing: ListingSummary, showBuy: Boolean, onOpen: () -> Unit, onBuy: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            Modifier
+                .clip(MaterialTheme.shapes.small)
+                .clickable(onClickLabel = "Open listing", onClick = onOpen)
+                .padding(horizontal = Spacing.sm, vertical = Spacing.xs),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            RemoteImage(listing.listImageUrl, contentDescription = null, modifier = Modifier.size(40.dp).clip(MaterialTheme.shapes.small))
+            Spacer(Modifier.width(Spacing.sm))
+            Column(Modifier.widthIn(max = 220.dp)) {
+                Text(listing.title, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                    PriceText(listing.priceCents, currency = listing.currency, style = MaterialTheme.typography.labelLarge)
+                    if (listing.status != ListingStatus.ACTIVE) ListingStatusChip(listing.status)
+                }
+            }
+        }
+        if (showBuy) FilledTonalButton(onClick = onBuy, contentPadding = PaddingValues(horizontal = 20.dp)) { Text("Buy") }
+    }
+}
+
 /** "Today" / "Yesterday" / "Wednesday" / "Mar 4" pill between days. */
 @Composable
 internal fun DaySeparator(label: String) {
