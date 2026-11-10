@@ -41,8 +41,8 @@ data class CheckoutUi(
 )
 
 sealed interface CheckoutEvent {
-    /** Order created (checkout opened in the browser): show it, replacing the review screen. */
-    data class OrderPlaced(val orderId: String) : CheckoutEvent
+    /** Order created (and checkout opened in the browser, if [checkoutOpened]): show it, replacing the review screen. */
+    data class OrderPlaced(val orderId: String, val checkoutOpened: Boolean = true) : CheckoutEvent
 }
 
 /**
@@ -97,7 +97,7 @@ class CheckoutViewModel(
                     // The order exists and this screen is about to be replaced by it: say so where it survives navigation.
                     userMessages.show("Couldn't open your browser. Tap “Continue to payment” to try again.")
                 }
-                events.send(CheckoutEvent.OrderPlaced(order.id))
+                events.send(CheckoutEvent.OrderPlaced(order.id, checkoutOpened = opened))
             } catch (e: CancellationException) {
                 throw e
             } catch (e: ApiError) {

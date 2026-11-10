@@ -1,5 +1,8 @@
 package com.campusmarket.app.feature.orders
 
+import com.campusmarket.app.data.HOUR
+import com.campusmarket.app.data.NOW
+import com.campusmarket.app.feature.chat.TimeFormat
 import com.campusmarket.core.DisputeOutcome
 import com.campusmarket.core.DisputeReason
 import com.campusmarket.core.OrderRole
@@ -57,7 +60,7 @@ class OrderLogicTest {
         val confirmDisputed = assertNotNull(order(OrderStatus.DISPUTED).confirmCopy(OrderAction.ConfirmReceipt))
         assertTrue("closes the problem report" in confirmDisputed.message, confirmDisputed.message)
         val refund = assertNotNull(order(OrderStatus.PAID, SELLER).confirmCopy(OrderAction.Cancel))
-        assertTrue(refund.destructive && "refund" in refund.message && "Liam Park" in refund.title)
+        assertTrue(refund.destructive && "refund" in refund.message && "Liam Park" in refund.title && refund.confirmLabel == "Refund $25")
         val withdraw = assertNotNull(order(OrderStatus.DISPUTED).confirmCopy(OrderAction.WithdrawDispute))
         assertTrue(!withdraw.destructive && "72 hours" in withdraw.message, withdraw.message)
         assertNull(order(OrderStatus.PAID).confirmCopy(OrderAction.Pay))
@@ -68,44 +71,70 @@ class OrderLogicTest {
         assertEquals("Order cancelled and the buyer refunded.", order(OrderStatus.REFUNDED, SELLER).actionResultMessage(OrderAction.Cancel))
     }
 
+    private val times = TimeFormat(use24h = false, now = { NOW })
+
     @Test
-    fun theAutoReleaseDeadlineIsExplainedToBothSides() {
-        val buyerView = order(OrderStatus.PAID)
-        val deadline = assertNotNull(buyerView.autoReleaseText())
-        assertTrue("Funds release to the seller on $deadline unless you report a problem" in buyerView.statusExplanation(), buyerView.statusExplanation())
-        val sellerView = order(OrderStatus.PAID, SELLER)
-        assertTrue("Funds release to you on $deadline unless Liam Park reports a problem" in sellerView.statusExplanation(), sellerView.statusExplanation())
-        assertTrue(deadline in buyerView.paymentNote() && deadline in sellerView.paymentNote())
-        assertTrue(buyerView.timeline().last().detail!!.contains("released automatically on $deadline"))
-        // no deadline once disputed or settled
-        assertNull(order(OrderStatus.DISPUTED).autoReleaseText())
-        assertNull(order(OrderStatus.COMPLETED).autoReleaseText())
+    fun theNextStepSaysWhoActsAndWhatClockIsRunning() {
+        val buyerPaid = order(OrderStatus.PAID).nextStep()
+        assertEquals("Meet Maya to pick it up", buyerPaid.title)
+        assertEquals(NextActor.Me, buyerPaid.actor)
+        assertEquals(Deadline("Released to Maya automatically", NOW + 72 * HOUR), buyerPaid.deadline)
+        val sellerPaid = order(OrderStatus.PAID, SELLER).nextStep()
+        assertEquals("Hand over the item", sellerPaid.title)
+        assertEquals("Paid to you automatically", sellerPaid.deadline?.label)
+
+        val buyerPending = order(OrderStatus.PENDING_PAYMENT).nextStep()
+        assertEquals(NextActor.Me, buyerPending.actor)
+        assertEquals(NOW - 60_000 + 30 * 60_000, buyerPending.deadline?.at, "unpaid orders cancel with the checkout session")
+        assertEquals(NextActor.Them, order(OrderStatus.PENDING_PAYMENT, SELLER).nextStep().actor)
+
+        // no clock once disputed or settled
+        assertNull(order(OrderStatus.DISPUTED).nextStep().deadline)
+        assertNull(order(OrderStatus.COMPLETED).nextStep().deadline)
+        assertEquals(NextActor.Nobody, order(OrderStatus.COMPLETED).nextStep().actor)
+        assertTrue("weren't charged" in order(OrderStatus.CANCELLED).nextStep().body)
+
+        // the timeline words the same deadline
+        val last = order(OrderStatus.PAID).timeline(times).last()
+        assertEquals("Maya paid" to StepState.Upcoming, last.title to last.state)
+        assertTrue(last.detail!!.startsWith("Automatically on "), last.detail)
     }
 
     @Test
     fun disputedOrdersExplainTheHoldFromEachSide() {
-        val buyer = order(OrderStatus.DISPUTED)
-        assertTrue("You reported a problem" in buyer.statusExplanation() && "withdraw" in buyer.statusExplanation())
-        val seller = order(OrderStatus.DISPUTED, SELLER)
-        assertTrue("Liam Park reported a problem" in seller.statusExplanation() && "refund" in seller.statusExplanation())
+        val buyer = order(OrderStatus.DISPUTED).nextStep()
+        assertEquals(NextActor.Quad, buyer.actor)
+        assertTrue("You reported a problem" in buyer.body && "withdraw" in buyer.body, buyer.body)
+        val seller = order(OrderStatus.DISPUTED, SELLER).nextStep()
+        assertEquals("Liam Park reported a problem", seller.title)
+        assertTrue(seller.actor == NextActor.Me && "refund" in seller.body, seller.body)
         val held = order(OrderStatus.DISPUTED, dispute = dispute(system = true))
         assertTrue(held.heldByPlatform)
-        assertTrue("account was suspended" in held.statusExplanation(), held.statusExplanation())
-        assertTrue("on hold" in buyer.paymentNote() && "on hold" in seller.paymentNote())
-        assertEquals("Problem reported" to StepState.Current, buyer.timeline().last().let { it.title to it.state })
-        assertNull(buyer.disputeOutcomeText(), "still open")
+        assertTrue("account was suspended" in held.nextStep().body, held.nextStep().body)
+        assertEquals(1, held.disputePaths().size, "only the team can settle a platform hold")
+        assertEquals(3, order(OrderStatus.DISPUTED).disputePaths().size)
+        assertTrue(order(OrderStatus.DISPUTED, SELLER).disputePaths()[1].startsWith("You can cancel"))
+        assertTrue("on hold" in order(OrderStatus.DISPUTED).paymentNote() && "on hold" in order(OrderStatus.DISPUTED, SELLER).paymentNote())
+        assertEquals(
+            listOf("Order placed" to StepState.Done, "Paid" to StepState.Done, "Problem reported" to StepState.Current, "Resolved" to StepState.Upcoming),
+            order(OrderStatus.DISPUTED).timeline(times).map { it.title to it.state },
+        )
+        assertNull(order(OrderStatus.DISPUTED).disputeOutcomeText(), "still open")
         assertEquals(BuyerDisputeReasons, listOf(DisputeReason.SELLER_NO_SHOW, DisputeReason.ITEM_NOT_AS_DESCRIBED, DisputeReason.OTHER))
     }
 
     @Test
     fun resolvedDisputesShowTheirOutcome() {
         val refunded = order(OrderStatus.REFUNDED, dispute = dispute(outcome = DisputeOutcome.REFUNDED_BY_MODERATOR))
-        assertTrue("Our team reviewed your problem report and refunded" in refunded.statusExplanation(), refunded.statusExplanation())
-        assertTrue(refunded.disputeOutcomeText()!!.startsWith("Reviewed by our team: the buyer was refunded"))
-        assertEquals(listOf("Order placed", "Paid", "Problem reported", "Refunded"), refunded.timeline().map { it.title })
+        assertTrue("Our team reviewed your problem report and refunded" in refunded.nextStep().body, refunded.nextStep().body)
+        assertEquals("Reviewed by our team: the buyer was refunded", refunded.disputeOutcomeText())
+        val steps = refunded.timeline(times)
+        assertEquals(listOf("Order placed", "Paid", "Problem reported", "Refunded"), steps.map { it.title })
+        assertEquals(NOW - 5_000, steps.last().at, "refunded when the dispute closed")
+        assertTrue(refunded.disputePaths().isEmpty())
 
         val released = order(OrderStatus.COMPLETED, SELLER, dispute = dispute(outcome = DisputeOutcome.RELEASED_BY_MODERATOR))
-        assertTrue("released the payment to you" in released.statusExplanation() && "$23.75" in released.statusExplanation())
+        assertTrue("released the payment to you" in released.nextStep().body && "$23.75" in released.nextStep().body)
 
         val confirmed = order(OrderStatus.COMPLETED, dispute = dispute(outcome = DisputeOutcome.BUYER_CONFIRMED))
         assertTrue(confirmed.disputeOutcomeText()!!.startsWith("You confirmed receipt"))
@@ -114,21 +143,44 @@ class OrderLogicTest {
 
         // a withdrawn report on a paid order: no "problem reported" step, but the card says it was withdrawn
         val withdrawn = order(OrderStatus.PAID, dispute = dispute(outcome = DisputeOutcome.WITHDRAWN))
-        assertTrue(withdrawn.timeline().none { it.title == "Problem reported" })
+        assertTrue(withdrawn.timeline(times).none { it.title == "Problem reported" })
         assertTrue(withdrawn.disputeOutcomeText()!!.startsWith("You withdrew your report"))
         assertEquals(listOf(OrderAction.ConfirmReceipt, OrderAction.ReportProblem, OrderAction.Message), withdrawn.availableActions())
+    }
+
+    @Test
+    fun moneyIsUnambiguousForEachRoleAndOutcome() {
+        fun rows(status: OrderStatus, role: OrderRole) = order(status, role).amountRows().map { Triple(it.label, it.cents, it.negative) }
+        assertEquals(
+            listOf(Triple("Item price", 2500, false), Triple("Service fee", null, false), Triple("You paid", 2500, false)),
+            rows(OrderStatus.PAID, BUYER),
+        )
+        assertEquals(Triple("Total to pay", 2500, false), rows(OrderStatus.PENDING_PAYMENT, BUYER).last())
+        assertEquals(Triple("Charged", 0, false), rows(OrderStatus.CANCELLED, BUYER).last())
+        assertEquals(
+            listOf(Triple("You paid", 2500, false), Triple("Refunded", 2500, true), Triple("Net cost", 0, false)),
+            rows(OrderStatus.REFUNDED, BUYER).takeLast(3),
+        )
+        assertEquals(
+            listOf(Triple("Sale price", 2500, false), Triple("Platform fee", 125, true), Triple("You'll receive", 2375, false)),
+            rows(OrderStatus.PAID, SELLER),
+        )
+        assertEquals(Triple("Your payout (on hold)", 2375, false), rows(OrderStatus.DISPUTED, SELLER).last())
+        assertEquals(Triple("Paid out to you", 2375, false), rows(OrderStatus.COMPLETED, SELLER).last())
+        assertEquals(listOf(Triple("Refunded to buyer", 2500, true), Triple("Your payout", 0, false)), rows(OrderStatus.REFUNDED, SELLER).takeLast(2))
+        assertEquals("You paid", order(OrderStatus.PAID).amountRows().single { it.emphasis }.label)
     }
 
     @Test
     fun sellerSeesPayoutAfterFee() {
         val o = order(OrderStatus.COMPLETED, SELLER)
         assertEquals(2375, o.payoutCents)
-        assertTrue("$23.75" in o.statusExplanation(), o.statusExplanation())
+        assertTrue("$23.75" in o.nextStep().body, o.nextStep().body)
     }
 
     @Test
     fun paymentNoteFollowsTheStatus() {
-        assertTrue("held until you confirm" in order(OrderStatus.PAID).paymentNote())
+        assertTrue("until you confirm pickup" in order(OrderStatus.PAID).paymentNote())
         assertTrue("released to Maya Chen" in order(OrderStatus.COMPLETED).paymentNote())
         assertTrue("weren't charged" in order(OrderStatus.CANCELLED).paymentNote())
         assertTrue("Refunded" in order(OrderStatus.REFUNDED).paymentNote())
@@ -136,17 +188,40 @@ class OrderLogicTest {
     }
 
     @Test
+    fun listHintsSayWhatsNext() {
+        assertEquals(ListHint("Finish paying to reserve it", mine = true), order(OrderStatus.PENDING_PAYMENT).listHint(times))
+        assertEquals(ListHint("Waiting for payment", mine = false), order(OrderStatus.PENDING_PAYMENT, SELLER).listHint(times))
+        assertEquals(ListHint("Confirm when you have it · releases in 3 days", mine = true), order(OrderStatus.PAID).listHint(times))
+        assertEquals(ListHint("Rate Liam", mine = true), order(OrderStatus.COMPLETED, SELLER).listHint(times))
+        assertNull(order(OrderStatus.COMPLETED, iHaveRated = true).listHint(times))
+        assertNull(order(OrderStatus.REFUNDED).listHint(times))
+        assertEquals(true, order(OrderStatus.DISPUTED, SELLER).listHint(times)?.mine)
+    }
+
+    @Test
     fun timelineFollowsTheStateMachine() {
-        fun states(status: OrderStatus) = order(status).timeline().map { it.title to it.state }
+        fun states(status: OrderStatus) = order(status).timeline(times).map { it.title to it.state }
         assertEquals(
-            listOf("Order placed" to StepState.Done, "Payment" to StepState.Current, "Pickup confirmed" to StepState.Upcoming),
+            listOf("Order placed" to StepState.Done, "Payment" to StepState.Current, "Picked up" to StepState.Upcoming, "Maya paid" to StepState.Upcoming),
             states(OrderStatus.PENDING_PAYMENT),
         )
-        assertEquals(StepState.Current, states(OrderStatus.PAID).last().second)
+        assertEquals("Picked up" to StepState.Current, states(OrderStatus.PAID)[2])
         assertTrue(states(OrderStatus.COMPLETED).all { it.second == StepState.Done })
         assertEquals("Cancelled" to StepState.Stopped, states(OrderStatus.CANCELLED).last())
         assertEquals(listOf("Order placed", "Paid", "Refunded"), states(OrderStatus.REFUNDED).map { it.first })
-        assertNotNull(order(OrderStatus.PAID).timeline()[1].at, "paid step carries paidAt")
+        assertNotNull(order(OrderStatus.PAID).timeline(times)[1].at, "paid step carries paidAt")
+        assertEquals("You're paid", order(OrderStatus.PAID, SELLER).timeline(times).last().title)
+    }
+
+    @Test
+    fun payoutSetupSteps() {
+        val steps = payoutSteps(PayoutAccountStatus(hasAccount = true)).map { it.state }
+        assertEquals(listOf(StepState.Done, StepState.Current, StepState.Upcoming), steps)
+        assertEquals(
+            listOf(StepState.Done, StepState.Done, StepState.Current),
+            payoutSteps(PayoutAccountStatus(hasAccount = true, detailsSubmitted = true)).map { it.state },
+        )
+        assertEquals(StepState.Current, payoutSteps(PayoutAccountStatus(hasAccount = false)).first().state)
     }
 
     @Test

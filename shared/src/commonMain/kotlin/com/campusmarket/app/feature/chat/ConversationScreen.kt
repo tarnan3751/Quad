@@ -3,6 +3,8 @@ package com.campusmarket.app.feature.chat
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,8 +13,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -29,10 +33,12 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SmallFloatingActionButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,6 +47,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -59,7 +67,6 @@ import com.campusmarket.app.ui.components.EmptyState
 import com.campusmarket.app.ui.components.ErrorState
 import com.campusmarket.app.ui.components.LoadingState
 import com.campusmarket.app.ui.components.RatingSummary
-import com.campusmarket.app.ui.components.UiStateContent
 import com.campusmarket.app.ui.state.UiState
 import com.campusmarket.app.ui.theme.Spacing
 import com.campusmarket.core.Conversation
@@ -105,21 +112,29 @@ fun ConversationScreen(route: ConversationRoute, nav: NavController) {
             }
         },
     ) { padding ->
-        UiStateContent(conversationState, onRetry = vm::loadConversation, modifier = Modifier.fillMaxSize().padding(padding)) { c ->
-            Column(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding()) {
-                val isBuyer = c.listing.sellerId != vm.myId
+        val body = Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding()
+        when (val s = conversationState) {
+            UiState.Loading -> Column(body) {
+                Box(Modifier.weight(1f)) { BubbleSkeletons(Modifier.align(Alignment.BottomCenter)) }
+            }
+            is UiState.Error -> ErrorState(s.error, body, onRetry = vm::loadConversation)
+            is UiState.Content -> Column(body) {
+                val c = s.value
+                val state by vm.state.collectAsStateWithLifecycle()
+                val mine = c.listing.sellerId == vm.myId
                 ListingStrip(
                     c.listing,
-                    showBuy = isBuyer && c.listing.status == ListingStatus.ACTIVE,
+                    mine = mine,
+                    showBuy = !mine && c.listing.status == ListingStatus.ACTIVE && state.restriction == null,
                     onOpen = { nav.navigate(ListingDetailRoute(c.listing.id)) },
                     onBuy = { nav.navigate(CheckoutRoute(c.listing.id)) },
                 )
                 val connection by vm.connection.collectAsStateWithLifecycle()
-                ConnectionBanner(connection)
+                ConnectionBanner(connection, onRetry = vm::retryConnection)
                 Box(Modifier.weight(1f)) {
                     MessageList(vm, c, onReportMessage = { reportMessageId = it })
                 }
-                ComposerArea(vm, c, isBuyer, onUnblock = { blockDialog = true })
+                ComposerArea(vm, c, isBuyer = !mine, onUnblock = { blockDialog = true })
             }
         }
     }
@@ -164,8 +179,15 @@ private fun ConversationTopBar(
     TopAppBar(
         navigationIcon = { BackButton(onBack) },
         title = {
-            Row(Modifier.clickable(onClick = onOpenProfile).padding(end = Spacing.sm), verticalAlignment = Alignment.CenterVertically) {
-                Avatar(other.avatarUrl, other.displayName, size = 36.dp)
+            Row(
+                Modifier
+                    .heightIn(min = 48.dp)
+                    .clip(MaterialTheme.shapes.small)
+                    .clickable(onClickLabel = "View profile", onClick = onOpenProfile)
+                    .padding(end = Spacing.sm),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Avatar(other.avatarUrl, other.displayName, size = 38.dp)
                 Spacer(Modifier.width(Spacing.md))
                 Column {
                     Text(other.displayName, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -195,6 +217,8 @@ private fun MessageList(vm: ConversationViewModel, conversation: Conversation, o
     val paged by vm.history.state.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
+    val times = rememberTimeFormat()
+    val otherName = conversation.otherUser.displayName
 
     // Older pages load as the top (the end of the reversed list) comes into view; appending there keeps the viewport still.
     LaunchedEffect(listState) {
@@ -204,24 +228,37 @@ private fun MessageList(vm: ConversationViewModel, conversation: Conversation, o
             info.totalItemsCount > 0 && last >= info.totalItemsCount - LOAD_OLDER_THRESHOLD
         }.distinctUntilChanged().collect { nearTop -> if (nearTop) vm.loadOlder() }
     }
-    // New newest row: follow it if we were at the bottom (or it's mine).
+    val atBottom by remember { derivedStateOf { listState.firstVisibleItemIndex <= 1 } }
+    // Unsent bubbles of mine stay at the very bottom, so "newest" is tracked separately for my rows and theirs.
     val newest = rows.firstOrNull()
+    val newestTheirs = rows.firstOrNull { it is ChatRow.Bubble && !it.mine }?.key
     LaunchedEffect(newest?.key) {
-        if (newest == null) return@LaunchedEffect
-        val mine = (newest as? ChatRow.Bubble)?.mine == true
-        if (mine || listState.firstVisibleItemIndex <= 1) listState.animateScrollToItem(0)
+        // I just sent something: show it.
+        if ((newest as? ChatRow.Bubble)?.mine == true) listState.animateScrollToItem(0)
+    }
+    LaunchedEffect(newestTheirs) {
+        // They wrote: follow along if I'm at the bottom, otherwise the jump chip counts it.
+        if (newestTheirs != null && listState.firstVisibleItemIndex <= 1) listState.animateScrollToItem(0)
+    }
+    var seenTheirsKey by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(atBottom, newestTheirs) { if (atBottom) seenTheirsKey = newestTheirs }
+    val unseen = if (atBottom) {
+        0
+    } else {
+        rows.asSequence().filter { it is ChatRow.Bubble && !it.mine }.takeWhile { it.key != seenTheirsKey }.count()
+            .takeIf { seenTheirsKey != null } ?: 0
     }
 
     when {
         !paged.loaded && paged.error != null && rows.isEmpty() ->
             ErrorState(paged.error!!, Modifier.fillMaxSize(), onRetry = vm::retryHistory)
-        !paged.loaded && rows.isEmpty() -> LoadingState(Modifier.fillMaxSize())
+        !paged.loaded && rows.isEmpty() -> Box(Modifier.fillMaxSize()) { BubbleSkeletons(Modifier.align(Alignment.BottomCenter)) }
         rows.isEmpty() -> EmptyState(
-            "Say hello",
+            if (conversation.listing.sellerId == vm.myId) "${firstNameOf(otherName)} is interested" else "Say hello",
             message = if (conversation.listing.sellerId == vm.myId) {
-                "${conversation.otherUser.displayName} is interested in “${conversation.listing.title}”."
+                "$otherName wants to know about “${conversation.listing.title}”. Reply to agree on a time and place to meet."
             } else {
-                "Ask about condition, pickup time or price. Keep payments in the app: you're covered until you confirm pickup."
+                "Ask about condition, pickup time or price. Pay in the app: your money is held until you've got the item."
             },
             icon = Icons.Filled.Email,
         )
@@ -236,11 +273,13 @@ private fun MessageList(vm: ConversationViewModel, conversation: Conversation, o
                     when (row) {
                         is ChatRow.Bubble -> MessageBubble(
                             row,
+                            time = times.time(row.createdAt),
+                            senderName = otherName,
                             onReport = if (!row.mine && row.messageId != null) ({ onReportMessage(row.messageId) }) else null,
                             onRetry = { row.localId?.let(vm::retry) },
                             onDiscard = { row.localId?.let(vm::discard) },
                         )
-                        is ChatRow.DayHeader -> DaySeparator(row.dayOf)
+                        is ChatRow.DayHeader -> DaySeparator(times.dayLabel(row.dayOf))
                     }
                 }
                 item(key = "__top", contentType = "top") {
@@ -253,15 +292,39 @@ private fun MessageList(vm: ConversationViewModel, conversation: Conversation, o
                     )
                 }
             }
-            val scrolledUp by remember { androidx.compose.runtime.derivedStateOf { listState.firstVisibleItemIndex > 2 } }
+            val showJump = !atBottom
             AnimatedVisibility(
-                scrolledUp,
-                enter = fadeIn(),
-                exit = fadeOut(),
+                showJump,
+                enter = fadeIn() + scaleIn(),
+                exit = fadeOut() + scaleOut(),
                 modifier = Modifier.align(Alignment.BottomEnd).padding(Spacing.md),
             ) {
-                SmallFloatingActionButton(onClick = { scope.launch { listState.animateScrollToItem(0) } }) {
-                    Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Jump to latest")
+                if (unseen > 0) {
+                    Surface(
+                        onClick = { scope.launch { listState.animateScrollToItem(0) } },
+                        shape = MaterialTheme.shapes.extraLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                        shadowElevation = 3.dp,
+                    ) {
+                        Row(Modifier.heightIn(min = 40.dp).padding(start = Spacing.md, end = Spacing.lg), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(Spacing.xs))
+                            Text(
+                                if (unseen == 1) "1 new message" else "$unseen new messages",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+                    }
+                } else {
+                    SmallFloatingActionButton(
+                        onClick = { scope.launch { listState.animateScrollToItem(0) } },
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        contentColor = MaterialTheme.colorScheme.onSurface,
+                    ) {
+                        Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Jump to latest")
+                    }
                 }
             }
         }
@@ -274,20 +337,31 @@ private fun ComposerArea(vm: ConversationViewModel, conversation: Conversation, 
     val paged by vm.history.state.collectAsStateWithLifecycle()
     val name = conversation.otherUser.displayName
     when (state.restriction) {
-        SendRestriction.BlockedByMe -> RestrictionBanner("You blocked $name. Unblock them to send messages.", "Unblock", onUnblock)
+        SendRestriction.BlockedByMe -> RestrictionBanner("You blocked $name, so you can't message each other. Unblock them to continue.", "Unblock", onUnblock)
         SendRestriction.Blocked -> RestrictionBanner("You can't send messages here: one of you has blocked the other.", null) {}
         SendRestriction.UserUnavailable -> RestrictionBanner("$name's account is no longer active, so new messages can't be sent.", null) {}
-        null -> Composer(
-            draft = state.draft,
-            error = state.draftError,
-            onDraft = vm::onDraft,
-            onSend = vm::send,
-            suggestions = if (isBuyer && paged.isEmpty && state.pending.isEmpty() && state.draft.isEmpty()) BUYER_SUGGESTIONS else emptyList(),
-        )
+        null -> {
+            val opening = paged.isEmpty && state.pending.isEmpty() && state.draft.isEmpty()
+            Composer(
+                draft = state.draft,
+                error = state.draftError,
+                placeholder = "Message ${firstNameOf(name)}…",
+                onDraft = vm::onDraft,
+                onSend = vm::send,
+                suggestions = when {
+                    !opening -> emptyList()
+                    isBuyer -> BUYER_SUGGESTIONS
+                    else -> SELLER_SUGGESTIONS
+                },
+            )
+        }
     }
 }
 
+private fun firstNameOf(name: String) = name.trim().substringBefore(' ').ifBlank { name }
+
 private val BUYER_SUGGESTIONS = listOf("Hi! Is this still available?", "When could I pick it up?", "Would you take a bit less?")
+private val SELLER_SUGGESTIONS = listOf("Hi! Yes, it's still available.", "When would you like to pick it up?", "I can meet on campus.")
 
 /**
  * Entry from a listing's "Message seller": `POST /conversations` (idempotent), then replaces itself with the

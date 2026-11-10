@@ -212,7 +212,7 @@ class ChatOrdersUiTest {
         awaitText("Maya Chen")
         awaitText("See you at the library")
         awaitText("Desk lamp")
-        waitUntil(timeoutMillis = 5_000) { onAllNodesWithContentDescription("2 unread").fetchSemanticsNodes().isNotEmpty() }
+        waitUntil(timeoutMillis = 5_000) { onAllNodesWithContentDescription("2 unread", substring = true).fetchSemanticsNodes().isNotEmpty() }
         click("Maya Chen")
 
         // Conversation: header, listing strip, history, day separator.
@@ -246,7 +246,7 @@ class ChatOrdersUiTest {
 
         DeepLinks.handle("campusmarket://orders/o1")
         awaitText("Confirm I received it")
-        awaitText("Your payment is held securely")
+        awaitText("Your payment is held by Quad")
         // the buyer of a paid order reports a problem rather than cancelling (no self-refund)
         awaitText("Report a problem")
         assertEquals(0, onAllNodesWithText("Cancel order").fetchSemanticsNodes().size + onAllNodesWithText("Cancel and", substring = true).fetchSemanticsNodes().size)
@@ -254,14 +254,15 @@ class ChatOrdersUiTest {
         click("Confirm I received it")
         awaitText("Confirm you received it?")
         click("Yes, I received it")
-        awaitText("Rate Maya")
-        awaitText("the payment was released to Maya Chen")
+        awaitText("How was trading with Maya?")
+        awaitText("Maya Chen has been paid")
 
-        click("Rate Maya")
+        // Tapping a star on the order opens the rating form with it selected.
+        clickDescription("Rate 4 stars")
         awaitText("How was trading with Maya Chen?")
-        click("Submit rating")
-        awaitText("Choose 1 to 5 stars")
-        clickDescription("4 stars")
+        awaitText("Good")
+        clickDescription("2 stars")
+        awaitText("Not great")
         click("Submit rating")
 
         awaitText("You rated Maya Chen")
@@ -312,12 +313,11 @@ class ChatOrdersUiTest {
             awaitText("Confirm you received it?")
             shot("5-confirm-dialog")
             click("Yes, I received it")
-            awaitText("Rate Maya")
+            awaitText("How was trading with Maya?")
             shot("6-order-completed")
 
-            click("Rate Maya")
-            awaitText("How was trading")
-            clickDescription("4 stars")
+            clickDescription("Rate 4 stars")
+            awaitText("How was trading with Maya Chen?")
             shot("7-rate")
             clickDescription("Back")
 

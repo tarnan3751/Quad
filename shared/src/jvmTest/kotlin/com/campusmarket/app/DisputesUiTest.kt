@@ -151,7 +151,7 @@ class DisputesUiTest {
         awaitText("Browse")
         DeepLinks.handle("campusmarket://orders/o1")
 
-        awaitText("Funds release to the seller on")
+        awaitText("Released to Maya automatically")
         click("Report a problem")
         awaitText("What went wrong with")
         click("Report problem")

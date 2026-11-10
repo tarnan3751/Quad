@@ -12,13 +12,16 @@ data class CheckoutRoute(val listingId: String)
 @Serializable
 data class OrdersRoute(val role: String? = null)
 
-/** Order detail: confirm receipt / cancel / rate. Also the target of `campusmarket://orders/{id}`. */
+/**
+ * Order detail: confirm receipt / cancel / rate. Also the target of `campusmarket://orders/{id}`. [fromCheckout]: the
+ * buyer was just sent to Stripe Checkout, so coming back with the order unpaid gets a "confirming your payment" check.
+ */
 @Serializable
-data class OrderDetailRoute(val orderId: String)
+data class OrderDetailRoute(val orderId: String, val fromCheckout: Boolean = false)
 
-/** Rate the other party of a COMPLETED order. */
+/** Rate the other party of a COMPLETED order. [stars] pre-selects a rating (tapped on the order screen). */
 @Serializable
-data class RateOrderRoute(val orderId: String)
+data class RateOrderRoute(val orderId: String, val stars: Int = 0)
 
 /** Buyer of a PAID order reports a problem (opens a dispute, which puts the payment on hold). */
 @Serializable

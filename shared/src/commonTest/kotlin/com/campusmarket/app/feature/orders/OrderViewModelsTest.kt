@@ -65,7 +65,7 @@ class OrderDetailViewModelTest {
     private var actionError: Pair<HttpStatusCode, String>? = null
     private val conversations = mutableListOf<Conversation>()
 
-    private fun TestScope.setUp(user: UserPrivate = testUser): Pair<OrderDetailViewModel, VmHarness> {
+    private fun TestScope.setUp(user: UserPrivate = testUser, fromCheckout: Boolean = false): Pair<OrderDetailViewModel, VmHarness> {
         mainOnTestScheduler()
         val h = VmHarness(this, user) { req ->
             val err = actionError
@@ -99,7 +99,7 @@ class OrderDetailViewModelTest {
             }
         }
         val updates = OrderUpdates()
-        return OrderDetailViewModel(OrderDetailRoute("o1"), h.api, h.links, updates, h.userMessages, testScheduler.timeSource) to h
+        return OrderDetailViewModel(OrderDetailRoute("o1", fromCheckout), h.api, h.links, updates, h.userMessages, testScheduler.timeSource) to h
     }
 
     @AfterTest
@@ -279,6 +279,65 @@ class OrderDetailViewModelTest {
     }
 
     @Test
+    fun backFromCheckoutConfirmsThePaymentWhenStripeCatchesUp() = runTest {
+        current = order(OrderStatus.PENDING_PAYMENT)
+        val (vm, h) = setUp(fromCheckout = true)
+        advanceUntilIdle()
+        vm.onResume() // back from the browser; the webhook hasn't landed yet
+        runCurrent()
+        assertEquals(PaymentCheck.Checking, vm.ui.value.paymentCheck)
+
+        current = order(OrderStatus.PAID)
+        advanceTimeBy(2_500)
+        runCurrent()
+        assertEquals(OrderStatus.PAID, vm.order.value.valueOrNull?.status)
+        assertNull(vm.ui.value.paymentCheck)
+        assertEquals("Payment received. Quad holds it until you confirm pickup.", h.nextMessage()?.text)
+
+        // Settled: later resumes are ordinary refreshes.
+        advanceTimeBy(10_000)
+        vm.onResume()
+        advanceUntilIdle()
+        assertNull(vm.ui.value.paymentCheck)
+        vm.close()
+    }
+
+    @Test
+    fun backFromCheckoutWithoutPayingSaysSoAndPayRetries() = runTest {
+        current = order(OrderStatus.PENDING_PAYMENT)
+        val (vm, h) = setUp(fromCheckout = true)
+        advanceUntilIdle()
+        vm.onResume()
+        advanceUntilIdle()
+        assertEquals(PaymentCheck.NotReceived, vm.ui.value.paymentCheck)
+        val checks = h.requests(HttpMethod.Get, ApiRoutes.order("o1")).size
+        assertTrue(checks in 4..7, "a handful of checks, then it stops ($checks)")
+
+        vm.onAction(OrderAction.Pay)
+        assertNull(vm.ui.value.paymentCheck, "back to plain pending while checkout is open again")
+        assertEquals(1, h.opened.size)
+        vm.close()
+    }
+
+    @Test
+    fun checkAgainRunsAnotherRoundAndPicksUpTheLatePayment() = runTest {
+        current = order(OrderStatus.PENDING_PAYMENT)
+        val (vm, h) = setUp(fromCheckout = true)
+        advanceUntilIdle()
+        vm.onResume()
+        advanceUntilIdle()
+        assertEquals(PaymentCheck.NotReceived, vm.ui.value.paymentCheck)
+
+        current = order(OrderStatus.PAID)
+        vm.recheckPayment()
+        advanceUntilIdle()
+        assertEquals(OrderStatus.PAID, vm.order.value.valueOrNull?.status)
+        assertNull(vm.ui.value.paymentCheck)
+        assertEquals("Payment received. Quad holds it until you confirm pickup.", h.nextMessage()?.text)
+        vm.close()
+    }
+
+    @Test
     fun browserThatWontOpenIsReported() = runTest {
         current = order(OrderStatus.PENDING_PAYMENT)
         val (vm, h) = setUp()
@@ -383,7 +442,7 @@ class CheckoutViewModelTest {
         advanceUntilIdle()
         vm.placeOrder()
         advanceUntilIdle()
-        assertEquals(CheckoutEvent.OrderPlaced("o-new"), vm.events.flow.first())
+        assertEquals(CheckoutEvent.OrderPlaced("o-new", checkoutOpened = false), vm.events.flow.first())
         assertTrue(h.nextMessage()!!.text.contains("Continue to payment"))
         vm.close()
     }
@@ -449,7 +508,7 @@ class CheckoutViewModelTest {
 class RateOrderViewModelTest {
     private var rateStatus: Pair<HttpStatusCode, String>? = null
 
-    private fun TestScope.setUp(): Pair<RateOrderViewModel, VmHarness> {
+    private fun TestScope.setUp(stars: Int = 0): Pair<RateOrderViewModel, VmHarness> {
         mainOnTestScheduler()
         val h = VmHarness(this) { req ->
             when (req.url.encodedPath) {
@@ -459,7 +518,7 @@ class RateOrderViewModelTest {
                 else -> respondError(HttpStatusCode.NotFound, ErrorCodes.NOT_FOUND)
             }
         }
-        return RateOrderViewModel(RateOrderRoute("o1"), h.api, OrderUpdates(), h.userMessages) to h
+        return RateOrderViewModel(RateOrderRoute("o1", stars), h.api, OrderUpdates(), h.userMessages) to h
     }
 
     @AfterTest
@@ -501,6 +560,17 @@ class RateOrderViewModelTest {
         val (vm, _) = setUp()
         vm.onComment("x".repeat(com.campusmarket.core.Limits.RATING_COMMENT_MAX + 10))
         assertEquals(com.campusmarket.core.Limits.RATING_COMMENT_MAX, vm.state.value.comment.length)
+        vm.close()
+    }
+
+    @Test
+    fun starsTappedOnTheOrderArePreselected() = runTest {
+        val (vm, h) = setUp(stars = 4)
+        advanceUntilIdle()
+        assertEquals(4, vm.state.value.stars)
+        vm.submit()
+        advanceUntilIdle()
+        assertEquals(1, h.requests(HttpMethod.Post, ApiRoutes.orderRating("o1")).size)
         vm.close()
     }
 }
