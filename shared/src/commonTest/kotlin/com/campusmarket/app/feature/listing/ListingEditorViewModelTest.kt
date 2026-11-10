@@ -58,7 +58,7 @@ class ListingEditorViewModelTest {
     private class Env(val h: Harness, val messages: UserMessages, val sync: ListingSync)
 
     private fun TestScope.env(handler: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData): Env {
-        val h = Harness(handler = handler)
+        val h = Harness(threaded = true, handler = handler)
         val messages = UserMessages()
         return Env(h, messages, ListingSync(h.api, messages, backgroundScope))
     }
