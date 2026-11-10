@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 11 and lower (android:fullBackupContent). The encrypted session is useless without the device-bound
+     Keystore key, so it must never be backed up or restored. -->
+<full-backup-content>
+    <exclude domain="sharedpref" path="campusmarket_secure_session.xml" />
+</full-backup-content>

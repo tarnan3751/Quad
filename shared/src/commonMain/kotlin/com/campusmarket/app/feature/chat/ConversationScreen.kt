@@ -1,0 +1,313 @@
+package com.campusmarket.app.feature.chat
+
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SmallFloatingActionButton
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavController
+import com.campusmarket.app.feature.listing.ListingDetailRoute
+import com.campusmarket.app.feature.moderation.ReportSheet
+import com.campusmarket.app.feature.orders.CheckoutRoute
+import com.campusmarket.app.feature.profile.BlockUserDialog
+import com.campusmarket.app.feature.profile.UserProfileRoute
+import com.campusmarket.app.ui.components.AppTopBar
+import com.campusmarket.app.ui.components.Avatar
+import com.campusmarket.app.ui.components.BackButton
+import com.campusmarket.app.ui.components.CollectEvents
+import com.campusmarket.app.ui.components.EmptyState
+import com.campusmarket.app.ui.components.ErrorState
+import com.campusmarket.app.ui.components.LoadingState
+import com.campusmarket.app.ui.components.RatingSummary
+import com.campusmarket.app.ui.components.UiStateContent
+import com.campusmarket.app.ui.state.UiState
+import com.campusmarket.app.ui.theme.Spacing
+import com.campusmarket.core.Conversation
+import com.campusmarket.core.ListingStatus
+import com.campusmarket.core.ReportTargetType
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.launch
+import org.koin.compose.viewmodel.koinViewModel
+import org.koin.core.parameter.parametersOf
+
+private const val LOAD_OLDER_THRESHOLD = 5
+
+/**
+ * One conversation: header (other person → profile, listing → detail), history paged backwards (newest at the
+ * bottom), live messages, optimistic sending with retry, read receipts, report / block.
+ */
+@Composable
+fun ConversationScreen(route: ConversationRoute, nav: NavController) {
+    val vm = koinViewModel<ConversationViewModel>(key = "conversation:${route.conversationId}") { parametersOf(route) }
+    val conversationState by vm.conversation.collectAsStateWithLifecycle()
+    LifecycleResumeEffect(vm) {
+        vm.setVisible(true)
+        onPauseOrDispose { vm.setVisible(false) }
+    }
+
+    var reportUser by remember { mutableStateOf(false) }
+    var reportMessageId by remember { mutableStateOf<String?>(null) }
+    var blockDialog by remember { mutableStateOf(false) }
+    val conversation = (conversationState as? UiState.Content)?.value
+
+    Scaffold(
+        topBar = {
+            if (conversation == null) {
+                AppTopBar("Conversation", onBack = { nav.popBackStack() })
+            } else {
+                ConversationTopBar(
+                    conversation,
+                    onBack = { nav.popBackStack() },
+                    onOpenProfile = { nav.navigate(UserProfileRoute(conversation.otherUser.id)) },
+                    onReport = { reportUser = true },
+                    onBlock = { blockDialog = true },
+                )
+            }
+        },
+    ) { padding ->
+        UiStateContent(conversationState, onRetry = vm::loadConversation, modifier = Modifier.fillMaxSize().padding(padding)) { c ->
+            Column(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding()) {
+                val isBuyer = c.listing.sellerId != vm.myId
+                ListingStrip(
+                    c.listing,
+                    showBuy = isBuyer && c.listing.status == ListingStatus.ACTIVE,
+                    onOpen = { nav.navigate(ListingDetailRoute(c.listing.id)) },
+                    onBuy = { nav.navigate(CheckoutRoute(c.listing.id)) },
+                )
+                val connection by vm.connection.collectAsStateWithLifecycle()
+                ConnectionBanner(connection)
+                Box(Modifier.weight(1f)) {
+                    MessageList(vm, c, onReportMessage = { reportMessageId = it })
+                }
+                ComposerArea(vm, c, isBuyer, onUnblock = { blockDialog = true })
+            }
+        }
+    }
+
+    if (conversation != null) {
+        if (reportUser) {
+            ReportSheet(
+                ReportTargetType.USER,
+                conversation.otherUser.id,
+                onDismiss = { reportUser = false },
+                onReported = { reportUser = false; vm.onReported() },
+            )
+        }
+        reportMessageId?.let { id ->
+            ReportSheet(
+                ReportTargetType.MESSAGE,
+                id,
+                onDismiss = { reportMessageId = null },
+                onReported = { reportMessageId = null; vm.onReported() },
+            )
+        }
+        if (blockDialog) {
+            BlockUserDialog(
+                conversation.otherUser,
+                onDismiss = { blockDialog = false },
+                onDone = { blocked -> blockDialog = false; vm.onBlockChanged(blocked) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun ConversationTopBar(
+    conversation: Conversation,
+    onBack: () -> Unit,
+    onOpenProfile: () -> Unit,
+    onReport: () -> Unit,
+    onBlock: () -> Unit,
+) {
+    val other = conversation.otherUser
+    var menu by remember { mutableStateOf(false) }
+    TopAppBar(
+        navigationIcon = { BackButton(onBack) },
+        title = {
+            Row(Modifier.clickable(onClick = onOpenProfile).padding(end = Spacing.sm), verticalAlignment = Alignment.CenterVertically) {
+                Avatar(other.avatarUrl, other.displayName, size = 36.dp)
+                Spacer(Modifier.width(Spacing.md))
+                Column {
+                    Text(other.displayName, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    RatingSummary(other.ratingAverage, other.ratingCount, starSize = 11.dp)
+                }
+            }
+        },
+        actions = {
+            Box {
+                IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, contentDescription = "More options") }
+                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    DropdownMenuItem(text = { Text("View profile") }, onClick = { menu = false; onOpenProfile() })
+                    DropdownMenuItem(text = { Text("Report ${other.displayName}") }, onClick = { menu = false; onReport() })
+                    DropdownMenuItem(
+                        text = { Text(if (other.blockedByMe) "Unblock ${other.displayName}" else "Block ${other.displayName}") },
+                        onClick = { menu = false; onBlock() },
+                    )
+                }
+            }
+        },
+    )
+}
+
+@Composable
+private fun MessageList(vm: ConversationViewModel, conversation: Conversation, onReportMessage: (String) -> Unit) {
+    val rows by vm.rows.collectAsStateWithLifecycle()
+    val paged by vm.history.state.collectAsStateWithLifecycle()
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+
+    // Older pages load as the top (the end of the reversed list) comes into view; appending there keeps the viewport still.
+    LaunchedEffect(listState) {
+        snapshotFlow {
+            val info = listState.layoutInfo
+            val last = info.visibleItemsInfo.lastOrNull()?.index ?: -1
+            info.totalItemsCount > 0 && last >= info.totalItemsCount - LOAD_OLDER_THRESHOLD
+        }.distinctUntilChanged().collect { nearTop -> if (nearTop) vm.loadOlder() }
+    }
+    // New newest row: follow it if we were at the bottom (or it's mine).
+    val newest = rows.firstOrNull()
+    LaunchedEffect(newest?.key) {
+        if (newest == null) return@LaunchedEffect
+        val mine = (newest as? ChatRow.Bubble)?.mine == true
+        if (mine || listState.firstVisibleItemIndex <= 1) listState.animateScrollToItem(0)
+    }
+
+    when {
+        !paged.loaded && paged.error != null && rows.isEmpty() ->
+            ErrorState(paged.error!!, Modifier.fillMaxSize(), onRetry = vm::retryHistory)
+        !paged.loaded && rows.isEmpty() -> LoadingState(Modifier.fillMaxSize())
+        rows.isEmpty() -> EmptyState(
+            "Say hello",
+            message = if (conversation.listing.sellerId == vm.myId) {
+                "${conversation.otherUser.displayName} is interested in “${conversation.listing.title}”."
+            } else {
+                "Ask about condition, pickup time or price. Keep payments in the app: you're covered until you confirm pickup."
+            },
+            icon = Icons.Filled.Email,
+        )
+        else -> Box(Modifier.fillMaxSize()) {
+            LazyColumn(
+                state = listState,
+                reverseLayout = true,
+                contentPadding = PaddingValues(horizontal = Spacing.md, vertical = Spacing.sm),
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                items(rows, key = { it.key }, contentType = { if (it is ChatRow.Bubble) "bubble" else "day" }) { row ->
+                    when (row) {
+                        is ChatRow.Bubble -> MessageBubble(
+                            row,
+                            onReport = if (!row.mine && row.messageId != null) ({ onReportMessage(row.messageId) }) else null,
+                            onRetry = { row.localId?.let(vm::retry) },
+                            onDiscard = { row.localId?.let(vm::discard) },
+                        )
+                        is ChatRow.DayHeader -> DaySeparator(row.dayOf)
+                    }
+                }
+                item(key = "__top", contentType = "top") {
+                    HistoryTop(
+                        loadingMore = paged.isLoadingMore,
+                        failed = paged.loadMoreError != null,
+                        endReached = paged.endReached,
+                        listingTitle = conversation.listing.title,
+                        onRetry = vm::retryHistory,
+                    )
+                }
+            }
+            val scrolledUp by remember { androidx.compose.runtime.derivedStateOf { listState.firstVisibleItemIndex > 2 } }
+            AnimatedVisibility(
+                scrolledUp,
+                enter = fadeIn(),
+                exit = fadeOut(),
+                modifier = Modifier.align(Alignment.BottomEnd).padding(Spacing.md),
+            ) {
+                SmallFloatingActionButton(onClick = { scope.launch { listState.animateScrollToItem(0) } }) {
+                    Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Jump to latest")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ComposerArea(vm: ConversationViewModel, conversation: Conversation, isBuyer: Boolean, onUnblock: () -> Unit) {
+    val state by vm.state.collectAsStateWithLifecycle()
+    val paged by vm.history.state.collectAsStateWithLifecycle()
+    val name = conversation.otherUser.displayName
+    when (state.restriction) {
+        SendRestriction.BlockedByMe -> RestrictionBanner("You blocked $name. Unblock them to send messages.", "Unblock", onUnblock)
+        SendRestriction.Blocked -> RestrictionBanner("You can't send messages here: one of you has blocked the other.", null) {}
+        SendRestriction.UserUnavailable -> RestrictionBanner("$name's account is no longer active, so new messages can't be sent.", null) {}
+        null -> Composer(
+            draft = state.draft,
+            error = state.draftError,
+            onDraft = vm::onDraft,
+            onSend = vm::send,
+            suggestions = if (isBuyer && paged.isEmpty && state.pending.isEmpty() && state.draft.isEmpty()) BUYER_SUGGESTIONS else emptyList(),
+        )
+    }
+}
+
+private val BUYER_SUGGESTIONS = listOf("Hi! Is this still available?", "When could I pick it up?", "Would you take a bit less?")
+
+/**
+ * Entry from a listing's "Message seller": `POST /conversations` (idempotent), then replaces itself with the
+ * conversation so Back returns to the listing.
+ */
+@Composable
+fun MessageSellerScreen(route: MessageSellerRoute, nav: NavController) {
+    val vm = koinViewModel<MessageSellerViewModel>(key = "message-seller:${route.listingId}") { parametersOf(route) }
+    val problem by vm.problem.collectAsStateWithLifecycle()
+    CollectEvents(vm.events.flow) { conversationId ->
+        nav.navigate(ConversationRoute(conversationId)) { popUpTo<MessageSellerRoute> { inclusive = true } }
+    }
+
+    Scaffold(topBar = { AppTopBar("Message seller", onBack = { nav.popBackStack() }) }) { padding ->
+        val modifier = Modifier.fillMaxSize().padding(padding)
+        val p = problem
+        when {
+            p == null -> LoadingState(modifier)
+            p.canRetry -> ErrorState(p.message, modifier, title = p.title, onRetry = vm::start)
+            else -> EmptyState(p.title, modifier, message = p.message, icon = Icons.Filled.Info, actionLabel = "Go back", onAction = { nav.popBackStack() })
+        }
+    }
+}

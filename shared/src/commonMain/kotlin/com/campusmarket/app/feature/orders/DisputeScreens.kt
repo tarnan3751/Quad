@@ -1,0 +1,164 @@
+package com.campusmarket.app.feature.orders
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavController
+import com.campusmarket.app.ui.Format
+import com.campusmarket.app.ui.components.AppTextField
+import com.campusmarket.app.ui.components.AppTopBar
+import com.campusmarket.app.ui.components.ChipTone
+import com.campusmarket.app.ui.components.CollectEvents
+import com.campusmarket.app.ui.components.EmptyState
+import com.campusmarket.app.ui.components.InlineError
+import com.campusmarket.app.ui.components.PrimaryButton
+import com.campusmarket.app.ui.components.StatusChip
+import com.campusmarket.app.ui.components.UiStateContent
+import com.campusmarket.app.ui.label
+import com.campusmarket.app.ui.theme.Spacing
+import com.campusmarket.core.DisputeStatus
+import com.campusmarket.core.Limits
+import com.campusmarket.core.Order
+import com.campusmarket.core.OrderStatus
+import org.koin.compose.viewmodel.koinViewModel
+import org.koin.core.parameter.parametersOf
+
+// ---------------------------------------------------------------------------------------------------- report a problem
+
+/** The buyer's "Report a problem" form: why (reason) and what happened (details), with what it does to the payment. */
+@Composable
+fun ReportProblemScreen(route: ReportProblemRoute, nav: NavController) {
+    val vm = koinViewModel<ReportProblemViewModel>(key = "dispute:${route.orderId}") { parametersOf(route) }
+    val orderState by vm.order.collectAsStateWithLifecycle()
+    val state by vm.state.collectAsStateWithLifecycle()
+    CollectEvents(vm.done.flow) { nav.popBackStack() }
+
+    Scaffold(topBar = { AppTopBar("Report a problem", onBack = { nav.popBackStack() }) }) { padding ->
+        UiStateContent(orderState, onRetry = vm::reload, modifier = Modifier.fillMaxSize().padding(padding)) { order ->
+            if (!order.isBuyer || order.status != OrderStatus.PAID) {
+                EmptyState(
+                    "You can't report a problem here",
+                    Modifier.fillMaxSize().padding(padding),
+                    message = "Problems can be reported by the buyer of a paid order, until the payment is released to the seller.",
+                    icon = Icons.Filled.Warning,
+                    actionLabel = "Back to the order",
+                    onAction = { nav.popBackStack() },
+                )
+                return@UiStateContent
+            }
+            Column(
+                Modifier.fillMaxSize().padding(padding).imePadding().verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Column(
+                    Modifier.fillMaxWidth().widthIn(max = 560.dp).padding(horizontal = Spacing.screen, vertical = Spacing.lg),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.md),
+                ) {
+                    Text("What went wrong with “${order.listing.title}”?", style = MaterialTheme.typography.headlineSmall)
+                    InfoCard(
+                        "Reporting a problem puts your payment of ${Format.price(order.amountCents, order.currency)} on hold: it won't " +
+                            "be released to ${order.seller.displayName} while the report is open. You can withdraw it or confirm receipt " +
+                            "if things get sorted out, ${firstName(order.seller)} can refund you, or our team reviews the order and " +
+                            "either refunds you or pays the seller.",
+                        tone = InfoTone.Warning,
+                    )
+                    Column(Modifier.selectableGroup()) {
+                        vm.reasons.forEach { reason ->
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .selectable(
+                                        selected = state.reason == reason,
+                                        onClick = { vm.onReason(reason) },
+                                        enabled = !state.submitting,
+                                        role = Role.RadioButton,
+                                    )
+                                    .padding(vertical = Spacing.xs),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                RadioButton(selected = state.reason == reason, onClick = null, enabled = !state.submitting)
+                                Spacer(Modifier.width(Spacing.sm))
+                                Text(reason.label, style = MaterialTheme.typography.bodyLarge)
+                            }
+                        }
+                        state.fieldErrors["reason"]?.let {
+                            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                    AppTextField(
+                        value = state.details,
+                        onValueChange = vm::onDetails,
+                        label = if (state.detailsRequired) "What happened?" else "What happened? (optional)",
+                        placeholder = "When and where you met, what was wrong with the item…",
+                        supportingText = "Shared with ${order.seller.displayName} and our team",
+                        error = state.fieldErrors["details"],
+                        singleLine = false,
+                        minLines = 4,
+                        maxLength = Limits.DISPUTE_DETAILS_MAX,
+                        enabled = !state.submitting,
+                    )
+                    InlineError(state.formError, Modifier.fillMaxWidth())
+                    PrimaryButton("Report problem", onClick = vm::submit, loading = state.submitting, modifier = Modifier.fillMaxWidth())
+                }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------- dispute card
+
+/** The order's dispute as both parties see it: reason, what the buyer wrote, its state and how it ended. */
+@Composable
+internal fun DisputeCard(order: Order, modifier: Modifier = Modifier) {
+    val d = order.dispute ?: return
+    SectionCard(modifier) {
+        Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    if (d.openedBySystem) "Order on hold" else "Problem reported",
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.weight(1f),
+                )
+                StatusChip(
+                    if (d.status == DisputeStatus.OPEN) "Open" else "Closed",
+                    if (d.status == DisputeStatus.OPEN) ChipTone.Warning else ChipTone.Neutral,
+                )
+            }
+            Text(d.reason.label, style = MaterialTheme.typography.bodyLarge)
+            if (d.details.isNotBlank()) {
+                Text("“${d.details}”", style = MaterialTheme.typography.bodyMedium)
+            }
+            Text(
+                (if (d.openedBySystem) "Placed by our team" else if (order.isBuyer) "Reported by you" else "Reported by ${order.buyer.displayName}") +
+                    " · " + Format.dateTime(d.openedAt),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            order.disputeOutcomeText()?.let { Text(it, style = MaterialTheme.typography.titleSmall) }
+        }
+    }
+}
