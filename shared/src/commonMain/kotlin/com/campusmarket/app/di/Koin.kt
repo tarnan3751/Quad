@@ -15,6 +15,7 @@ import com.campusmarket.app.feature.listing.listingModule
 import com.campusmarket.app.feature.moderation.moderationModule
 import com.campusmarket.app.feature.orders.ordersModule
 import com.campusmarket.app.feature.profile.profileModule
+import com.campusmarket.app.navigation.InboxBadge
 import com.campusmarket.app.platform.AppEnvironment
 import com.campusmarket.app.platform.ExternalLinks
 import com.campusmarket.app.platform.createPlatformHttpClient
@@ -50,6 +51,7 @@ fun coreModule(environment: AppEnvironment): Module = module {
     single { ChatSocket(get(), get(), get(), get(), get(AppScope)) }
     single { UserMessages() }
     single { ExternalLinks(get(), get()) }
+    single { InboxBadge(get(), get(AppScope)) }
 }
 
 /** One module per feature package; each owner edits only their own module file. */

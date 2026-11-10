@@ -1,8 +1,12 @@
 package com.campusmarket.app.ui.components
 
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -20,7 +24,12 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.campusmarket.app.ui.theme.CampusTheme
 
@@ -39,7 +48,8 @@ fun AppNavigationBar(modifier: Modifier = Modifier, content: @Composable RowScop
 
 /**
  * A tab: the selected one sits in a pill of the Golden Hour action gradient (white icon) that grows in like
- * Material's indicator; unselected tabs are muted.
+ * Material's indicator; unselected tabs are muted. [badgeCount] > 0 shows a count badge (99+ beyond that) and
+ * [badgeDot] a plain dot; screen readers hear "[label], [badgeDescription]" (default "N new").
  */
 @Composable
 fun RowScope.AppNavigationBarItem(
@@ -48,35 +58,63 @@ fun RowScope.AppNavigationBarItem(
     icon: ImageVector,
     label: String,
     modifier: Modifier = Modifier,
+    badgeCount: Int = 0,
+    badgeDot: Boolean = false,
+    badgeDescription: String? = null,
 ) {
     val scheme = MaterialTheme.colorScheme
     val progress by animateFloatAsState(if (selected) 1f else 0f, label = "tabIndicator")
     val brush = CampusTheme.actionGradient
+    val haptics = LocalHapticFeedback.current
     NavigationBarItem(
         selected = selected,
-        onClick = onClick,
+        onClick = {
+            if (!selected) haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+            onClick()
+        },
         modifier = modifier,
         icon = {
-            Icon(
-                icon,
-                contentDescription = null,
-                modifier = Modifier.drawBehind {
-                    if (progress > 0f) {
-                        // Material's indicator is 64 × 32 dp around the 24 dp icon.
-                        val w = 64.dp.toPx() * (0.5f + 0.5f * progress)
-                        val h = 32.dp.toPx()
-                        drawRoundRect(
-                            brush = brush,
-                            topLeft = Offset((size.width - w) / 2f, (size.height - h) / 2f),
-                            size = Size(w, h),
-                            cornerRadius = CornerRadius(h / 2f),
-                            alpha = progress,
+            BadgedBox(
+                badge = {
+                    if (badgeCount > 0 || badgeDot) {
+                        val description = badgeDescription ?: if (badgeCount > 0) "$badgeCount new" else "New"
+                        CountBadge(
+                            count = badgeCount,
+                            modifier = Modifier
+                                .border(1.5.dp, scheme.surfaceContainer, CampusTheme.pill)
+                                .clearAndSetSemantics { contentDescription = description },
                         )
                     }
                 },
+            ) {
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    modifier = Modifier.drawBehind {
+                        if (progress > 0f) {
+                            // Material's indicator is 64 × 32 dp around the 24 dp icon.
+                            val w = 64.dp.toPx() * (0.5f + 0.5f * progress)
+                            val h = 32.dp.toPx()
+                            drawRoundRect(
+                                brush = brush,
+                                topLeft = Offset((size.width - w) / 2f, (size.height - h) / 2f),
+                                size = Size(w, h),
+                                cornerRadius = CornerRadius(h / 2f),
+                                alpha = progress,
+                            )
+                        }
+                    },
+                )
+            }
+        },
+        label = {
+            Text(
+                label,
+                fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         },
-        label = { Text(label, fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.SemiBold) },
         colors = NavigationBarItemDefaults.colors(
             selectedIconColor = Color.White,
             selectedTextColor = scheme.onSurface,
@@ -85,6 +123,22 @@ fun RowScope.AppNavigationBarItem(
             unselectedTextColor = scheme.onSurfaceVariant,
         ),
     )
+}
+
+/**
+ * Small berry count badge ("3", "99+"), or a dot when [count] is 0. For unread counts on tabs, rows and icons.
+ * Give it a `contentDescription` (e.g. "3 unread") through [modifier] where the number alone isn't clear.
+ */
+@Composable
+fun CountBadge(count: Int, modifier: Modifier = Modifier) {
+    val scheme = MaterialTheme.colorScheme
+    if (count > 0) {
+        Badge(modifier = modifier, containerColor = scheme.secondary, contentColor = scheme.onSecondary) {
+            Text(if (count > 99) "99+" else count.toString(), fontWeight = FontWeight.Bold)
+        }
+    } else {
+        Badge(modifier = modifier.size(10.dp), containerColor = scheme.secondary)
+    }
 }
 
 /** A tab for Material's (Primary)TabRow in the kit's colours: muted label when unselected, brand colour (bold) when selected. */
