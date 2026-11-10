@@ -14,9 +14,7 @@ import com.campusmarket.core.Conversation
 import com.campusmarket.core.Limits
 import com.campusmarket.core.Message
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -50,7 +48,7 @@ class InboxViewModel(
         conversations.onRefreshError = userMessages::showError
         conversations.refresh()
         viewModelScope.launch { live.events.collect(::onEvent) }
-        viewModelScope.launch { fallbackSync() }
+        viewModelScope.launch { live.syncWhileDown(pollWhileConnecting = true, onReconnected = ::catchUp, poll = ::syncFirstPage) }
         if (unread != null) viewModelScope.launch { conversations.state.map { it.items }.distinctUntilChanged().collect(unread::report) }
     }
 
@@ -138,27 +136,6 @@ class InboxViewModel(
             throw e
         } catch (e: ApiError) {
             // Offline: keep what we have; the next attempt or a pull-to-refresh will catch up.
-        }
-    }
-
-    private suspend fun fallbackSync() {
-        var wasDown = false
-        live.status.collectLatest { status ->
-            when (status) {
-                ChatSocket.Status.Connected -> if (wasDown) {
-                    // Events sent while we were disconnected are gone: catch up once.
-                    wasDown = false
-                    catchUp()
-                }
-                ChatSocket.Status.Connecting, ChatSocket.Status.Reconnecting -> {
-                    if (status == ChatSocket.Status.Reconnecting) wasDown = true
-                    while (true) {
-                        delay(CHAT_POLL_INTERVAL_MS)
-                        syncFirstPage()
-                    }
-                }
-                ChatSocket.Status.Idle -> Unit
-            }
         }
     }
 

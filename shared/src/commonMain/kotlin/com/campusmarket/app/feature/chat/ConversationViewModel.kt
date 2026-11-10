@@ -28,7 +28,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -155,7 +154,7 @@ class ConversationViewModel(
         loadConversation()
         history.refresh()
         viewModelScope.launch { live.events.collect(::onEvent) }
-        viewModelScope.launch { fallbackSync() }
+        viewModelScope.launch { live.syncWhileDown(pollWhileConnecting = true, onReconnected = ::syncNewest, poll = ::syncNewest) }
         viewModelScope.launch {
             history.state.map { it.loaded }.distinctUntilChanged().collect { loaded -> if (loaded) mergeLiveMessages() }
         }
@@ -356,26 +355,6 @@ class ConversationViewModel(
             throw e
         } catch (e: ApiError) {
             // Offline: the next poll / resume retries.
-        }
-    }
-
-    private suspend fun fallbackSync() {
-        var wasDown = false
-        live.status.collectLatest { status ->
-            when (status) {
-                ChatSocket.Status.Connected -> if (wasDown) {
-                    wasDown = false
-                    syncNewest()
-                }
-                ChatSocket.Status.Connecting, ChatSocket.Status.Reconnecting -> {
-                    if (status == ChatSocket.Status.Reconnecting) wasDown = true
-                    while (true) {
-                        delay(CHAT_POLL_INTERVAL_MS)
-                        syncNewest()
-                    }
-                }
-                ChatSocket.Status.Idle -> Unit
-            }
         }
     }
 

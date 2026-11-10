@@ -2,7 +2,6 @@ package com.campusmarket.app.feature.chat
 
 import com.campusmarket.app.data.ApiClient
 import com.campusmarket.app.data.ApiError
-import com.campusmarket.app.data.ChatSocket
 import com.campusmarket.app.data.SessionManager
 import com.campusmarket.app.data.SessionState
 import com.campusmarket.core.ChatEvent
@@ -12,7 +11,6 @@ import com.campusmarket.core.Message
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -129,7 +127,7 @@ class UnreadConversations(
         myId = userId
         launch { live.events.collect(::onEvent) }
         launch { refreshRequests.collectLatest { sync() } }
-        launch { fallbackSync() }
+        launch { live.syncWhileDown(pollWhileConnecting = false, onReconnected = ::sync, poll = ::sync) }
         entries.map { map -> map.values.count { it.unread > 0 } }.distinctUntilChanged().collect { send(it) }
     }
 
@@ -160,26 +158,6 @@ class UnreadConversations(
             throw e
         } catch (e: ApiError) {
             // Keep the last known count; the next reconnect, poll or refresh catches up.
-        }
-    }
-
-    private suspend fun fallbackSync() {
-        var wasDown = false
-        live.status.collectLatest { status ->
-            when (status) {
-                ChatSocket.Status.Connected -> if (wasDown) {
-                    wasDown = false
-                    sync()
-                }
-                ChatSocket.Status.Reconnecting -> {
-                    wasDown = true
-                    while (true) {
-                        delay(CHAT_POLL_INTERVAL_MS)
-                        sync()
-                    }
-                }
-                ChatSocket.Status.Connecting, ChatSocket.Status.Idle -> Unit
-            }
         }
     }
 }
