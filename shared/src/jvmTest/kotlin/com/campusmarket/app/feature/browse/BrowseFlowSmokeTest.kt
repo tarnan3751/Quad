@@ -175,8 +175,8 @@ class BrowseFlowSmokeTest {
         awaitText("12th edition, a few highlights.")
         awaitText("Library steps")
         awaitText("Maya Chen")
-        awaitText("Message seller")
-        awaitText("Buy · $65")
+        awaitText("Message")
+        awaitText("Buy now")
         awaitText("2 favorites")
 
         clickDescription("Add to favorites")
@@ -200,10 +200,13 @@ class BrowseFlowSmokeTest {
 
         click("My old bike")
         awaitText("Edit listing")
-        awaitText("Seller (you)")
-        assertTrue(onAllNodesWithText("Message seller").fetchSemanticsNodes().isEmpty())
+        awaitText("Your listing")
+        assertTrue(onAllNodesWithText("Message").fetchSemanticsNodes().isEmpty())
+        assertTrue(onAllNodesWithText("Buy now").fetchSemanticsNodes().isEmpty())
 
-        click("Delete")
+        // Delete lives in the overflow menu, behind a confirmation.
+        clickDescription("More options")
+        click("Delete listing")
         awaitText("Delete this listing?")
         click("Cancel")
 

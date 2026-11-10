@@ -70,9 +70,12 @@ data class ListingFormState(
     val fieldErrors: Map<String, String> = emptyMap(),
     val formError: String? = null,
     val submitting: Boolean = false,
+    /** Counts submits rejected by local validation, so the screen can bring the first error into view each time. */
+    val rejectedSubmits: Int = 0,
 ) {
     val photosRemaining: Int get() = (Limits.PHOTOS_MAX - photos.size).coerceAtLeast(0)
     val uploading: Boolean get() = photos.any { it.status == UploadStatus.Uploading }
+    val uploadingCount: Int get() = photos.count { it.status == UploadStatus.Uploading }
 
     /** True once the user has entered anything (Sell offers "Clear"). */
     val isBlank: Boolean
@@ -210,7 +213,7 @@ abstract class ListingFormViewModel(
         if (s.submitting) return
         val errors = validate(s)
         if (errors.isNotEmpty()) {
-            _form.update { it.copy(fieldErrors = errors, formError = "Check the highlighted fields.") }
+            _form.update { it.copy(fieldErrors = errors, formError = "Check the highlighted fields.", rejectedSubmits = it.rejectedSubmits + 1) }
             return
         }
         val valid = ValidForm(
@@ -241,6 +244,9 @@ abstract class ListingFormViewModel(
 
     /** Sends [form] to the server and reports success (event + message). Throws [ApiError]. */
     protected abstract suspend fun save(form: ValidForm)
+
+    /** Whether leaving now would throw away something the user entered (asks before discarding). */
+    open val hasUnsavedChanges: Boolean get() = !_form.value.isBlank && !_form.value.submitting
 
     protected fun validate(s: ListingFormState): Map<String, String> = fieldErrorsOf(
         "photoIds" to when {
@@ -333,6 +339,17 @@ class EditListingViewModel(
             pickupLocation = listing.pickupLocation,
         )
     }
+
+    override val hasUnsavedChanges: Boolean
+        get() {
+            val before = (_original.value as? UiState.Content)?.value ?: return false
+            val f = _form.value
+            if (f.submitting) return false
+            return f.title.trim() != before.title || f.description.trim() != before.description ||
+                f.category != before.category || f.condition != before.condition ||
+                Format.parsePriceCents(f.price) != before.priceCents || f.pickupLocation.trim() != before.pickupLocation ||
+                f.photos.map { it.photoId } != before.photos.map { it.id }
+        }
 
     override suspend fun save(form: ValidForm) {
         val before = (_original.value as? UiState.Content)?.value ?: return

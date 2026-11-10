@@ -344,7 +344,7 @@ class LiveServerTest {
 
                 awaitText("Campbell Biology")
                 clickNode(hasText("Campbell Biology", substring = true) and hasClickAction())
-                awaitText("Message seller")
+                awaitText("Buy now")
                 shot("04-detail")
 
                 clickNode(hasContentDescription("Back") and hasClickAction())
@@ -421,7 +421,8 @@ class LiveServerTest {
                 awaitText(title)
                 shot("11-created-detail")
 
-                click("Delete")
+                clickNode(hasContentDescription("More options") and hasClickAction())
+                click("Delete listing")
                 awaitText("Delete this listing?")
                 val confirm = onAllNodes(hasText("Delete") and hasClickAction()).onLast()
                 runOnUiThread { confirm.performClick() }

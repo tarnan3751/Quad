@@ -92,7 +92,7 @@ class ListingDetailAndListsViewModelTest {
         }
         val messages = UserMessages()
         val sync = ListingSync(h.api, messages, backgroundScope)
-        val mine = MyListingsViewModel(h.api, sync)
+        val mine = MyListingsViewModel(h.api, sync, messages)
         val vm = ListingDetailViewModel(ListingDetailRoute("l1"), h.api, messages, sync)
         vm.listing.awaitValue { it is UiState.Content }
         mine.listings.state.awaitValue { it.loaded }
@@ -154,7 +154,7 @@ class ListingDetailAndListsViewModelTest {
             respondJson(pageSerializer, Page(items, null))
         }
         val messages = UserMessages()
-        val vm = MyListingsViewModel(h.api, ListingSync(h.api, messages, backgroundScope))
+        val vm = MyListingsViewModel(h.api, ListingSync(h.api, messages, backgroundScope), messages)
         vm.listings.state.awaitValue { it.loaded && it.items.size == 2 }
         assertNull(h.requests.last().url.parameters["status"])
 

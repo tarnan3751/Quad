@@ -51,6 +51,7 @@ val MyListingsFilters: List<ListingStatus?> = listOf(null, ListingStatus.ACTIVE,
 class MyListingsViewModel(
     private val api: ApiClient,
     private val sync: ListingSync,
+    messages: UserMessages,
 ) : ViewModel() {
     private val _filter = MutableStateFlow<ListingStatus?>(null)
     val filter: StateFlow<ListingStatus?> = _filter.asStateFlow()
@@ -60,6 +61,7 @@ class MyListingsViewModel(
     }
 
     init {
+        listings.onRefreshError = messages::showError // a failed pull-to-refresh keeps the list, but says why
         listings.refresh()
         viewModelScope.launch {
             sync.changes.collect { change ->
