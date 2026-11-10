@@ -28,6 +28,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -63,6 +64,8 @@ fun RowScope.AppNavigationBarItem(
     badgeDescription: String? = null,
 ) {
     val scheme = MaterialTheme.colorScheme
+    val badgeShown = badgeCount > 0 || badgeDot
+    val description = badgeDescription ?: if (badgeCount > 0) "$badgeCount new" else "New"
     val progress by animateFloatAsState(if (selected) 1f else 0f, label = "tabIndicator")
     val brush = CampusTheme.actionGradient
     val haptics = LocalHapticFeedback.current
@@ -76,8 +79,7 @@ fun RowScope.AppNavigationBarItem(
         icon = {
             BadgedBox(
                 badge = {
-                    if (badgeCount > 0 || badgeDot) {
-                        val description = badgeDescription ?: if (badgeCount > 0) "$badgeCount new" else "New"
+                    if (badgeShown) {
                         CountBadge(
                             count = badgeCount,
                             modifier = Modifier
@@ -113,6 +115,9 @@ fun RowScope.AppNavigationBarItem(
                 fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+                // NavigationBarItem clears the icon's semantics (badge included) when it shows a label, so the badge
+                // is spoken with the label instead.
+                modifier = if (badgeShown) Modifier.semantics { contentDescription = "$label, $description" } else Modifier,
             )
         },
         colors = NavigationBarItemDefaults.colors(

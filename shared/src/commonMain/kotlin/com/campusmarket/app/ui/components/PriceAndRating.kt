@@ -20,6 +20,8 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -107,7 +109,8 @@ fun RatingInput(stars: Int, onChange: (Int) -> Unit, modifier: Modifier = Modifi
                     onChange(i)
                 },
                 enabled = enabled,
-                modifier = Modifier.size(starSize + 12.dp),
+                // The chosen star reads as selected, so a screen reader can tell the current rating.
+                modifier = Modifier.size(starSize + 12.dp).semantics { selected = i == stars },
             ) {
                 Icon(
                     Icons.Filled.Star,
