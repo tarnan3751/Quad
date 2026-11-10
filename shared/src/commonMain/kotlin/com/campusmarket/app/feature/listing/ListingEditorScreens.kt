@@ -547,7 +547,11 @@ private fun PhotoTile(
                         tint = MaterialTheme.colorScheme.onErrorContainer,
                     )
                     Text(
-                        if (item.retryable) "Retry" else "Too large",
+                        when {
+                            item.retryable -> "Retry"
+                            item.rejected -> "Can't use"
+                            else -> "Too large"
+                        },
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onErrorContainer,
                     )

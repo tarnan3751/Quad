@@ -77,6 +77,13 @@ class MyListingsViewModel(
         }
     }
 
+    private var resumedBefore = false
+
+    /** Called on every resume: coming back refreshes, since an order may have reserved or sold a listing meanwhile. */
+    fun onResume() {
+        if (resumedBefore) listings.refresh() else resumedBefore = true
+    }
+
     fun setFilter(status: ListingStatus?) {
         if (status == _filter.value) return
         _filter.value = status

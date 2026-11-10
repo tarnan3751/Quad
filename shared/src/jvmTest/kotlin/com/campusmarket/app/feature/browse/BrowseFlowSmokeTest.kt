@@ -5,7 +5,10 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.performClick
@@ -23,6 +26,7 @@ import com.campusmarket.app.data.respondJson
 import com.campusmarket.app.data.testUser
 import com.campusmarket.app.di.coreModule
 import com.campusmarket.app.di.featureModules
+import com.campusmarket.app.feature.listing.LISTING_GRID_TAG
 import com.campusmarket.app.feature.listing.detail
 import com.campusmarket.app.feature.listing.summary
 import com.campusmarket.app.platform.AppEnvironment
@@ -69,7 +73,7 @@ class BrowseFlowSmokeTest {
     private val calculus = summary("l3", "Calculus textbook", priceCents = 4000)
     private val mine = summary("m1", "My old bike", priceCents = 9000).copy(sellerId = testUser.id, sellerName = testUser.displayName)
 
-    private fun startApp() {
+    private fun startApp(manyListings: Boolean = false) {
         val env = AppEnvironment(isDebug = true, defaultBaseUrl = "http://test.local", platform = PlatformKind.DESKTOP)
         val pages = Page.serializer(ListingSummary.serializer())
         val engine = MockEngine { req ->
@@ -81,6 +85,8 @@ class BrowseFlowSmokeTest {
                     ListSerializer(CategoryInfo.serializer()),
                     ListingCategory.entries.map { CategoryInfo(it, it.label, if (it == ListingCategory.TEXTBOOKS) 2 else 0) },
                 )
+                path == ApiRoutes.LISTINGS && manyListings -> respondJson(pages, Page((1..24).map { summary("item$it") }))
+                manyListings && path.startsWith(ApiRoutes.LISTINGS + "/") -> respondJson(ListingDetail.serializer(), detail(id = path.substringAfterLast('/')))
                 path == ApiRoutes.LISTINGS -> respondJson(
                     pages,
                     when {
@@ -187,6 +193,21 @@ class BrowseFlowSmokeTest {
         clickDescription("Back")
         awaitText("Desk lamp with USB port")
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasContentDescription("Remove from favorites")).fetchSemanticsNodes().isNotEmpty() }
+    }
+
+    @Test
+    fun gridKeepsItsScrollPositionWhenComingBackFromAListing() = runComposeUiTest {
+        startApp(manyListings = true)
+        setContent { App() }
+        awaitText("Listing item1")
+
+        onNode(hasTestTag(LISTING_GRID_TAG)).performScrollToNode(hasText("Listing item20"))
+        click("Listing item20")
+        awaitText("Buy now")
+        clickDescription("Back")
+        awaitText("Listing item20")
+        onNode(hasText("Listing item20") and hasClickAction()).assertIsDisplayed()
+        assertTrue(onAllNodesWithText("Listing item1").fetchSemanticsNodes().isEmpty(), "still scrolled down, not back at the top")
     }
 
     @Test

@@ -35,6 +35,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.campusmarket.app.navigation.TopLevelTab
@@ -87,6 +88,10 @@ fun MyListingsScreen(nav: NavController) {
     val vm = koinViewModel<MyListingsViewModel>()
     val filter by vm.filter.collectAsStateWithLifecycle()
     val paged by vm.listings.state.collectAsStateWithLifecycle()
+    LifecycleResumeEffect(vm) {
+        vm.onResume()
+        onPauseOrDispose { }
+    }
     Scaffold(
         topBar = {
             AppTopBar(

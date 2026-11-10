@@ -147,6 +147,69 @@ class ListingDetailAndListsViewModelTest {
     }
 
     @Test
+    fun aBlockEitherWayTakesAwayBuyAndMessage() {
+        val theyBlockedMe = detail().copy(blocked = true)
+        assertTrue(theyBlockedMe.isBlocked)
+        assertTrue(!theyBlockedMe.canBuy && !theyBlockedMe.canMessage)
+        val iBlockedThem = detail().let { it.copy(blocked = true, seller = it.seller.copy(blockedByMe = true)) }
+        assertTrue(iBlockedThem.isBlocked && !iBlockedThem.canBuy && !iBlockedThem.canMessage)
+        // An older server sends only `blockedByMe`.
+        val oldServer = detail().let { it.copy(seller = it.seller.copy(blockedByMe = true)) }
+        assertTrue(oldServer.isBlocked && !oldServer.canBuy)
+        assertFalse(detail(isMine = true).copy(blocked = true).isBlocked)
+    }
+
+    @Test
+    fun unblockingTheSellerBringsBuyBack() = runTest {
+        var blocked = true
+        val h = Harness { req ->
+            when {
+                req.url.encodedPath == ApiRoutes.userBlock(seller.id) && req.method == HttpMethod.Delete -> {
+                    blocked = false
+                    respondJson(OkResponse.serializer(), OkResponse())
+                }
+                else -> respondJson(
+                    ListingDetail.serializer(),
+                    detail().let { it.copy(blocked = blocked, seller = it.seller.copy(blockedByMe = blocked)) },
+                )
+            }
+        }
+        val messages = UserMessages()
+        val vm = ListingDetailViewModel(ListingDetailRoute("l1"), h.api, messages, ListingSync(h.api, messages, backgroundScope))
+        assertFalse(vm.listing.awaitValue { it is UiState.Content }.valueOrNull!!.canBuy)
+
+        vm.unblockSeller()
+        runCurrent()
+        assertTrue(vm.listing.awaitValue { it.valueOrNull?.canBuy == true }.valueOrNull!!.canMessage)
+        assertEquals("Unblocked Maya Chen", messages.messages.awaitValue().text)
+        assertFalse(vm.ui.awaitValue { !it.unblocking }.unblocking)
+    }
+
+    @Test
+    fun myListingsSaysWhenARefreshFailsAndRefreshesOnReturn() = runTest {
+        var offline = false
+        val h = Harness {
+            if (offline) respondError(HttpStatusCode.ServiceUnavailable, ErrorCodes.INTERNAL, "Server is down")
+            else respondJson(pageSerializer, Page(listOf(summary("a1")), null))
+        }
+        val messages = UserMessages()
+        val vm = MyListingsViewModel(h.api, ListingSync(h.api, messages, backgroundScope), messages)
+        vm.listings.state.awaitValue { it.loaded }
+
+        vm.onResume() // first show: already loading, no second request
+        runCurrent()
+        assertEquals(1, h.requests.size)
+
+        offline = true
+        vm.onResume() // back from another screen
+        runCurrent()
+        assertEquals("Server is down", messages.messages.awaitValue().text)
+        val after = vm.listings.state.awaitValue { !it.isRefreshing }
+        assertEquals(listOf("a1"), after.items.map { it.id }, "the list stays")
+        assertEquals(2, h.requests.size)
+    }
+
+    @Test
     fun myListingsStatusFilterRestartsPaging() = runTest {
         val h = Harness { req ->
             val status = req.url.parameters["status"]

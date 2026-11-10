@@ -52,9 +52,12 @@ data class PhotoItem(
     /** 0..1 while uploading, once the upload has started and its size is known. */
     val progress: Float? = null,
     val error: String? = null,
+    /** The server refused the file itself (unsupported or corrupt): sending it again won't help. */
+    val rejected: Boolean = false,
 ) {
-    /** A failed upload can be retried unless the file itself is over the server's size limit. */
-    val retryable: Boolean get() = status == UploadStatus.Failed && local != null && local.bytes.size <= Limits.PHOTO_MAX_BYTES
+    /** A failed upload can be retried unless the file is over the size limit or was refused as a file. */
+    val retryable: Boolean
+        get() = status == UploadStatus.Failed && local != null && !rejected && local.bytes.size <= Limits.PHOTO_MAX_BYTES
 }
 
 data class ListingFormState(
@@ -183,7 +186,9 @@ abstract class ListingFormViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: ApiError) {
-                updatePhoto(key) { it.copy(status = UploadStatus.Failed, progress = null, error = e.field("file") ?: e.message) }
+                // 400/413 name the file as the problem; network errors, 5xx and rate limits are worth a retry.
+                val rejected = e.status == 400 || e.status == 413
+                updatePhoto(key) { it.copy(status = UploadStatus.Failed, progress = null, error = e.field("file") ?: e.message, rejected = rejected) }
             }
         }
         uploadJobs[key] = job
