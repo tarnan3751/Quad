@@ -36,13 +36,14 @@ fun ServerSettingsDialog(onDismiss: () -> Unit) {
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("API server") },
+        title = { Text("Dev server") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
                 AppTextField(
                     value = text,
                     onValueChange = { text = it; status = null },
-                    label = "Base URL",
+                    label = "Server address",
+                    placeholder = "http://192.168.1.20:8080",
                     supportingText = "Default: ${server.defaultBaseUrl}",
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, autoCorrectEnabled = false),
                 )
@@ -58,7 +59,7 @@ fun ServerSettingsDialog(onDismiss: () -> Unit) {
                                 api.health()
                                 "Connected to ${server.baseUrl.value}"
                             } catch (e: ApiError) {
-                                "Failed: ${e.message}"
+                                "Couldn't connect: ${e.message}"
                             }
                             testing = false
                         }

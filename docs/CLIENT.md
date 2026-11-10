@@ -20,7 +20,7 @@ Read `docs/CONTRACT.md` first: endpoints, wire types (`core/`) and the product s
 | Desktop harness | `./gradlew :desktopApp:run`. Server from `CAMPUS_MARKET_API` (default `http://localhost:8080`). Always a debug build. |
 | Android | `./gradlew :androidApp:installDebug`. The emulator reaches the host at `http://10.0.2.2:8080` (the default). |
 | iOS | Open `iosApp/iosApp.xcodeproj` in Xcode (not on the dev machine yet). The simulator uses `http://localhost:8080`. |
-| Other server (e.g. phone on LAN) | Debug builds only: Welcome screen → "Server: …" (or Settings → API server). The override is persisted. |
+| Other server (e.g. phone on LAN) | Debug builds only: Welcome screen → "Dev server · …" (or Settings → API server). The override is persisted. |
 | Deep links | Android: `adb shell am start -a android.intent.action.VIEW -d "campusmarket://orders/<id>"`. Desktop: `./gradlew :desktopApp:run --args="campusmarket://orders/<id>"`. iOS: `xcrun simctl openurl booted campusmarket://payouts`. |
 
 Photo / avatar URLs from the server are absolute and built from the server's `PUBLIC_BASE_URL`, which defaults to `http://localhost:8080` and can't be reached from the emulator. `ServerConfig.resolve()` rewrites loopback origins to the app's base URL. `RemoteImage` and `ExternalLinks` do this for you, so never load server URLs any other way.
@@ -66,7 +66,7 @@ Composable screen ── koinViewModel() ──▶ ViewModel ──▶ ApiClient
                                                      TokenStore ◀── SessionManager (StateFlow<SessionState>)
 ```
 
-- **DI: Koin 4.** Core singletons (`coreModule` in `di/Koin.kt`): `ServerConfig`, `TokenStore`, `HttpClient`, `ApiClient`, `SessionManager`, `ChatSocket`, `UserMessages`, `ExternalLinks`, `AppEnvironment`, plus the platform `PlatformUrlLauncher`. Each feature registers its view models in its own module (`browseModule`, `listingModule`, …), which is already listed in `featureModules`.
+- **DI: Koin 4.** Core singletons (`coreModule` in `di/Koin.kt`): `ServerConfig`, `TokenStore`, `HttpClient`, `ApiClient`, `SessionManager`, `ChatSocket`, `UserMessages`, `ExternalLinks`, `InboxBadge`, `AppEnvironment`, plus the platform `PlatformUrlLauncher`. Each feature registers its view models in its own module (`browseModule`, `listingModule`, …), which is already listed in `featureModules`.
 - **View models:** `androidx.lifecycle.ViewModel` (multiplatform), scoped to the navigation back-stack entry by `koinViewModel()`. Expose immutable state as `StateFlow` and take actions as plain functions.
 - **Route arguments → view model:** pass the route object.
   ```kotlin
@@ -86,11 +86,13 @@ Composable screen ── koinViewModel() ──▶ ViewModel ──▶ ApiClient
 
 | Need | Use |
 |---|---|
-| Load one thing (listing, order, profile) | `MutableStateFlow<UiState<T>>(UiState.Loading)` + `load(state) { api.listing(id) }`; render with `UiStateContent(state, onRetry = vm::reload) { … }`. Pull-to-refresh: `load(state, keepContent = true) { … }`. Optimistic edits: `state.updateContent { it.copy(favorited = true) }`. |
-| Cursor list (`Page<T>`) | `val items = Paginator(viewModelScope, key = { it.id }) { cursor, limit -> api.xxx(cursor = cursor, limit = limit) }` and render with `PagedLazyColumn(vm.items, key = { it.id }) { … }` / `PagedLazyGrid`. It starts the first load, handles pull-to-refresh, infinite scroll, retry footer and empty state. New query: `reset()`. Local edits: `items.update { list -> … }`. |
-| Form | Immutable `XxxState(fields…, fieldErrors: Map<String,String>, formError: String?, submitting)`. Validate locally with `Validate.*` + `fieldErrorsOf(...)`, then call the API and map failures with `e.toFormErrors(codeToField)`. Show errors with `AppTextField(error = state.fieldErrors["title"])` and `InlineError(state.formError)`. See `feature/auth/AuthViewModels.kt`. |
+| Load one thing (listing, order, profile) | `MutableStateFlow<UiState<T>>(UiState.Loading)` + `load(state) { api.listing(id) }`; render with `UiStateContent(state, onRetry = vm::reload) { … }` (pass `loading = { … }` with a skeleton when the layout is known). Pull-to-refresh: `load(state, keepContent = true) { … }`. Optimistic edits: `state.updateContent { it.copy(favorited = true) }`. |
+| Cursor list (`Page<T>`) | `val items = Paginator(viewModelScope, key = { it.id }) { cursor, limit -> api.xxx(cursor = cursor, limit = limit) }` and render with `PagedLazyColumn(vm.items, key = { it.id }) { … }` / `PagedLazyGrid`. It starts the first load (skeleton rows / listing-card skeletons; override with `loading = { … }`), handles pull-to-refresh, infinite scroll, retry footer and empty state. New query: `reset()`. Local edits: `items.update { list -> … }`. |
+| Form | Immutable `XxxState(fields…, fieldErrors: Map<String,String>, formError: String?, submitting)`. Validate locally with `Validate.*` + `fieldErrorsOf(...)`, then call the API and map failures with `e.toFormErrors(codeToField)`. Show errors with `AppTextField(error = state.fieldErrors["title"])` and `InlineError(state.formError)`. Flag a field as soon as the user leaves it with `Modifier.onFocusLost(vm::checkTitle)` (skip empty fields). Pass `loading = state.submitting` to the submit button and return early from `submit()` while submitting (double taps). See `feature/auth/AuthViewModels.kt`. |
 | One-off event (navigate after save, open URL) | `val events = EventQueue<MyEvent>()`, `events.send(...)` in the VM, `CollectEvents(vm.events.flow) { … }` in the screen. |
-| Snackbar / toast | Inject `UserMessages`: `messages.show("Listing deleted")` or `messages.showError(e)`. It survives navigation. |
+| Snackbar / toast | Inject `UserMessages`: `messages.show("Listing deleted")`, `messages.show("Removed", "Undo") { … }` or `messages.showError(e)` / `showError("Couldn't save", "Retry") { … }` (errors get an alert icon, stay longer and can be closed). It survives navigation. Keep the text short and plain. |
+| Inbox tab badge | `InboxBadge` (Koin single, `navigation/`): the shell counts unread messages (first page of `GET /conversations`) at start, on resume and when the user lands on a tab root. Chat code that knows better can call `inboxBadge.set(total)` or `inboxBadge.refresh(force = true)` (e.g. after marking a conversation read). |
+| Scroll to top when the current tab is tapped again | `OnTabReselected(TopLevelTab.Browse) { gridState.animateScrollToItem(0) }` in the tab's root screen. |
 
 ## Calling the API
 
@@ -118,7 +120,7 @@ Auth calls (`register / verifyEmail / resendCode / login / logout`) are used thr
 
 ## Navigation
 
-Type-safe navigation-compose (2.9). Routes are `@Serializable` objects/classes in each feature's `XxxRoutes.kt`. Each feature registers them in `fun NavGraphBuilder.xxxGraph(nav: NavController)` (in `XxxGraph.kt`), which `navigation/AppNavigation.kt` calls. Signed-out and signed-in sides are separate NavHosts behind an auth gate, so signing out discards the signed-in back stack. The bottom bar shows only on the four tab roots. Use `nav.navigateToTab(TopLevelTab.Inbox)` to jump to a tab.
+Type-safe navigation-compose (2.9). Routes are `@Serializable` objects/classes in each feature's `XxxRoutes.kt`. Each feature registers them in `fun NavGraphBuilder.xxxGraph(nav: NavController)` (in `XxxGraph.kt`), which `navigation/AppNavigation.kt` calls. Signed-out and signed-in sides are separate NavHosts behind an auth gate, so signing out discards the signed-in back stack. The bottom bar shows only on the four tab roots; Inbox carries the unread badge (`InboxBadge`), and tapping the current tab again emits on `LocalTabReselected` (`OnTabReselected`). Use `nav.navigateToTab(TopLevelTab.Inbox)` to jump to a tab.
 
 | Route | Args | Owner | Screen file | Notes |
 |---|---|---|---|---|
@@ -164,26 +166,32 @@ Route args are primitives/strings. Use enum *names* as strings if you need an en
 |---|---|
 | `PrimaryButton`, `SecondaryButton`, `DestructiveButton` | 48 dp pill buttons with `loading` spinner + optional icon. Primary = Golden Hour gradient with white label (one per screen: the main call to action); Secondary = ghost pill with a primary-colour ring; Destructive = solid error red |
 | `FilterChip(selected, onClick, label, …)` | Quad's filter chip: Material's `FilterChip` API, import `com.campusmarket.app.ui.components.FilterChip` instead of the Material one. Pill; gradient + white label when selected |
-| `AppTextField` | Outlined field with `error` (field error), `supportingText`, `maxLength` counter, prefix/icons |
-| `EmailField`, `PasswordField` (Show/Hide), `PriceField` ($ prefix, decimal keyboard) | Specialised fields. Price text ↔ cents via `Format.parsePriceCents` / `Format.priceInput` |
-| `InlineError` | Form-level error banner |
-| `LoadingState`, `ErrorState(ApiError, onRetry)`, `EmptyState(title, message, icon, action)` | Full-area states |
-| `UiStateContent(state, onRetry) { value -> }` | Loading/error/content switch for `UiState` |
+| `AppTextField` | Outlined field with `error` (field error), `supportingText`, `maxLength` counter, prefix/icons, `contentType` (autofill hint, e.g. `ContentType.PersonFullName`) |
+| `EmailField`, `PasswordField` (eye toggle, `newPassword` for sign-up), `PriceField` ($ prefix, decimal keyboard) | Specialised fields with autofill hints. The keyboard's Next / Done keeps its default (next field / hide keyboard) after your `onImeAction`. Price text ↔ cents via `Format.parsePriceCents` / `Format.priceInput` |
+| `CodeField(value, onValueChange, length)` | One-time code in separate boxes (digits only, number keyboard, one-time-code autofill) |
+| `Modifier.onFocusLost { }` | Run a check when focus leaves a field (inline validation) |
+| `InlineError(message)`, `InfoBanner(message, icon)` | Form-level error banner (alert icon, announced by screen readers); the same banner in neutral colours for notices that aren't failures |
+| `LoadingState`, `ErrorState(ApiError, onRetry)`, `EmptyState(title, message, icon, actionLabel, onAction, secondaryActionLabel, onSecondaryAction)` | Full-area states. Empty / error states scroll instead of clipping in short spaces; offline errors get a cloud icon and neutral colours. An empty state should say what goes here and offer the one action that fills it |
+| `ListingGridSkeleton`, `ListSkeleton(leading = SkeletonLeading.Avatar/Thumbnail/None)`, `ListingCardSkeleton`, `ListRowSkeleton`, `SkeletonBox`, `SkeletonLine`, `ShimmerGroup` | Shimmering placeholders in the shape of the content. Prefer them to a spinner whenever the layout is known (e.g. `UiStateContent(…, loading = { MyDetailSkeleton() })`) |
+| `UiStateContent(state, onRetry, loading = { … }) { value -> }` | Loading/error/content switch for `UiState` |
 | `CollectEvents(flow) { }` | Consume `EventQueue` events |
-| `PagedLazyColumn`, `PagedLazyGrid` | Infinite lists for a `Paginator` (pull-to-refresh, footer, empty) |
-| `RemoteImage(url, …)` | Coil image with placeholder; resolves dev URLs |
-| `Avatar(url, name, size)` | Round photo, or initials on a Golden Hour colour picked from the name |
+| `PagedLazyColumn`, `PagedLazyGrid` | Infinite lists for a `Paginator` (skeleton first load, pull-to-refresh, footer, empty) |
+| `RemoteImage(url, …)` | Coil image: shimmers while loading, `placeholderIcon` (a photo icon) when missing or failed; resolves dev URLs |
+| `Avatar(url, name, size, contentDescription = name)` | Round photo over initials on a Golden Hour colour picked from the name (initials show while loading and if the photo fails). Pass `contentDescription = null` when the name is printed next to it |
+| `CountBadge(count)` | Berry count pill ("3", "99+"), or a dot for 0 |
 | `PriceText(cents)` | Price in the price colour (berry on light, amber on dark), weight 800 |
-| `RatingStars(rating)`, `RatingSummary(avg, count)`, `RatingInput(stars, onChange)` | Display (fractional) and input |
+| `RatingStars(rating)`, `RatingSummary(avg, count)`, `RatingInput(stars, onChange)` | Display (fractional; read as "Rated 4.8 out of 5, 12 ratings") and input (48 dp stars) |
 | `StatusChip(text, ChipTone)`, `ListingStatusChip`, `OrderStatusChip`, `ReportStatusChip`, `ConditionChip` | Status pills (consistent colours) |
-| `ListingCard(listing, onClick, onToggleFavorite?)` | Grid tile (square photo, price, title, condition · age, status, heart) |
+| `ListingCard(listing, onClick, onToggleFavorite?)` | Grid tile (square photo, price, title, condition · age, status, heart with a 48 dp target) |
 | `ListingRow(listing, onClick, supporting, trailing)` | Compact list row with thumbnail |
 | `UserRow(user, onClick, supporting, trailing)` | Avatar + name + rating (seller card, order parties, blocked users) |
-| `AppTopBar(title, onBack, actions)`, `BackButton`, `SectionHeader` | Chrome |
-| `AppNavigationBar { AppNavigationBarItem(selected, onClick, icon, label) }` | The bottom tab bar (used by `AppNavigation`); the selected tab sits in a gradient pill |
+| `AppTopBar(title, onBack, actions, scrollBehavior)`, `BackButton`, `SectionHeader` | Chrome. Titles and section headers are headings for screen readers |
+| `AppNavigationBar { AppNavigationBarItem(selected, onClick, icon, label, badgeCount, badgeDot, badgeDescription) }` | The bottom tab bar (used by `AppNavigation`); the selected tab sits in a gradient pill; optional count badge |
+| `AppSnackbar(data)`, `AppSnackbarVisuals` | The shell's snackbar (rounded, inverse colours, alert icon for errors). `UserMessages` already uses it |
+| `QuadIcons.*` | Icons missing from `material-icons-core`: `ChatBubble(Outline)`, `AddCircleOutline`, `Visibility(Off)`, `Image`, `CloudOff`, `ErrorOutline` |
 | `QuadMark(size, color)`, `QuadAppIcon(size)`, `QuadWordmark(color, fontSize)` | Brand: the "Sun on the Quad" mark (see Theme), the app icon tile, the lowercase `quad` wordmark. For brand moments only (Welcome, auth headers) |
-| `ConfirmDialog(title, message, confirmLabel, onConfirm, onDismiss, destructive, loading)` | Confirmations |
-| `ServerSettingsDialog` | Debug server override (already on Welcome; C puts it in Settings) |
+| `ConfirmDialog(title, message, confirmLabel, onConfirm, onDismiss, destructive, loading)` | Confirmations. Destructive: red confirm, neutral Cancel |
+| `ServerSettingsDialog` | Debug server override (Welcome → "Dev server · …", and Settings) |
 | `PlaceholderScreen` | Temporary. Delete its usages as you build screens. |
 
 Also: `Format.price / relativeTime / date / dateTime / memberSince / rating`, enum labels (`ListingStatus.label`, `OrderStatus.label`, `ReportStatus.label`, `ModerationAction.label`, …; `ListingCategory`, `ListingCondition`, `ReportReason` already have `.label` in core), and `Validate.*` for `Limits`-based checks.
@@ -231,8 +239,17 @@ are code identifiers, like the `com.campusmarket` packages.)
 - Spacing: `Spacing.xs/sm/md/lg/xl/xxl` and `Spacing.screen` (16 dp horizontal screen padding). Shapes come from the theme (`MaterialTheme.shapes.medium` for cards).
 - Status bar: a screen that draws its own colour under the status bar calls `StatusBarIcons(darkIcons = …)` (in
   `platform/`); leaving the screen restores the system default. Only the Welcome hero does this today.
-- Brand screenshots: `CAMPUS_MARKET_LIVE=http://localhost:8080 CAMPUS_MARKET_SCREENSHOTS=/some/dir ./gradlew :shared:jvmTest --tests '*BrandScreenshotTest*'`
-  renders the main screens in light and dark against a running dev server (read-only).
+- **Motion.** Screen changes are Material's shared-axis X, kept short (300 ms): a pushed screen slides in a little and
+  fades in, back reverses it; switching tabs is a quick cross-fade. Both NavHosts in `AppNavigation` set this; don't add
+  per-route transitions. Haptics go through Compose's `LocalHapticFeedback` (no-op on desktop): tab switches, filter
+  chips, the favourite heart, rating stars and confirm buttons in `ConfirmDialog` already do it.
+- **Loading, empty, error.** First loads show skeletons in the shape of the content (the paged lists do this for you);
+  a bare spinner is for things without a known shape. Empty states say what goes here and offer the action that fills
+  it. Errors come with a retry. Touch targets are at least 48 dp.
+- Screenshots: `CAMPUS_MARKET_LIVE=http://127.0.0.1:8080 CAMPUS_MARKET_SCREENSHOTS=/some/dir ./gradlew :shared:jvmTest --tests '*BrandScreenshotTest*'`
+  renders the main screens in light and dark against a running dev server (read-only); `*UiCoreScreenshotTest*` renders
+  the auth screens, the shell's loading / offline states, the tab bar badge, 1.3× text and a gallery of the shared
+  components (mostly against a fake server). Use `127.0.0.1`: the test JVM may not reach `localhost` over IPv6.
 - Copy: plain English strings inline. No string resources yet (single locale). Sentence case. Money always via `Format.price` / `PriceText`.
 - Text inputs: enforce `Limits` with `maxLength` and `Validate.*`. The server stays authoritative, so always surface `ApiError.fields`.
 - Never call `HttpClient` directly from features, never store tokens, never load server URLs without `RemoteImage` / `ExternalLinks`.
@@ -242,8 +259,8 @@ are code identifiers, like the `com.campusmarket` packages.)
 
 ## Platform notes
 
-- **Android:** `CampusMarketApp` calls `initCampusMarket(context)`. `MainActivity` is `singleTask` and forwards `campusmarket://` intents (cold start + `onNewIntent`) to `DeepLinks`. Cleartext HTTP is allowed only in debug (`src/debug/res/xml/network_security_config.xml`). Images come from the system photo picker, so the app needs no media permissions.
-- **iOS:** `MainViewController()` starts Koin. `iOSApp.swift` forwards `.onOpenURL` to `MainViewControllerKt.handleDeepLink(url:)`. `Info.plist` registers the `campusmarket` scheme, has photo/camera/local-network usage strings, sets `NSAllowsLocalNetworking` (HTTP to localhost/.local only), and sets `UIViewControllerBasedStatusBarAppearance` to NO so `StatusBarIcons` can set the app-wide status bar style (the SwiftUI host never asks the Compose view controller). The display name comes from `APP_NAME` in `Configuration/Config.xcconfig`. The Kotlin side compiles (`./gradlew :shared:compileKotlinIosSimulatorArm64`). Swift and linking need Xcode.
+- **Android:** `CampusMarketApp` calls `initCampusMarket(context)`. `MainActivity` is `singleTask` and forwards `campusmarket://` intents (cold start + `onNewIntent`) to `DeepLinks`. Cleartext HTTP is allowed only in debug (`src/debug/res/xml/network_security_config.xml`). Images come from the system photo picker, so the app needs no media permissions. The window theme (`Theme.Quad`, `res/values*/themes.xml`) paints the warm-white / after-dark background behind Compose and the Android 12+ splash, so launch never flashes white in dark mode.
+- **iOS:** `MainViewController()` starts Koin. `iOSApp.swift` forwards `.onOpenURL` to `MainViewControllerKt.handleDeepLink(url:)`. `Info.plist` registers the `campusmarket` scheme, has photo/camera/local-network usage strings, sets `NSAllowsLocalNetworking` (HTTP to localhost/.local only), and sets `UIViewControllerBasedStatusBarAppearance` to NO so `StatusBarIcons` can set the app-wide status bar style (the SwiftUI host never asks the Compose view controller). The display name comes from `APP_NAME` in `Configuration/Config.xcconfig`. The launch screen is the `LaunchBackground` colour from the asset catalog (warm white / after dark). The Kotlin side compiles (`./gradlew :shared:compileKotlinIosSimulatorArm64`). Swift and linking need Xcode.
 - **Desktop:** dev harness only. URL opening uses `java.awt.Desktop`. There's no URL-scheme registration, so pass a deep link as a program argument instead.
 
 ## Token storage

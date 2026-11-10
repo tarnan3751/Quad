@@ -309,6 +309,14 @@ class UiCoreScreenshotTest {
                 shot("$t-b02-inbox-loading")
                 click("Profile")
                 shot("$t-b03-profile-loading")
+                // A frame in the middle of the push transition.
+                mainClock.autoAdvance = false
+                val node = onAllNodes(hasText("My listings") and hasClickAction()).onFirst()
+                runOnUiThread { node.performClick() }
+                mainClock.advanceTimeBy(140)
+                dir!!.mkdirs()
+                ImageIO.write(captureToImage().toAwtImage(), "png", File(dir, "$t-b05-push-transition.png"))
+                mainClock.autoAdvance = true
             }
             render(dark, start = { startFake(signedIn(), FakeBehaviour.Offline) }) {
                 awaitText("Browse")
