@@ -70,7 +70,6 @@ kotlin {
     sourceSets {
         commonMain.configure { kotlin.srcDir(generateBuildInfo.map { it.outputs.files }) }
         androidMain.dependencies {
-            implementation(libs.compose.uiToolingPreview)
             implementation(libs.androidx.activity.compose)
             implementation(libs.ktor.client.okhttp)
         }
@@ -105,7 +104,6 @@ kotlin {
             implementation(libs.compose.ui)
             implementation(libs.compose.ui.backhandler)
             implementation(libs.compose.components.resources)
-            implementation(libs.compose.uiToolingPreview)
 
             implementation(libs.navigation.compose)
             implementation(libs.androidx.lifecycle.runtimeCompose)
@@ -124,10 +122,6 @@ kotlin {
             implementation(libs.filekit.dialogs.compose)
         }
     }
-}
-
-dependencies {
-    androidRuntimeClasspath(libs.compose.uiTooling)
 }
 
 composeCompiler {
