@@ -75,6 +75,7 @@ import com.campusmarket.app.ui.components.FilterChip
 import com.campusmarket.app.ui.components.ListingStatusChip
 import com.campusmarket.app.ui.components.PriceText
 import com.campusmarket.app.ui.components.RemoteImage
+import com.campusmarket.app.ui.components.listImageUrl
 import com.campusmarket.app.ui.theme.CampusTheme
 import com.campusmarket.app.ui.theme.Spacing
 import com.campusmarket.core.Limits
@@ -133,7 +134,7 @@ internal fun ListingStrip(listing: ListingSummary, mine: Boolean, showBuy: Boole
                     .padding(horizontal = Spacing.screen, vertical = Spacing.sm),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                RemoteImage(listing.thumbnailUrl, contentDescription = null, modifier = Modifier.size(48.dp).clip(MaterialTheme.shapes.small))
+                RemoteImage(listing.listImageUrl, contentDescription = null, modifier = Modifier.size(48.dp).clip(MaterialTheme.shapes.small))
                 Spacer(Modifier.width(Spacing.md))
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     if (mine) {

@@ -28,15 +28,67 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import coil3.ImageLoader
+import coil3.PlatformContext
 import coil3.compose.AsyncImage
 import coil3.compose.AsyncImagePainter
+import coil3.disk.DiskCache
+import coil3.network.ktor3.KtorNetworkFetcherFactory
+import coil3.request.crossfade
+import com.campusmarket.app.platform.imageDiskCacheDirectory
+import com.campusmarket.app.platform.imageMemoryCache
 import com.campusmarket.app.ui.theme.GoldenHour
+import com.campusmarket.core.ListingSummary
+import com.campusmarket.core.Photo
+import com.campusmarket.core.UserPrivate
+import com.campusmarket.core.UserPublic
 
 /**
  * Turns server URLs into URLs this device can load (see `ServerConfig.resolve`). Provided at the app root;
  * [RemoteImage] applies it for you.
  */
 val LocalUrlResolver = staticCompositionLocalOf<(String?) -> String?> { { it } }
+
+/*
+ * Which size of a photo to load (docs/SERVER_NOTES.md "Photos"). The server's resized variants are optional, so each
+ * falls back to the original. A grid tile or row needs a few hundred pixels: the original is up to 9x the bytes.
+ */
+
+/** Grid tiles and list rows (inbox, orders, moderation): the small variant of the listing's first photo. */
+val ListingSummary.listImageUrl: String? get() = thumbnailSmallUrl ?: thumbnailUrl
+
+/** Avatars (never shown larger than ~112 dp). */
+val UserPublic.avatarImageUrl: String? get() = avatarThumbnailUrl ?: avatarUrl
+
+/** Avatars (never shown larger than ~112 dp). */
+val UserPrivate.avatarImageUrl: String? get() = avatarThumbnailUrl ?: avatarUrl
+
+/** A photo filling the screen width (the listing pager). The zoomable full-screen viewer keeps [Photo.url]. */
+val Photo.screenImageUrl: String get() = displayUrl ?: url
+
+/** Small previews (the listing editor's photo strip). */
+val Photo.smallImageUrl: String get() = thumbnailUrl ?: url
+
+/**
+ * The app's one Coil [ImageLoader] (installed by `App()`): decoded images in a platform-sized memory cache, downloads
+ * in a disk cache under the platform's cache directory (photo URLs are immutable, so a cached file is never stale),
+ * a short crossfade for images that come from disk or network. Requests are sized to the composable, decoded off the
+ * main thread and keyed by URL, so scrolling back to a tile reuses its bitmap.
+ */
+fun newImageLoader(context: PlatformContext): ImageLoader =
+    ImageLoader.Builder(context)
+        .components { add(KtorNetworkFetcherFactory()) }
+        .memoryCache { imageMemoryCache(context) }
+        .diskCache {
+            DiskCache.Builder()
+                .directory(imageDiskCacheDirectory(context))
+                .maxSizeBytes(128L * 1024 * 1024)
+                .build()
+        }
+        .crossfade(CROSSFADE_MS)
+        .build()
+
+private const val CROSSFADE_MS = 150
 
 private enum class ImageLoad { Loading, Loaded, Failed }
 

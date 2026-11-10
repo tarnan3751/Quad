@@ -76,6 +76,7 @@ import com.campusmarket.app.ui.components.ErrorState
 import com.campusmarket.app.ui.components.ListingStatusChip
 import com.campusmarket.app.ui.components.LocalUrlResolver
 import com.campusmarket.app.ui.components.PriceText
+import com.campusmarket.app.ui.components.listImageUrl
 import com.campusmarket.app.ui.state.PagedState
 import com.campusmarket.app.ui.state.Paginator
 import com.campusmarket.app.ui.theme.Spacing
@@ -245,7 +246,7 @@ internal fun ListingTile(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
         Box {
-            ListingImage(listing.thumbnailUrl, contentDescription = null, modifier = Modifier.fillMaxWidth().aspectRatio(1f))
+            ListingImage(listing.listImageUrl, contentDescription = null, modifier = Modifier.fillMaxWidth().aspectRatio(1f))
             if (listing.status != ListingStatus.ACTIVE) {
                 if (listing.status != ListingStatus.RESERVED) {
                     Box(Modifier.matchParentSize().background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.28f)))

@@ -7,6 +7,8 @@ import com.campusmarket.app.data.ApiError
 import com.campusmarket.app.data.SessionManager
 import com.campusmarket.app.platform.PickedImage
 import com.campusmarket.app.ui.Validate
+import com.campusmarket.app.ui.components.avatarImageUrl
+import com.campusmarket.app.ui.components.smallImageUrl
 import com.campusmarket.app.ui.fieldErrorsOf
 import com.campusmarket.app.ui.state.EventQueue
 import com.campusmarket.app.ui.state.Paginator
@@ -139,7 +141,7 @@ class EditProfileViewModel(
             EditProfileState(
                 displayName = u?.displayName.orEmpty(),
                 bio = u?.bio.orEmpty(),
-                avatarUrl = u?.avatarUrl,
+                avatarUrl = u?.avatarImageUrl,
                 originalName = u?.displayName.orEmpty().trim(),
                 originalBio = u?.bio.orEmpty().trim(),
             )
@@ -167,7 +169,7 @@ class EditProfileViewModel(
         viewModelScope.launch {
             try {
                 val photo = api.uploadPhoto(image.bytes, image.fileName, image.mimeType)
-                _state.update { it.copy(avatarUrl = photo.url, pendingAvatarPhotoId = photo.id) }
+                _state.update { it.copy(avatarUrl = photo.smallImageUrl, pendingAvatarPhotoId = photo.id) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: ApiError) {

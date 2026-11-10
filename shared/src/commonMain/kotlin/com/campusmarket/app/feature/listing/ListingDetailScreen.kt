@@ -85,6 +85,8 @@ import com.campusmarket.app.ui.components.PriceText
 import com.campusmarket.app.ui.components.PrimaryButton
 import com.campusmarket.app.ui.components.RatingSummary
 import com.campusmarket.app.ui.components.SecondaryButton
+import com.campusmarket.app.ui.components.avatarImageUrl
+import com.campusmarket.app.ui.components.screenImageUrl
 import com.campusmarket.app.ui.state.UiState
 import com.campusmarket.app.ui.theme.CampusTheme
 import com.campusmarket.app.ui.theme.Spacing
@@ -401,7 +403,7 @@ private fun SellerCard(seller: UserPublic, isMe: Boolean, onClick: () -> Unit) {
         modifier = Modifier.fillMaxWidth(),
     ) {
         Row(Modifier.padding(Spacing.md), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Spacing.md)) {
-            Avatar(seller.avatarUrl, seller.displayName, size = 52.dp)
+            Avatar(seller.avatarImageUrl, seller.displayName, size = 52.dp)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
                     if (isMe) "${seller.displayName} (you)" else seller.displayName,
@@ -431,7 +433,7 @@ private fun PhotoPager(listing: ListingDetail, onPhotoClick: (Int) -> Unit, modi
     Box(modifier.background(MaterialTheme.colorScheme.surfaceContainerHighest)) {
         HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize(), key = { photos[it].id }) { page ->
             ListingImage(
-                url = photos[page].url,
+                url = photos[page].screenImageUrl,
                 contentDescription = "${listing.title}, photo ${page + 1} of ${photos.size}",
                 modifier = Modifier.fillMaxSize().clickable(onClickLabel = "View full screen") { onPhotoClick(page) },
                 iconSize = 56.dp,

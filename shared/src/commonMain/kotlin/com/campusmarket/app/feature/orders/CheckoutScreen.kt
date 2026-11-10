@@ -46,6 +46,7 @@ import com.campusmarket.app.ui.components.RemoteImage
 import com.campusmarket.app.ui.components.SecondaryButton
 import com.campusmarket.app.ui.components.UiStateContent
 import com.campusmarket.app.ui.components.UserRow
+import com.campusmarket.app.ui.components.smallImageUrl
 import com.campusmarket.app.ui.state.valueOrNull
 import com.campusmarket.app.ui.theme.Spacing
 import com.campusmarket.core.ListingDetail
@@ -160,7 +161,7 @@ fun CheckoutScreen(route: CheckoutRoute, nav: NavController) {
 private fun ItemSummary(listing: ListingDetail, onOpen: () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         RemoteImage(
-            listing.photos.firstOrNull()?.url,
+            listing.photos.firstOrNull()?.smallImageUrl,
             contentDescription = listing.title,
             modifier = Modifier.size(88.dp).clip(MaterialTheme.shapes.medium),
         )

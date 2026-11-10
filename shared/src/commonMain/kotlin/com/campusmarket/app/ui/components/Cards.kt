@@ -58,7 +58,7 @@ fun ListingCard(
         Box {
             // The title is right below and the card reads as one item, so the photo needs no description of its own.
             RemoteImage(
-                url = listing.thumbnailUrl,
+                url = listing.listImageUrl,
                 contentDescription = null,
                 modifier = Modifier.fillMaxWidth().aspectRatio(1f),
             )
@@ -128,7 +128,7 @@ fun ListingRow(
         colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
         leadingContent = {
             RemoteImage(
-                listing.thumbnailUrl,
+                listing.listImageUrl,
                 contentDescription = null,
                 modifier = Modifier.size(56.dp).clip(MaterialTheme.shapes.small),
             )
@@ -159,7 +159,7 @@ fun UserRow(
     ListItem(
         modifier = modifier.then(clickModifier),
         colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
-        leadingContent = { Avatar(user.avatarUrl, user.displayName, size = 44.dp, contentDescription = null) },
+        leadingContent = { Avatar(user.avatarImageUrl, user.displayName, size = 44.dp, contentDescription = null) },
         headlineContent = { Text(user.displayName, maxLines = 1, overflow = TextOverflow.Ellipsis) },
         supportingContent = {
             if (supporting != null) Text(supporting, maxLines = 2, overflow = TextOverflow.Ellipsis)

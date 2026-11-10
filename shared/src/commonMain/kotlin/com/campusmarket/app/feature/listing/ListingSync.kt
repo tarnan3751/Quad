@@ -98,6 +98,9 @@ fun ListingDetail.toSummary(): ListingSummary = ListingSummary(
     sellerName = seller.displayName,
     favorited = favorited,
     createdAt = createdAt,
+    thumbnailSmallUrl = photos.firstOrNull()?.thumbnailUrl,
+    thumbnailWidth = photos.firstOrNull()?.width,
+    thumbnailHeight = photos.firstOrNull()?.height,
 )
 
 /** "Listed just now", "Listed 3h ago", "Listed Mar 4". */

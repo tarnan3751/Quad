@@ -53,6 +53,7 @@ import com.campusmarket.app.ui.components.EmptyState
 import com.campusmarket.app.ui.components.ErrorState
 import com.campusmarket.app.ui.components.InlineError
 import com.campusmarket.app.ui.components.StatusChip
+import com.campusmarket.app.ui.components.avatarImageUrl
 import com.campusmarket.app.ui.label
 import com.campusmarket.app.ui.state.UiState
 import com.campusmarket.app.ui.theme.Spacing
@@ -183,7 +184,7 @@ private fun MemberRow(m: StaffMember, currentUserId: String, onAction: (StaffMem
         Modifier.fillMaxWidth().padding(start = Spacing.lg, end = Spacing.sm, top = Spacing.md, bottom = Spacing.sm),
         horizontalArrangement = Arrangement.spacedBy(Spacing.md),
     ) {
-        Avatar(m.user.avatarUrl, m.user.displayName, size = 40.dp)
+        Avatar(m.user.avatarImageUrl, m.user.displayName, size = 40.dp)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
                 if (isMe) "${m.user.displayName} (you)" else m.user.displayName,

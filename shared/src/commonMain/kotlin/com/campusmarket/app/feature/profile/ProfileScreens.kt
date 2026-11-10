@@ -105,6 +105,7 @@ import com.campusmarket.app.ui.components.PagedLazyColumn
 import com.campusmarket.app.ui.components.PrimaryButton
 import com.campusmarket.app.ui.components.RatingStars
 import com.campusmarket.app.ui.components.ServerSettingsDialog
+import com.campusmarket.app.ui.components.avatarImageUrl
 import com.campusmarket.app.ui.label
 import com.campusmarket.app.ui.state.UiState
 import com.campusmarket.app.ui.state.UserMessages
@@ -515,7 +516,7 @@ private fun PublicProfileHeader(user: UserPublic, isMe: Boolean, listingCount: S
                 Icon(Icons.Default.Person, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(48.dp))
             }
         } else {
-            Avatar(user.avatarUrl, user.displayName, size = 96.dp)
+            Avatar(user.avatarImageUrl, user.displayName, size = 96.dp)
         }
         Text(
             user.displayName,
@@ -690,7 +691,7 @@ private fun RatingRow(rating: Rating, onClickRater: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(Spacing.md),
         ) {
-            Avatar(rating.rater.avatarUrl, rating.rater.displayName, size = 40.dp)
+            Avatar(rating.rater.avatarImageUrl, rating.rater.displayName, size = 40.dp)
             Column(Modifier.weight(1f)) {
                 Text(rating.rater.displayName, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
@@ -959,7 +960,7 @@ private fun BlockedRow(user: UserPublic, unblocking: Boolean, onOpen: () -> Unit
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Spacing.md),
     ) {
-        Avatar(user.avatarUrl, user.displayName, size = 40.dp)
+        Avatar(user.avatarImageUrl, user.displayName, size = 40.dp)
         Column(Modifier.weight(1f)) {
             Text(user.displayName, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold), maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(user.campusDomain, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

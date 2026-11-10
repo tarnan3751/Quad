@@ -53,6 +53,8 @@ import com.campusmarket.app.ui.components.ListingStatusChip
 import com.campusmarket.app.ui.components.PagedLazyColumn
 import com.campusmarket.app.ui.components.RemoteImage
 import com.campusmarket.app.ui.components.StatusChip
+import com.campusmarket.app.ui.components.avatarImageUrl
+import com.campusmarket.app.ui.components.listImageUrl
 import com.campusmarket.app.ui.theme.Spacing
 import com.campusmarket.core.Conversation
 import com.campusmarket.core.ListingStatus
@@ -125,7 +127,7 @@ private fun ConversationRow(conversation: Conversation, stamp: String, onClick: 
         // Listing photo with the other person's avatar tucked into the corner.
         Box(Modifier.size(60.dp)) {
             RemoteImage(
-                conversation.listing.thumbnailUrl,
+                conversation.listing.listImageUrl,
                 contentDescription = null,
                 modifier = Modifier.size(56.dp).clip(MaterialTheme.shapes.small),
             )
@@ -133,7 +135,7 @@ private fun ConversationRow(conversation: Conversation, stamp: String, onClick: 
             val density = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale = 1f)) {
                 Avatar(
-                    other.avatarUrl,
+                    other.avatarImageUrl,
                     other.displayName,
                     size = 28.dp,
                     modifier = Modifier
