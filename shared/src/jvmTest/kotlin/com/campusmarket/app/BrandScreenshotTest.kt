@@ -90,8 +90,10 @@ class BrandScreenshotTest {
         }
     }
 
-    private fun ComposeUiTest.awaitText(text: String) =
-        waitUntil(timeoutMillis = 20_000) { onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
+    /** Rows and chat bubbles are read as one summary, so their texts are found in the content description. */
+    private fun ComposeUiTest.awaitText(text: String) = waitUntil(timeoutMillis = 20_000) {
+        onAllNodes(hasText(text, substring = true) or hasContentDescription(text, substring = true)).fetchSemanticsNodes().isNotEmpty()
+    }
 
     private fun ComposeUiTest.clickNode(matcher: SemanticsMatcher) {
         waitUntil(timeoutMillis = 20_000) { onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty() }
@@ -102,7 +104,7 @@ class BrandScreenshotTest {
     }
 
     private fun ComposeUiTest.click(text: String, substring: Boolean = false) =
-        clickNode(hasText(text, substring = substring) and hasClickAction())
+        clickNode((hasText(text, substring = substring) or hasContentDescriptionStartingWith(text)) and hasClickAction())
 
     private fun SkikoComposeUiTest.shot(name: String) {
         repeat(25) {
