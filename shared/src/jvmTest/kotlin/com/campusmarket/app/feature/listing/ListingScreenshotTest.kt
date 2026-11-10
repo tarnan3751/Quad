@@ -26,6 +26,8 @@ import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeDown
+import androidx.compose.ui.test.doubleClick
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.v2.runSkikoComposeUiTest
 import androidx.compose.ui.unit.Density
 import com.campusmarket.app.App
@@ -492,7 +494,10 @@ class ListingScreenshotTest {
             clickDescription("photo 1 of")
             waitForIdle()
             shot("03-viewer")
-            clickDescription("Close")
+            onNode(hasContentDescription("Photo 1 of 3")).performTouchInput { doubleClick(center + Offset(0f, -200f)) }
+            waitForIdle()
+            shot("03b-viewer-zoomed")
+            clickDescription("Close photos")
             back()
             open("Trek FX 2")
             awaitText("Jordan")
@@ -616,6 +621,10 @@ class ListingScreenshotTest {
         app(dark = false, tag = "font130", fontScale = 1.3f) {
             awaitText("Campbell Biology")
             shot("01-feed")
+            clickDescription("Filters")
+            awaitText("Show results")
+            shot("01b-filter-sheet")
+            click("Show results")
             open("Trek FX 2")
             awaitText("Jordan")
             shot("02-detail")

@@ -59,7 +59,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
@@ -98,6 +100,7 @@ import kotlinx.coroutines.launch
 import org.koin.compose.viewmodel.koinViewModel
 
 /** Browse tab: search (with recent searches), category row, sort menu, filter sheet, paged listing grid. */
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun BrowseScreen(nav: NavController) {
     val vm = koinViewModel<BrowseViewModel>()
@@ -110,7 +113,17 @@ fun BrowseScreen(nav: NavController) {
     // the keyboard pops up again.
     val keyboard = LocalSoftwareKeyboardController.current
     var searchFocused by remember { mutableStateOf(false) }
+    // Back (or the panel's close button) puts recent searches away even though the field keeps its focus (see above).
+    var recentsDismissed by remember { mutableStateOf(false) }
+    val showRecents = searchFocused && !recentsDismissed && state.searchText.isEmpty() && recents.isNotEmpty()
+    BackHandler(enabled = showRecents) {
+        recentsDismissed = true
+        keyboard?.hide()
+    }
     val searching = state.query.q != null
+    // A fresh grid state per query: new results start at the top. Coming back from a listing (or from recent searches)
+    // restores it.
+    val gridState = rememberSaveable(state.query, saver = LazyGridState.Saver) { LazyGridState() }
 
     Scaffold(
         topBar = {
@@ -127,20 +140,26 @@ fun BrowseScreen(nav: NavController) {
         Column(Modifier.fillMaxSize().padding(padding)) {
             SearchBarRow(
                 text = state.searchText,
-                onTextChange = vm::onSearchTextChange,
+                onTextChange = {
+                    recentsDismissed = false
+                    vm.onSearchTextChange(it)
+                },
                 onSearch = {
                     vm.submitSearch()
                     keyboard?.hide()
                 },
                 onClear = vm::clearSearch,
-                onFocusChange = { searchFocused = it },
+                onFocusChange = {
+                    if (it && !searchFocused) recentsDismissed = false
+                    searchFocused = it
+                },
                 filterCount = state.filters.filterCount,
                 onOpenFilters = {
                     keyboard?.hide()
                     vm.openFilters()
                 },
             )
-            if (searchFocused && state.searchText.isEmpty() && recents.isNotEmpty()) {
+            if (showRecents) {
                 RecentSearchesPanel(
                     recents = recents,
                     onPick = {
@@ -149,10 +168,12 @@ fun BrowseScreen(nav: NavController) {
                     },
                     onRemove = vm::removeRecentSearch,
                     onClearAll = vm::clearRecentSearches,
+                    onClose = {
+                        recentsDismissed = true
+                        keyboard?.hide()
+                    },
                 )
             } else {
-                // A fresh grid state per query: new results start at the top. Coming back from a listing restores it.
-                val gridState = rememberSaveable(state.query, saver = LazyGridState.Saver) { LazyGridState() }
                 PagedListingGrid(
                     paginator = vm.listings,
                     state = gridState,
@@ -289,6 +310,7 @@ private fun RecentSearchesPanel(
     onPick: (String) -> Unit,
     onRemove: (String) -> Unit,
     onClearAll: () -> Unit,
+    onClose: () -> Unit,
 ) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = Spacing.lg)) {
         Row(
@@ -297,6 +319,7 @@ private fun RecentSearchesPanel(
         ) {
             Text("Recent searches", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
             TextButton(onClick = onClearAll) { Text("Clear") }
+            IconButton(onClick = onClose) { Icon(Icons.Filled.Close, contentDescription = "Close recent searches") }
         }
         recents.forEach { query ->
             Row(
