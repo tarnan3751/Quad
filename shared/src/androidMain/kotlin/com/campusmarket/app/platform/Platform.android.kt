@@ -36,6 +36,7 @@ fun initCampusMarket(context: Context) {
         platformModule = module {
             single<PlatformUrlLauncher> { AndroidUrlLauncher(app) }
             single<SecretStorage> { KeystoreSecretStorage(app) }
+            single<NetworkMonitor> { AndroidNetworkMonitor(app) }
         },
     )
 }

@@ -22,7 +22,9 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -50,6 +52,8 @@ class ChatSocket(
     private val api: ApiClient,
     private val tokens: TokenStore,
     scope: CoroutineScope,
+    /** Emits when a network becomes available: a reconnect waiting out its backoff retries at once. */
+    private val networkAvailable: Flow<Unit> = emptyFlow(),
 ) {
     enum class Status { Idle, Connecting, Connected, Reconnecting }
 
@@ -91,6 +95,11 @@ class ChatSocket(
 
     private suspend fun runConnectionLoop(out: ProducerScope<ChatEvent>) {
         var attempt = 0
+        val networkWatch = out.launch {
+            networkAvailable
+                .catch { } // no monitor (e.g. a missing permission): the backoff alone still reconnects
+                .collect { if (_status.value == Status.Reconnecting) reconnectNow() }
+        }
         try {
             while (true) {
                 val token = try {
@@ -152,6 +161,7 @@ class ChatSocket(
                 backoff(attempt++)
             }
         } finally {
+            networkWatch.cancel()
             activeSession.value = null
             _status.value = Status.Idle
         }
