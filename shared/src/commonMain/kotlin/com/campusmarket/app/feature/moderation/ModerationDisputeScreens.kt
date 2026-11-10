@@ -34,7 +34,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.campusmarket.app.feature.listing.ListingDetailRoute
@@ -49,6 +48,7 @@ import com.campusmarket.app.ui.components.ChipTone
 import com.campusmarket.app.ui.components.CollectEvents
 import com.campusmarket.app.ui.components.EmptyState
 import com.campusmarket.app.ui.components.ErrorState
+import com.campusmarket.app.ui.components.OnResume
 import com.campusmarket.app.ui.components.OrderStatusChip
 import com.campusmarket.app.ui.components.PagedLazyColumn
 import com.campusmarket.app.ui.components.PriceText
@@ -78,10 +78,7 @@ fun DisputesScreen(nav: NavController) {
     ModeratorGate("Disputes", nav) {
         val vm = koinViewModel<DisputesViewModel>()
         val status by vm.status.collectAsStateWithLifecycle()
-        LifecycleResumeEffect(vm) {
-            vm.onResume()
-            onPauseOrDispose {}
-        }
+        OnResume(vm, vm::onResume)
         Scaffold(
             topBar = { AppTopBar("Disputes", onBack = { nav.popBackStack() }, actions = { ModerationToolLinks(nav, current = DisputesRoute) }) },
         ) { padding ->

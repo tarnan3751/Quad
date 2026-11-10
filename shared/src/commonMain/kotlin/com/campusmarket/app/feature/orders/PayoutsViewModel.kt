@@ -6,6 +6,7 @@ import com.campusmarket.app.data.ApiClient
 import com.campusmarket.app.data.ApiError
 import com.campusmarket.app.data.SessionManager
 import com.campusmarket.app.platform.ExternalLinks
+import com.campusmarket.app.ui.state.ResumeGate
 import com.campusmarket.app.ui.state.UiState
 import com.campusmarket.app.ui.state.UserMessages
 import com.campusmarket.app.ui.state.load
@@ -38,7 +39,7 @@ class PayoutsViewModel(
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
-    private var resumedOnce = false
+    private val resumes = ResumeGate()
 
     /** Set once the user went to Stripe from here, so we can celebrate when they come back enabled. */
     private var awaitingReturn = false
@@ -57,10 +58,7 @@ class PayoutsViewModel(
     }
 
     fun onResume() {
-        if (!resumedOnce) {
-            resumedOnce = true
-            return
-        }
+        if (!resumes.isReturn()) return
         refresh()
     }
 

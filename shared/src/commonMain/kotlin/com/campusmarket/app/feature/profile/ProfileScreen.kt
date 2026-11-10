@@ -30,7 +30,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.campusmarket.app.BuildInfo
@@ -52,7 +51,7 @@ import com.campusmarket.app.ui.Format
 import com.campusmarket.app.ui.components.AppTopBar
 import com.campusmarket.app.ui.components.Avatar
 import com.campusmarket.app.ui.components.ChipTone
-import com.campusmarket.app.ui.components.ConfirmDialog
+import com.campusmarket.app.ui.components.OnResume
 import com.campusmarket.app.ui.components.QuadIcons
 import com.campusmarket.app.ui.components.SecondaryButton
 import com.campusmarket.app.ui.components.StatusChip
@@ -77,10 +76,7 @@ fun ProfileScreen(nav: NavController) {
     val vm = koinViewModel<ProfileViewModel>()
     val state by vm.state.collectAsStateWithLifecycle()
     val openPage = rememberPageOpener()
-    LifecycleResumeEffect(vm) {
-        vm.refresh()
-        onPauseOrDispose {}
-    }
+    OnResume(vm, vm::refresh)
     val scroll = rememberScrollState()
     OnTabReselected(TopLevelTab.Profile) { scroll.animateScrollTo(0) }
 
@@ -181,13 +177,7 @@ fun ProfileScreen(nav: NavController) {
     }
 
     if (state.confirmSignOut) {
-        ConfirmDialog(
-            title = "Sign out?",
-            message = "You'll need your campus email and password to sign in to Quad on this device again.",
-            confirmLabel = "Sign out",
-            onConfirm = vm::signOut,
-            onDismiss = vm::cancelSignOut,
-        )
+        SignOutDialog(onConfirm = vm::signOut, onDismiss = vm::cancelSignOut)
     }
 }
 

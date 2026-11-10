@@ -116,7 +116,7 @@ fun BlockUserDialog(user: UserPublic, onDismiss: () -> Unit, onDone: (blocked: B
 }
 
 @Composable
-private fun Bullet(text: String) {
+internal fun Bullet(text: String) {
     Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
         Text("•", style = MaterialTheme.typography.bodyMedium)
         Text(text, style = MaterialTheme.typography.bodyMedium)

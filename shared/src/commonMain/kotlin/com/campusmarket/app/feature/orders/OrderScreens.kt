@@ -5,10 +5,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -45,11 +45,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.campusmarket.app.feature.chat.ConversationRoute
-import com.campusmarket.app.ui.rememberTimeFormat
 import com.campusmarket.app.feature.listing.ListingDetailRoute
 import com.campusmarket.app.feature.profile.UserProfileRoute
 import com.campusmarket.app.navigation.LocalCurrentUser
@@ -64,16 +62,18 @@ import com.campusmarket.app.ui.components.CollectEvents
 import com.campusmarket.app.ui.components.ConfirmDialog
 import com.campusmarket.app.ui.components.EmptyState
 import com.campusmarket.app.ui.components.InlineError
+import com.campusmarket.app.ui.components.OnResume
 import com.campusmarket.app.ui.components.OrderStatusChip
 import com.campusmarket.app.ui.components.PagedLazyColumn
 import com.campusmarket.app.ui.components.PriceText
 import com.campusmarket.app.ui.components.PrimaryButton
 import com.campusmarket.app.ui.components.RatingInput
+import com.campusmarket.app.ui.components.RatingSummary
 import com.campusmarket.app.ui.components.RemoteImage
 import com.campusmarket.app.ui.components.SecondaryButton
-import com.campusmarket.app.ui.components.RatingSummary
 import com.campusmarket.app.ui.components.UiStateContent
 import com.campusmarket.app.ui.label
+import com.campusmarket.app.ui.rememberTimeFormat
 import com.campusmarket.app.ui.state.valueOrNull
 import com.campusmarket.app.ui.theme.CampusTheme
 import com.campusmarket.app.ui.theme.Spacing
@@ -93,10 +93,7 @@ fun OrdersScreen(route: OrdersRoute, nav: NavController) {
     val tab by vm.tab.collectAsStateWithLifecycle()
     val times = rememberTimeFormat()
     val payoutsEnabled = LocalCurrentUser.current.payoutsEnabled
-    LifecycleResumeEffect(vm) {
-        vm.onResume()
-        onPauseOrDispose { }
-    }
+    OnResume(vm, vm::onResume)
 
     Scaffold(topBar = { AppTopBar("Orders", onBack = { nav.popBackStack() }) }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
@@ -156,10 +153,7 @@ fun OrderDetailScreen(route: OrderDetailRoute, nav: NavController) {
     val vm = koinViewModel<OrderDetailViewModel>(key = "order:${route.orderId}") { parametersOf(route) }
     val state by vm.order.collectAsStateWithLifecycle()
     val ui by vm.ui.collectAsStateWithLifecycle()
-    LifecycleResumeEffect(vm) {
-        vm.onResume()
-        onPauseOrDispose { }
-    }
+    OnResume(vm, vm::onResume)
     CollectEvents(vm.events.flow) { event ->
         when (event) {
             is OrderDetailEvent.OpenConversation -> nav.navigate(ConversationRoute(event.conversationId))

@@ -64,7 +64,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.campusmarket.app.feature.chat.MessageSellerRoute
@@ -83,6 +82,7 @@ import com.campusmarket.app.ui.components.IconBadge
 import com.campusmarket.app.ui.components.ListingIcons
 import com.campusmarket.app.ui.components.ListingImage
 import com.campusmarket.app.ui.components.ListingStatusChip
+import com.campusmarket.app.ui.components.OnResume
 import com.campusmarket.app.ui.components.PriceText
 import com.campusmarket.app.ui.components.PrimaryButton
 import com.campusmarket.app.ui.components.RatingSummary
@@ -125,10 +125,7 @@ fun ListingDetailScreen(route: ListingDetailRoute, nav: NavController) {
             ListingDetailEvent.Deleted -> nav.popBackStack()
         }
     }
-    LifecycleResumeEffect(vm) {
-        vm.onResume()
-        onPauseOrDispose { }
-    }
+    OnResume(vm, vm::onResume)
 
     val listing = (state as? UiState.Content)?.value
     val openSales = { nav.navigate(OrdersRoute(role = OrderRole.SELLER.name.lowercase())) }

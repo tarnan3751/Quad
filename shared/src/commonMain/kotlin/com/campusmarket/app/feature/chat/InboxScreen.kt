@@ -38,7 +38,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.campusmarket.app.navigation.OnTabReselected
@@ -49,6 +48,7 @@ import com.campusmarket.app.ui.components.Avatar
 import com.campusmarket.app.ui.components.ChipTone
 import com.campusmarket.app.ui.components.EmptyState
 import com.campusmarket.app.ui.components.ListingStatusChip
+import com.campusmarket.app.ui.components.OnResume
 import com.campusmarket.app.ui.components.PagedLazyColumn
 import com.campusmarket.app.ui.components.RemoteImage
 import com.campusmarket.app.ui.components.StatusChip
@@ -65,10 +65,7 @@ fun InboxScreen(nav: NavController) {
     val vm = koinViewModel<InboxViewModel>()
     val connection by vm.connection.collectAsStateWithLifecycle()
     val times = rememberTimeFormat()
-    LifecycleResumeEffect(vm) {
-        vm.onResume()
-        onPauseOrDispose { }
-    }
+    OnResume(vm, vm::onResume)
 
     val listState = rememberLazyListState()
     OnTabReselected(TopLevelTab.Inbox) { listState.animateScrollToItem(0) }

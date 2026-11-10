@@ -31,7 +31,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.campusmarket.app.navigation.TopLevelTab
@@ -43,6 +42,7 @@ import com.campusmarket.app.ui.components.ListingIcons
 import com.campusmarket.app.ui.components.ListingImage
 import com.campusmarket.app.ui.components.ListingStatusChip
 import com.campusmarket.app.ui.components.ListingTile
+import com.campusmarket.app.ui.components.OnResume
 import com.campusmarket.app.ui.components.PagedLazyColumn
 import com.campusmarket.app.ui.components.PagedListingGrid
 import com.campusmarket.app.ui.components.PriceText
@@ -88,10 +88,7 @@ fun FavoritesScreen(nav: NavController) {
 fun MyListingsScreen(nav: NavController) {
     val vm = koinViewModel<MyListingsViewModel>()
     val filter by vm.filter.collectAsStateWithLifecycle()
-    LifecycleResumeEffect(vm) {
-        vm.onResume()
-        onPauseOrDispose { }
-    }
+    OnResume(vm, vm::onResume)
     Scaffold(
         topBar = {
             AppTopBar(

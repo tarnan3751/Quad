@@ -162,12 +162,7 @@ fun ReportSheet(
     val scope = rememberCoroutineScope()
     val controller = remember(targetType, targetId) { ReportFormController(api, targetType, targetId, scope, reported) }
     val state by controller.state.collectAsStateWithLifecycle()
-    val noun = when (targetType) {
-        ReportTargetType.LISTING -> "listing"
-        ReportTargetType.USER -> "account"
-        ReportTargetType.MESSAGE -> "message"
-        ReportTargetType.ORDER -> "order" // log-only type: orders are reported as a dispute, never through this sheet
-    }
+    val noun = targetType.noun
     val finish = { if (state.submitted) onReported() else onDismiss() }
 
     ModalBottomSheet(

@@ -42,6 +42,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.campusmarket.app.ui.components.Avatar
+import com.campusmarket.app.ui.components.ConfirmDialog
 import com.campusmarket.app.ui.components.ListingStatusChip
 import com.campusmarket.app.ui.components.PriceText
 import com.campusmarket.app.ui.components.QuadIcons
@@ -244,3 +245,12 @@ private fun RowScope.StatCell(stat: Stat, loading: Boolean) {
         )
     }
 }
+
+@Composable
+internal fun SignOutDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) = ConfirmDialog(
+    title = "Sign out?",
+    message = "You'll need your campus email and password to sign in to Quad on this device again.",
+    confirmLabel = "Sign out",
+    onConfirm = onConfirm,
+    onDismiss = onDismiss,
+)

@@ -6,6 +6,7 @@ import com.campusmarket.app.data.ApiClient
 import com.campusmarket.app.data.ApiError
 import com.campusmarket.app.ui.state.EventQueue
 import com.campusmarket.app.ui.state.Paginator
+import com.campusmarket.app.ui.state.ResumeGate
 import com.campusmarket.app.ui.state.UiState
 import com.campusmarket.app.ui.state.UserMessages
 import com.campusmarket.app.ui.state.load
@@ -36,17 +37,14 @@ class DisputesViewModel(private val api: ApiClient, messages: UserMessages) : Vi
         disputes.onRefreshError = messages::showError
     }
 
-    private var resumedOnce = false
+    private val resumes = ResumeGate()
 
     /**
      * Screen resumed: the first time is the initial load; later (back from a dispute that may have been resolved)
      * refresh. The flag lives here because the list leaves the composition while the detail is open.
      */
     fun onResume() {
-        if (!resumedOnce) {
-            resumedOnce = true
-            return
-        }
+        if (!resumes.isReturn()) return
         disputes.refresh()
     }
 

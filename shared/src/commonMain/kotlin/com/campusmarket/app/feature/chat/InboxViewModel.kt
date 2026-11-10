@@ -7,6 +7,7 @@ import com.campusmarket.app.data.ApiError
 import com.campusmarket.app.data.ChatSocket
 import com.campusmarket.app.data.SessionManager
 import com.campusmarket.app.ui.state.Paginator
+import com.campusmarket.app.ui.state.ResumeGate
 import com.campusmarket.app.ui.state.UserMessages
 import com.campusmarket.core.ChatEvent
 import com.campusmarket.core.Conversation
@@ -43,7 +44,7 @@ class InboxViewModel(
     private val myId: String? get() = session.currentUser?.id
     private val seenMessageIds = LinkedHashSet<String>()
     private val fetching = mutableSetOf<String>()
-    private var resumedOnce = false
+    private val resumes = ResumeGate()
 
     init {
         conversations.onRefreshError = userMessages::showError
@@ -58,10 +59,7 @@ class InboxViewModel(
 
     /** Called by the screen on every resume after the first: catch up on anything missed in the background. */
     fun onResume() {
-        if (!resumedOnce) {
-            resumedOnce = true
-            return
-        }
+        if (!resumes.isReturn()) return
         live.reconnectNow()
         viewModelScope.launch { catchUp() }
     }

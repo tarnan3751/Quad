@@ -46,7 +46,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.campusmarket.app.feature.listing.ListingDetailRoute
@@ -66,6 +65,7 @@ import com.campusmarket.app.ui.components.CollectEvents
 import com.campusmarket.app.ui.components.EmptyState
 import com.campusmarket.app.ui.components.ErrorState
 import com.campusmarket.app.ui.components.FilterChip
+import com.campusmarket.app.ui.components.OnResume
 import com.campusmarket.app.ui.components.PagedLazyColumn
 import com.campusmarket.app.ui.components.QuadIcons
 import com.campusmarket.app.ui.components.RemoteImage
@@ -84,9 +84,9 @@ import com.campusmarket.core.Report
 import com.campusmarket.core.ReportStatus
 import com.campusmarket.core.ReportTargetType
 import com.campusmarket.core.UserRole
+import kotlin.time.Clock
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
-import kotlin.time.Clock
 
 // ---------------------------------------------------------------------------------------------------- queue
 
@@ -114,10 +114,7 @@ private fun QueueContent(nav: NavController) {
 
     // Coming back from a report that was just resolved: reload. The flag lives in the view model: this composable
     // leaves the composition while the detail is open, so a `remember`ed one would always look like the first resume.
-    LifecycleResumeEffect(vm) {
-        vm.onResume()
-        onPauseOrDispose {}
-    }
+    OnResume(vm, vm::onResume)
 
     Scaffold(
         topBar = {
@@ -174,13 +171,7 @@ internal fun ModerationToolLinks(nav: NavController, current: Any) {
 
 @Composable
 private fun QueueEmpty(status: ReportStatus, type: ReportTargetType?) {
-    val kind = when (type) {
-        null -> ""
-        ReportTargetType.LISTING -> "listing "
-        ReportTargetType.USER -> "account "
-        ReportTargetType.MESSAGE -> "message "
-        ReportTargetType.ORDER -> "order "
-    }
+    val kind = type?.let { "${it.noun} " }.orEmpty()
     when (status) {
         ReportStatus.OPEN -> EmptyState(
             if (type == null) "The queue is clear" else "No open ${kind}reports",
@@ -423,7 +414,8 @@ private fun ReportDetailContent(route: ReportDetailRoute, nav: NavController) {
     }
 }
 
-private val ReportTargetType.noun: String
+/** What was reported, in a sentence: "listing", "account", "message", "order". */
+internal val ReportTargetType.noun: String
     get() = when (this) {
         ReportTargetType.LISTING -> "listing"
         ReportTargetType.USER -> "account"

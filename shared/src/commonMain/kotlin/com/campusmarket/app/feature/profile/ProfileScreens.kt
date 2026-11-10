@@ -75,7 +75,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.campusmarket.app.BuildInfo
@@ -103,6 +102,7 @@ import com.campusmarket.app.ui.components.InlineError
 import com.campusmarket.app.ui.components.ListRowSkeletons
 import com.campusmarket.app.ui.components.ListSkeleton
 import com.campusmarket.app.ui.components.ListingTile
+import com.campusmarket.app.ui.components.OnResume
 import com.campusmarket.app.ui.components.PagedLazyColumn
 import com.campusmarket.app.ui.components.PagedListingGrid
 import com.campusmarket.app.ui.components.PrimaryButton
@@ -822,13 +822,7 @@ fun SettingsScreen(nav: NavController) {
     if (showServer) ServerSettingsDialog(onDismiss = { showServer = false })
 
     if (state.confirmSignOut) {
-        ConfirmDialog(
-            title = "Sign out?",
-            message = "You'll need your campus email and password to sign in to Quad on this device again.",
-            confirmLabel = "Sign out",
-            onConfirm = vm::signOut,
-            onDismiss = vm::cancelSignOut,
-        )
+        SignOutDialog(onConfirm = vm::signOut, onDismiss = vm::cancelSignOut)
     }
     when (state.deleteStep) {
         DeleteStep.None -> Unit
@@ -901,14 +895,6 @@ fun SettingsScreen(nav: NavController) {
     }
 }
 
-@Composable
-private fun Bullet(text: String) {
-    Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-        Text("•", style = MaterialTheme.typography.bodyMedium)
-        Text(text, style = MaterialTheme.typography.bodyMedium)
-    }
-}
-
 // ---------------------------------------------------------------------------------------------------- blocked users
 
 /** `api.myBlocks()` with Unblock (`api.unblockUser`, Undo in the snackbar). Tap a row for the public profile. */
@@ -918,10 +904,7 @@ fun BlockedUsersScreen(nav: NavController) {
     val state by vm.state.collectAsStateWithLifecycle()
     val unblocking by vm.unblocking.collectAsStateWithLifecycle()
     val refreshing by vm.refreshing.collectAsStateWithLifecycle()
-    LifecycleResumeEffect(vm) {
-        vm.onResume()
-        onPauseOrDispose {}
-    }
+    OnResume(vm, vm::onResume)
 
     Scaffold(topBar = { AppTopBar("Blocked users", onBack = { nav.popBackStack() }) }) { padding ->
         when (val s = state) {
