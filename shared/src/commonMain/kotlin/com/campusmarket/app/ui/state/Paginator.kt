@@ -35,7 +35,7 @@ data class PagedState<T>(
  * Drives a `Page<T>` endpoint: first load, pull-to-refresh, infinite scroll, retry, and local edits.
  *
  * ```
- * val listings = Paginator(viewModelScope, key = { it.id }) { cursor, limit -> api.listings(query, cursor, limit) }
+ * val listings = Paginator(viewModelScope, key = { it.id }, messages = messages) { cursor, limit -> api.listings(query, cursor, limit) }
  * init { listings.refresh() }
  * ```
  * Render it with [com.campusmarket.app.ui.components.PagedLazyColumn] / `PagedLazyGrid`, which call [loadMore] near
@@ -47,13 +47,12 @@ class Paginator<T>(
     private val scope: CoroutineScope,
     private val pageSize: Int = Limits.PAGE_DEFAULT,
     private val key: ((T) -> Any)? = null,
+    /** Where a refresh that fails while items are on screen says why (the items stay). Null: such failures are silent. */
+    private val messages: UserMessages? = null,
     private val fetch: suspend (cursor: String?, limit: Int) -> Page<T>,
 ) {
     private val _state = MutableStateFlow(PagedState<T>())
     val state: StateFlow<PagedState<T>> = _state.asStateFlow()
-
-    /** Optional hook for refresh failures while content is visible (e.g. `userMessages::showError`). */
-    var onRefreshError: ((ApiError) -> Unit)? = null
 
     private var nextCursor: String? = null
     private var job: Job? = null
@@ -123,7 +122,7 @@ class Paginator<T>(
                     else -> s.copy(isLoadingMore = false, loadMoreError = e)
                 }
             }
-            if (replace && _state.value.loaded) onRefreshError?.invoke(e)
+            if (replace && _state.value.loaded) messages?.showError(e)
         }
     }
 }

@@ -2,6 +2,7 @@ package com.campusmarket.app.feature.profile
 
 import com.campusmarket.app.data.Harness
 import com.campusmarket.app.data.SessionManager
+import com.campusmarket.app.data.awaitCondition
 import com.campusmarket.app.data.awaitValue
 import com.campusmarket.app.data.respondJson
 import com.campusmarket.app.data.testUser
@@ -81,6 +82,8 @@ class ProfileStatsTest {
             vm.refresh(pulled = true)
             val s = vm.state.awaitValue { it.stats != null && !it.refreshing }
             assertEquals(MyListingStats(active = 1, sold = 1, capped = false), s.stats)
+            // The engine records requests on its own thread.
+            awaitCondition { h.requestsTo(ApiRoutes.MY_LISTINGS).size == 1 }
             assertEquals("${Limits.PAGE_MAX}", h.requestsTo(ApiRoutes.MY_LISTINGS).single().url.parameters["limit"])
         }
     }
