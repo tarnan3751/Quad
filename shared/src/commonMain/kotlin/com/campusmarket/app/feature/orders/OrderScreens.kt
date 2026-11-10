@@ -61,6 +61,7 @@ import com.campusmarket.app.ui.components.Avatar
 import com.campusmarket.app.ui.components.CollectEvents
 import com.campusmarket.app.ui.components.ConfirmDialog
 import com.campusmarket.app.ui.components.EmptyState
+import com.campusmarket.app.ui.components.FormColumn
 import com.campusmarket.app.ui.components.InlineError
 import com.campusmarket.app.ui.components.OnResume
 import com.campusmarket.app.ui.components.OrderStatusChip
@@ -73,6 +74,7 @@ import com.campusmarket.app.ui.components.RemoteImage
 import com.campusmarket.app.ui.components.SecondaryButton
 import com.campusmarket.app.ui.components.UiStateContent
 import com.campusmarket.app.ui.components.avatarImageUrl
+import com.campusmarket.app.ui.components.formSubmit
 import com.campusmarket.app.ui.components.listImageUrl
 import com.campusmarket.app.ui.label
 import com.campusmarket.app.ui.rememberTimeFormat
@@ -459,8 +461,8 @@ fun RateOrderScreen(route: RateOrderRoute, nav: NavController) {
                     actionLabel = "Done",
                     onAction = { nav.popBackStack() },
                 )
-                else -> Column(
-                    Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding().verticalScroll(rememberScrollState()),
+                else -> FormColumn(
+                    Modifier.fillMaxSize().consumeWindowInsets(padding),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Column(
@@ -500,7 +502,7 @@ fun RateOrderScreen(route: RateOrderRoute, nav: NavController) {
                             enabled = !state.submitting,
                         )
                         InlineError(state.formError, Modifier.fillMaxWidth())
-                        PrimaryButton("Submit rating", onClick = vm::submit, loading = state.submitting, modifier = Modifier.fillMaxWidth())
+                        PrimaryButton("Submit rating", onClick = vm::submit, loading = state.submitting, modifier = Modifier.fillMaxWidth().formSubmit())
                     }
                 }
             }

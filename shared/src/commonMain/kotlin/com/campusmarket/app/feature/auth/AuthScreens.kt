@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -67,6 +66,7 @@ import com.campusmarket.app.ui.components.AppTopBar
 import com.campusmarket.app.ui.components.CodeField
 import com.campusmarket.app.ui.components.CollectEvents
 import com.campusmarket.app.ui.components.EmailField
+import com.campusmarket.app.ui.components.FormColumn
 import com.campusmarket.app.ui.components.InlineError
 import com.campusmarket.app.ui.components.PasswordField
 import com.campusmarket.app.ui.components.PrimaryButton
@@ -75,6 +75,7 @@ import com.campusmarket.app.ui.components.QuadMark
 import com.campusmarket.app.ui.components.QuadWordmark
 import com.campusmarket.app.ui.components.SecondaryButton
 import com.campusmarket.app.ui.components.ServerSettingsDialog
+import com.campusmarket.app.ui.components.formSubmit
 import com.campusmarket.app.ui.components.onFocusLost
 import com.campusmarket.app.ui.theme.CampusTheme
 import com.campusmarket.app.ui.theme.Spacing
@@ -210,7 +211,7 @@ fun RegisterScreen(nav: NavController) {
         )
         InlineError(state.formError, Modifier.fillMaxWidth())
         Spacer(Modifier.height(Spacing.xs))
-        PrimaryButton("Continue", onClick = vm::submit, loading = state.submitting, modifier = Modifier.fillMaxWidth())
+        PrimaryButton("Continue", onClick = vm::submit, loading = state.submitting, modifier = Modifier.fillMaxWidth().formSubmit())
         LegalFooter()
         TextButton(
             onClick = { nav.navigate(LoginRoute(state.email.ifBlank { null })) { popUpTo(WelcomeRoute) } },
@@ -277,7 +278,7 @@ fun VerifyEmailScreen(route: VerifyEmailRoute, nav: NavController) {
         }
         InlineError(state.formError, Modifier.fillMaxWidth())
         Spacer(Modifier.height(Spacing.xs))
-        PrimaryButton("Verify", onClick = vm::submit, loading = state.submitting, modifier = Modifier.fillMaxWidth())
+        PrimaryButton("Verify", onClick = vm::submit, loading = state.submitting, modifier = Modifier.fillMaxWidth().formSubmit())
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
             TextButton(onClick = vm::resend, enabled = !state.resending && state.resendCooldown == 0) {
                 Text(
@@ -348,7 +349,7 @@ fun LoginScreen(route: LoginRoute, nav: NavController) {
             if (state.showSuspended) SuspendedAccountDialog(suspended, state.email, onDismiss = vm::dismissSuspended)
         }
         Spacer(Modifier.height(Spacing.xs))
-        PrimaryButton("Sign in", onClick = vm::submit, loading = state.submitting, modifier = Modifier.fillMaxWidth())
+        PrimaryButton("Sign in", onClick = vm::submit, loading = state.submitting, modifier = Modifier.fillMaxWidth().formSubmit())
         TextButton(
             onClick = { nav.navigate(RegisterRoute) { popUpTo(WelcomeRoute) } },
             modifier = Modifier.align(Alignment.CenterHorizontally),
@@ -365,14 +366,9 @@ fun LoginScreen(route: LoginRoute, nav: NavController) {
 @Composable
 private fun AuthFormScaffold(onBack: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
     Scaffold(topBar = { AppTopBar("", onBack = onBack) }) { padding ->
-        Box(
-            Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .consumeWindowInsets(padding)
-                .imePadding()
-                .verticalScroll(rememberScrollState()),
-            contentAlignment = Alignment.TopCenter,
+        FormColumn(
+            Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Column(
                 Modifier.fillMaxWidth().widthIn(max = FormMaxWidth).padding(start = Spacing.xl, end = Spacing.xl, bottom = Spacing.xl),

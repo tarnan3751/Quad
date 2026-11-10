@@ -81,12 +81,14 @@ import com.campusmarket.app.ui.components.CollectEvents
 import com.campusmarket.app.ui.components.ConfirmDialog
 import com.campusmarket.app.ui.components.EmptyState
 import com.campusmarket.app.ui.components.FilterChip
+import com.campusmarket.app.ui.components.FormColumn
 import com.campusmarket.app.ui.components.IconBadge
 import com.campusmarket.app.ui.components.InlineError
 import com.campusmarket.app.ui.components.ListingIcons
 import com.campusmarket.app.ui.components.ListingImage
 import com.campusmarket.app.ui.components.PrimaryButton
 import com.campusmarket.app.ui.components.UiStateContent
+import com.campusmarket.app.ui.components.formSubmit
 import com.campusmarket.app.ui.components.icon
 import com.campusmarket.app.ui.theme.Spacing
 import com.campusmarket.core.Limits
@@ -259,10 +261,7 @@ private fun ListingForm(
     }
     fun Modifier.field(key: String) = onGloballyPositioned { positions[key] = it.positionInParent().y.toInt() }
 
-    Box(
-        modifier.fillMaxSize().imePadding().verticalScroll(scroll),
-        contentAlignment = Alignment.TopCenter,
-    ) {
+    FormColumn(modifier.fillMaxSize(), scroll = scroll, horizontalAlignment = Alignment.CenterHorizontally) {
         Column(
             Modifier.fillMaxWidth().widthIn(max = 640.dp).padding(horizontal = Spacing.screen, vertical = Spacing.md),
             verticalArrangement = Arrangement.spacedBy(Spacing.lg),
@@ -350,7 +349,7 @@ private fun ListingForm(
                 },
                 onClick = vm::submit,
                 loading = form.submitting || uploading > 0,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().formSubmit(),
             )
             Spacer(Modifier.height(Spacing.lg))
         }

@@ -43,10 +43,12 @@ import com.campusmarket.app.ui.components.AppTopBar
 import com.campusmarket.app.ui.components.ChipTone
 import com.campusmarket.app.ui.components.CollectEvents
 import com.campusmarket.app.ui.components.EmptyState
+import com.campusmarket.app.ui.components.FormColumn
 import com.campusmarket.app.ui.components.InlineError
 import com.campusmarket.app.ui.components.PrimaryButton
 import com.campusmarket.app.ui.components.StatusChip
 import com.campusmarket.app.ui.components.UiStateContent
+import com.campusmarket.app.ui.components.formSubmit
 import com.campusmarket.app.ui.label
 import com.campusmarket.app.ui.theme.Spacing
 import com.campusmarket.core.DisputeStatus
@@ -79,8 +81,8 @@ fun ReportProblemScreen(route: ReportProblemRoute, nav: NavController) {
                 )
                 return@UiStateContent
             }
-            Column(
-                Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding().verticalScroll(rememberScrollState()),
+            FormColumn(
+                Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Column(
@@ -132,7 +134,7 @@ fun ReportProblemScreen(route: ReportProblemRoute, nav: NavController) {
                         enabled = !state.submitting,
                     )
                     InlineError(state.formError, Modifier.fillMaxWidth())
-                    PrimaryButton("Report problem", onClick = vm::submit, loading = state.submitting, modifier = Modifier.fillMaxWidth())
+                    PrimaryButton("Report problem", onClick = vm::submit, loading = state.submitting, modifier = Modifier.fillMaxWidth().formSubmit())
                 }
             }
         }
