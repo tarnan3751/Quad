@@ -245,7 +245,8 @@ class BrowseViewModelTest {
         assertEquals("4999", params["maxPrice"])
         assertEquals("PRICE_ASC", params["sort"])
         assertNull(params["cursor"], "paging restarts when filters change")
-        assertEquals(3, vm.state.value.filters.sheetCount)
+        // Conditions and price are filters (the badge count); the sort has its own menu and doesn't count.
+        assertEquals(2, vm.state.value.filters.filterCount)
         assertNull(vm.state.value.filterDraft)
 
         // Removing a single filter from its chip.
@@ -253,7 +254,7 @@ class BrowseViewModelTest {
         runCurrent()
         vm.listings.state.awaitValue { it.loaded }
         assertNull(h.listingRequests().last().url.parameters["minPrice"])
-        assertEquals(2, vm.state.value.filters.sheetCount)
+        assertEquals(1, vm.state.value.filters.filterCount)
     }
 
     @Test
