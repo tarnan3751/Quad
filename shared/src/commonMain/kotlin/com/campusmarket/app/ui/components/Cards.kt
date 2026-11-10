@@ -26,6 +26,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -54,27 +56,38 @@ fun ListingCard(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
         Box {
+            // The title is right below and the card reads as one item, so the photo needs no description of its own.
             RemoteImage(
                 url = listing.thumbnailUrl,
-                contentDescription = listing.title,
+                contentDescription = null,
                 modifier = Modifier.fillMaxWidth().aspectRatio(1f),
             )
             if (showStatus || listing.status != ListingStatus.ACTIVE) {
                 ListingStatusChip(listing.status, Modifier.align(Alignment.TopStart).padding(Spacing.sm))
             }
             if (onToggleFavorite != null) {
-                Surface(
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.92f),
-                    modifier = Modifier.align(Alignment.TopEnd).padding(Spacing.sm).size(34.dp),
+                val haptics = LocalHapticFeedback.current
+                // A 48 dp touch target around the 34 dp chip, so a near miss doesn't open the listing instead.
+                IconButton(
+                    onClick = {
+                        haptics.performHapticFeedback(if (listing.favorited) HapticFeedbackType.ToggleOff else HapticFeedbackType.ToggleOn)
+                        onToggleFavorite()
+                    },
+                    modifier = Modifier.align(Alignment.TopEnd).padding(2.dp),
                 ) {
-                    IconButton(onClick = onToggleFavorite) {
-                        Icon(
-                            if (listing.favorited) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-                            contentDescription = if (listing.favorited) "Remove from favorites" else "Add to favorites",
-                            tint = if (listing.favorited) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.size(19.dp),
-                        )
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.92f),
+                        modifier = Modifier.size(34.dp),
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                if (listing.favorited) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                                contentDescription = if (listing.favorited) "Remove from favorites" else "Add to favorites",
+                                tint = if (listing.favorited) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.size(19.dp),
+                            )
+                        }
                     }
                 }
             }
@@ -146,7 +159,7 @@ fun UserRow(
     ListItem(
         modifier = modifier.then(clickModifier),
         colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
-        leadingContent = { Avatar(user.avatarUrl, user.displayName, size = 44.dp) },
+        leadingContent = { Avatar(user.avatarUrl, user.displayName, size = 44.dp, contentDescription = null) },
         headlineContent = { Text(user.displayName, maxLines = 1, overflow = TextOverflow.Ellipsis) },
         supportingContent = {
             if (supporting != null) Text(supporting, maxLines = 2, overflow = TextOverflow.Ellipsis)

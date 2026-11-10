@@ -16,6 +16,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -65,7 +69,19 @@ fun RatingStars(rating: Double, modifier: Modifier = Modifier, starSize: Dp = 16
 /** Stars + "4.8 (12)", or "No ratings yet". Matches `UserPublic.ratingAverage / ratingCount`. */
 @Composable
 fun RatingSummary(average: Double?, count: Int, modifier: Modifier = Modifier, starSize: Dp = 14.dp) {
-    Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    // Screen readers hear "Rated 4.8 out of 5, 12 ratings" rather than five unlabeled stars and "4.8 (12)".
+    val spoken = if (average == null || count == 0) {
+        Modifier
+    } else {
+        Modifier.clearAndSetSemantics {
+            contentDescription = "Rated ${Format.rating(average)} out of 5, $count rating${if (count == 1) "" else "s"}"
+        }
+    }
+    Row(
+        modifier.then(spoken),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
         if (average == null || count == 0) {
             Text("No ratings yet", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
@@ -82,9 +98,17 @@ fun RatingSummary(average: Double?, count: Int, modifier: Modifier = Modifier, s
 /** Tap-to-rate 1..5 stars (0 = none chosen yet). */
 @Composable
 fun RatingInput(stars: Int, onChange: (Int) -> Unit, modifier: Modifier = Modifier, starSize: Dp = 36.dp, enabled: Boolean = true) {
+    val haptics = LocalHapticFeedback.current
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
         for (i in 1..5) {
-            IconButton(onClick = { onChange(i) }, enabled = enabled, modifier = Modifier.size(starSize + 8.dp)) {
+            IconButton(
+                onClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                    onChange(i)
+                },
+                enabled = enabled,
+                modifier = Modifier.size(starSize + 12.dp),
+            ) {
                 Icon(
                     Icons.Filled.Star,
                     contentDescription = "$i star${if (i > 1) "s" else ""}",

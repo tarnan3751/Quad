@@ -40,8 +40,8 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 private const val LOAD_MORE_THRESHOLD = 5
 
 /**
- * Infinite list for a [Paginator]: starts the first load if nobody has, full-screen loading / error / [empty]
- * states, pull-to-refresh, load-more near the end, and a retry footer.
+ * Infinite list for a [Paginator]: starts the first load if nobody has, full-screen [loading] (skeleton rows by
+ * default) / error / [empty] states, pull-to-refresh, load-more near the end, and a retry footer.
  *
  * ```
  * PagedLazyColumn(vm.conversations, key = { it.id }, empty = { EmptyState("No messages yet") }) { conversation ->
@@ -62,6 +62,7 @@ fun <T> PagedLazyColumn(
     pullToRefresh: Boolean = !reverseLayout,
     empty: @Composable () -> Unit = { EmptyState("Nothing here yet") },
     header: LazyListScope.() -> Unit = {},
+    loading: @Composable () -> Unit = { if (reverseLayout) LoadingState() else ListSkeleton(contentPadding = contentPadding) },
     itemContent: @Composable LazyItemScope.(T) -> Unit,
 ) {
     val paged by paginator.state.collectAsStateWithLifecycle()
@@ -81,7 +82,7 @@ fun <T> PagedLazyColumn(
         if (paged.loaded && !paged.endReached && last >= info.totalItemsCount - LOAD_MORE_THRESHOLD) paginator.loadMore()
     }
 
-    FirstLoadGate(paged, paginator, modifier) {
+    FirstLoadGate(paged, paginator, modifier, loading) {
         RefreshContainer(pullToRefresh, paged.isRefreshing, paginator::refresh, modifier) {
             LazyColumn(
                 state = state,
@@ -104,7 +105,7 @@ fun <T> PagedLazyColumn(
     }
 }
 
-/** Grid version of [PagedLazyColumn] for listing tiles (adaptive columns, ~160 dp min). */
+/** Grid version of [PagedLazyColumn] for listing tiles (adaptive columns, ~160 dp min); first load shows listing-card skeletons. */
 @Composable
 fun <T> PagedLazyGrid(
     paginator: Paginator<T>,
@@ -115,6 +116,7 @@ fun <T> PagedLazyGrid(
     contentPadding: PaddingValues = PaddingValues(Spacing.md),
     empty: @Composable () -> Unit = { EmptyState("Nothing here yet") },
     header: LazyGridScope.() -> Unit = {},
+    loading: @Composable () -> Unit = { ListingGridSkeleton(columns = columns, contentPadding = contentPadding) },
     itemContent: @Composable LazyGridItemScope.(T) -> Unit,
 ) {
     val paged by paginator.state.collectAsStateWithLifecycle()
@@ -133,7 +135,7 @@ fun <T> PagedLazyGrid(
         if (paged.loaded && !paged.endReached && last >= info.totalItemsCount - LOAD_MORE_THRESHOLD) paginator.loadMore()
     }
 
-    FirstLoadGate(paged, paginator, modifier) {
+    FirstLoadGate(paged, paginator, modifier, loading) {
         RefreshContainer(true, paged.isRefreshing, paginator::refresh, modifier) {
             LazyVerticalGrid(
                 columns = columns,
@@ -166,11 +168,17 @@ private fun <T> AutoStart(paginator: Paginator<T>) {
 }
 
 @Composable
-private fun <T> FirstLoadGate(paged: PagedState<T>, paginator: Paginator<T>, modifier: Modifier, content: @Composable () -> Unit) {
+private fun <T> FirstLoadGate(
+    paged: PagedState<T>,
+    paginator: Paginator<T>,
+    modifier: Modifier,
+    loading: @Composable () -> Unit,
+    content: @Composable () -> Unit,
+) {
     when {
         paged.loaded -> content()
         paged.error != null -> ErrorState(paged.error, modifier.fillMaxSize(), onRetry = paginator::retry)
-        else -> LoadingState(modifier.fillMaxSize())
+        else -> Box(modifier.fillMaxSize()) { loading() }
     }
 }
 

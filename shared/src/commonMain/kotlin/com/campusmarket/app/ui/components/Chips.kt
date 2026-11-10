@@ -14,6 +14,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.campusmarket.app.ui.label
@@ -110,9 +112,13 @@ fun FilterChip(
 ) {
     val scheme = MaterialTheme.colorScheme
     val branded = selected && enabled
+    val haptics = LocalHapticFeedback.current
     MaterialFilterChip(
         selected = selected,
-        onClick = onClick,
+        onClick = {
+            haptics.performHapticFeedback(if (selected) HapticFeedbackType.ToggleOff else HapticFeedbackType.ToggleOn)
+            onClick()
+        },
         label = label,
         modifier = if (branded) modifier.chipFill(CampusTheme.actionGradient, FilterChipDefaults.Height) else modifier,
         enabled = enabled,

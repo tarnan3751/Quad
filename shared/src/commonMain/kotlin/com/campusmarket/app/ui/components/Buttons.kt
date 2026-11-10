@@ -62,6 +62,8 @@ fun PrimaryButton(
             disabledContainerColor = if (loading) Color.Transparent else scheme.onSurface.copy(alpha = 0.10f),
             disabledContentColor = if (loading) Color.White else scheme.onSurface.copy(alpha = 0.45f),
         ),
+        // No shadow: the gradient is drawn behind a transparent container, and a shadow would outline that instead.
+        elevation = null,
         contentPadding = ButtonPadding,
         interactionSource = interaction,
     ) {
@@ -119,6 +121,7 @@ fun DestructiveButton(
             disabledContainerColor = if (loading) scheme.error else scheme.onSurface.copy(alpha = 0.10f),
             disabledContentColor = if (loading) scheme.onError else scheme.onSurface.copy(alpha = 0.45f),
         ),
+        elevation = null,
         contentPadding = ButtonPadding,
     ) {
         ButtonContent(text, loading, icon)
