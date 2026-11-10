@@ -203,7 +203,7 @@ fun OrderDetailScreen(route: OrderDetailRoute, nav: NavController) {
                     order,
                     ui,
                     onAction = vm::onAction,
-                    onRefresh = { vm.refresh(userInitiated = true) },
+                    onRecheckPayment = vm::recheckPayment,
                     onRate = { stars -> nav.navigate(RateOrderRoute(order.id, stars)) },
                     onOpenListing = { nav.navigate(ListingDetailRoute(order.listing.id)) },
                     onOpenUser = { nav.navigate(UserProfileRoute(order.otherParty.id)) },
@@ -235,7 +235,7 @@ private fun OrderDetailBody(
     order: Order,
     ui: OrderDetailUi,
     onAction: (OrderAction) -> Unit,
-    onRefresh: () -> Unit,
+    onRecheckPayment: () -> Unit,
     onRate: (Int) -> Unit,
     onOpenListing: () -> Unit,
     onOpenUser: () -> Unit,
@@ -252,7 +252,7 @@ private fun OrderDetailBody(
         val checking = ui.paymentCheck.takeIf { order.status == OrderStatus.PENDING_PAYMENT && order.isBuyer }
         NextStepCard(order.nextStep(), firstName(order.otherParty), times, checking) {
             InlineError(ui.error, Modifier.fillMaxWidth())
-            CardActions(order, actions, ui, checking, onAction, onRefresh)
+            CardActions(order, actions, ui, checking, onAction, onRecheckPayment)
         }
 
         if (OrderAction.Rate in actions) {
@@ -367,7 +367,7 @@ private fun CardActions(
     ui: OrderDetailUi,
     checking: PaymentCheck?,
     onAction: (OrderAction) -> Unit,
-    onRefresh: () -> Unit,
+    onRecheckPayment: () -> Unit,
 ) {
     val busy = ui.running != null
     val active = order.status == OrderStatus.PENDING_PAYMENT || order.status == OrderStatus.PAID || order.status == OrderStatus.DISPUTED
@@ -382,7 +382,7 @@ private fun CardActions(
                 modifier = Modifier.fillMaxWidth(),
             )
             if (checking == PaymentCheck.NotReceived) {
-                SecondaryButton("I've paid, check again", onClick = onRefresh, icon = Icons.Filled.Refresh, enabled = !busy, modifier = Modifier.fillMaxWidth())
+                SecondaryButton("I've paid, check again", onClick = onRecheckPayment, icon = Icons.Filled.Refresh, enabled = !busy, modifier = Modifier.fillMaxWidth())
             }
         }
         if (OrderAction.ConfirmReceipt in actions) {

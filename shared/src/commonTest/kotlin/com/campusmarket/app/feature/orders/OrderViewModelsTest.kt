@@ -320,6 +320,24 @@ class OrderDetailViewModelTest {
     }
 
     @Test
+    fun checkAgainRunsAnotherRoundAndPicksUpTheLatePayment() = runTest {
+        current = order(OrderStatus.PENDING_PAYMENT)
+        val (vm, h) = setUp(fromCheckout = true)
+        advanceUntilIdle()
+        vm.onResume()
+        advanceUntilIdle()
+        assertEquals(PaymentCheck.NotReceived, vm.ui.value.paymentCheck)
+
+        current = order(OrderStatus.PAID)
+        vm.recheckPayment()
+        advanceUntilIdle()
+        assertEquals(OrderStatus.PAID, vm.order.value.valueOrNull?.status)
+        assertNull(vm.ui.value.paymentCheck)
+        assertEquals("Payment received. Quad holds it until you confirm pickup.", h.nextMessage()?.text)
+        vm.close()
+    }
+
+    @Test
     fun browserThatWontOpenIsReported() = runTest {
         current = order(OrderStatus.PENDING_PAYMENT)
         val (vm, h) = setUp()

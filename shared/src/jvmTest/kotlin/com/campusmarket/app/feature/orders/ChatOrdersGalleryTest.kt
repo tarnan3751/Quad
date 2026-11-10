@@ -527,6 +527,8 @@ class ChatOrdersGalleryTest {
         click("Continue to payment", substring = true)
         await("Polaroid")
         shot("checkout-02-returned-pending")
+        await("Payment not finished yet", 20_000)
+        shot("checkout-02b-payment-not-received")
         back()
         payoutsNotEnabledFor = "l-headphones"
         click("Buy")

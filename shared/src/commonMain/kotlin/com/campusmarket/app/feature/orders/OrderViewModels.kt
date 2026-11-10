@@ -174,6 +174,10 @@ class OrderDetailViewModel(
                 fetchedAt = timeSource.markNow()
                 _order.value = UiState.Content(fresh)
                 if (before != null && before != fresh) updates.publish(fresh)
+                if (awaitingCheckout && fresh.status != OrderStatus.PENDING_PAYMENT) {
+                    awaitingCheckout = false
+                    _ui.update { it.copy(paymentCheck = null) }
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: ApiError) {
@@ -191,6 +195,11 @@ class OrderDetailViewModel(
         }
         val fetched = fetchedAt ?: return // first load still running (or failed: the error state has Retry)
         if (fetched.elapsedNow() >= RESUME_STALE_AFTER) refresh()
+    }
+
+    /** "I've paid, check again": another round of payment checks after checkout (a plain refresh otherwise). */
+    fun recheckPayment() {
+        if (awaitingCheckout) checkPayment() else refresh(userInitiated = true)
     }
 
     /** Re-fetches until the order leaves PENDING_PAYMENT (or gives up after [PAYMENT_CHECKS] tries). */
