@@ -1,51 +1,10 @@
 package com.campusmarket.app.ui
 
 import com.campusmarket.core.formatPrice
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toLocalDateTime
-import kotlin.time.Clock
-import kotlin.time.Instant
 
-/** Shared display formatting. Keep all date / money formatting here so screens agree. */
+/** Shared money and rating formatting, so screens agree. Dates and times are in [TimeFormat]. */
 object Format {
-    private val MONTHS = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
-
     fun price(cents: Int, currency: String = "usd"): String = formatPrice(cents, currency)
-
-    /** "just now", "5m", "3h", "2d", then "Mar 4" (this year) or "Mar 4, 2025". */
-    fun relativeTime(epochMillis: Long, nowMillis: Long = Clock.System.now().toEpochMilliseconds()): String {
-        val diff = (nowMillis - epochMillis).coerceAtLeast(0)
-        val minutes = diff / 60_000
-        return when {
-            minutes < 1 -> "just now"
-            minutes < 60 -> "${minutes}m"
-            minutes < 60 * 24 -> "${minutes / 60}h"
-            minutes < 60 * 24 * 7 -> "${minutes / (60 * 24)}d"
-            else -> date(epochMillis, nowMillis)
-        }
-    }
-
-    /** "Mar 4" this year, "Mar 4, 2025" otherwise. */
-    fun date(epochMillis: Long, nowMillis: Long = Clock.System.now().toEpochMilliseconds()): String {
-        val tz = TimeZone.currentSystemDefault()
-        val d = Instant.fromEpochMilliseconds(epochMillis).toLocalDateTime(tz)
-        val thisYear = Instant.fromEpochMilliseconds(nowMillis).toLocalDateTime(tz).year
-        val base = "${MONTHS[d.month.ordinal]} ${d.day}"
-        return if (d.year == thisYear) base else "$base, ${d.year}"
-    }
-
-    /** "Mar 4, 2025 · 14:05" */
-    fun dateTime(epochMillis: Long): String {
-        val d = Instant.fromEpochMilliseconds(epochMillis).toLocalDateTime(TimeZone.currentSystemDefault())
-        val time = "${d.hour.toString().padStart(2, '0')}:${d.minute.toString().padStart(2, '0')}"
-        return "${MONTHS[d.month.ordinal]} ${d.day}, ${d.year} · $time"
-    }
-
-    /** "Joined Mar 2025" */
-    fun memberSince(epochMillis: Long): String {
-        val d = Instant.fromEpochMilliseconds(epochMillis).toLocalDateTime(TimeZone.currentSystemDefault())
-        return "Joined ${MONTHS[d.month.ordinal]} ${d.year}"
-    }
 
     /** "4.8" or null when there are no ratings. */
     fun rating(average: Double?): String? = average?.let {

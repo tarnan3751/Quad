@@ -68,16 +68,6 @@ class ProfileStatsTest {
     }
 
     @Test
-    fun relativeTimesReadNaturally() {
-        val now = kotlin.time.Clock.System.now().toEpochMilliseconds()
-        assertEquals("just now", ago(now))
-        assertEquals("5m ago", ago(now - 5 * 60_000))
-        assertEquals("3h ago", ago(now - 3 * 3_600_000))
-        assertEquals("2d ago", ago(now - 2 * 86_400_000))
-        assertFalse(ago(now - 30L * 86_400_000).endsWith("ago")) // a date
-    }
-
-    @Test
     fun profileTabLoadsListingCountsWithOneBigPage() = withMainDispatcher {
         runTest {
             val h = Harness { req ->

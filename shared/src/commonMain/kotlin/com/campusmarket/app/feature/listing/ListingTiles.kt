@@ -71,11 +71,11 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import coil3.compose.AsyncImagePainter
-import com.campusmarket.app.ui.Format
 import com.campusmarket.app.ui.components.ErrorState
 import com.campusmarket.app.ui.components.ListingStatusChip
 import com.campusmarket.app.ui.components.LocalUrlResolver
 import com.campusmarket.app.ui.components.PriceText
+import com.campusmarket.app.ui.rememberTimeFormat
 import com.campusmarket.app.ui.state.PagedState
 import com.campusmarket.app.ui.state.Paginator
 import com.campusmarket.app.ui.theme.Spacing
@@ -91,12 +91,6 @@ import kotlinx.coroutines.flow.distinctUntilChanged
  */
 
 // ---------------------------------------------------------------------------------------------------- text
-
-/** "just now", "5m ago", "2h ago", "3d ago", then "Mar 4". */
-internal fun timeAgo(epochMillis: Long, nowMillis: Long = kotlin.time.Clock.System.now().toEpochMilliseconds()): String {
-    val relative = Format.relativeTime(epochMillis, nowMillis)
-    return if (relative.first().isDigit()) "$relative ago" else relative
-}
 
 /** One-line explanation of a condition, shown when picking it and on the listing. */
 internal val ListingCondition.hint: String
@@ -269,7 +263,7 @@ internal fun ListingTile(
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                "${listing.condition.label} · ${timeAgo(listing.createdAt)}",
+                "${listing.condition.label} · ${rememberTimeFormat().ago(listing.createdAt)}",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,

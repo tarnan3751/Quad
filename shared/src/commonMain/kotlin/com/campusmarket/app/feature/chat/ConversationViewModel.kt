@@ -6,6 +6,7 @@ import com.campusmarket.app.data.ApiClient
 import com.campusmarket.app.data.ApiError
 import com.campusmarket.app.data.ChatSocket
 import com.campusmarket.app.data.SessionManager
+import com.campusmarket.app.ui.TimeFormat
 import com.campusmarket.app.ui.Validate
 import com.campusmarket.app.ui.state.EventQueue
 import com.campusmarket.app.ui.state.Paginator
@@ -19,6 +20,7 @@ import com.campusmarket.core.Conversation
 import com.campusmarket.core.ErrorCodes
 import com.campusmarket.core.Limits
 import com.campusmarket.core.Message
+import kotlin.time.Clock
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -33,7 +35,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlin.time.Clock
 
 // ---------------------------------------------------------------------------------------------------- state
 
@@ -412,7 +413,7 @@ internal fun buildChatRows(
     endReached: Boolean,
     state: ConversationUiState,
     myId: String,
-    sameDay: (Long, Long) -> Boolean = { a, b -> ChatFormat.sameDay(a, b) },
+    sameDay: (Long, Long) -> Boolean = TimeFormat()::sameDay,
 ): List<ChatRow> {
     val bubbles = ArrayList<ChatRow.Bubble>(history.size + state.pending.size)
     state.pending.asReversed().forEach { p ->

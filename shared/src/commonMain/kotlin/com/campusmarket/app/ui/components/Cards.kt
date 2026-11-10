@@ -31,7 +31,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.campusmarket.app.ui.Format
+import com.campusmarket.app.ui.rememberTimeFormat
 import com.campusmarket.app.ui.theme.Spacing
 import com.campusmarket.core.ListingStatus
 import com.campusmarket.core.ListingSummary
@@ -104,7 +104,7 @@ fun ListingCard(
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                "${listing.condition.label} · ${Format.relativeTime(listing.createdAt)}",
+                "${listing.condition.label} · ${rememberTimeFormat().age(listing.createdAt)}",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,

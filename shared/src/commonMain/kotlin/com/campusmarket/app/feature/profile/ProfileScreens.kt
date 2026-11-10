@@ -9,11 +9,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -107,6 +107,7 @@ import com.campusmarket.app.ui.components.PrimaryButton
 import com.campusmarket.app.ui.components.RatingStars
 import com.campusmarket.app.ui.components.ServerSettingsDialog
 import com.campusmarket.app.ui.label
+import com.campusmarket.app.ui.rememberTimeFormat
 import com.campusmarket.app.ui.state.UiState
 import com.campusmarket.app.ui.state.UserMessages
 import com.campusmarket.app.ui.theme.CampusTheme
@@ -696,7 +697,7 @@ private fun RatingRow(rating: Rating, onClickRater: () -> Unit) {
                 Text(rating.rater.displayName, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
                     RatingStars(rating.stars.toDouble(), modifier = Modifier.semantics { contentDescription = "${rating.stars} out of 5 stars" })
-                    Text(ago(rating.createdAt), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(rememberTimeFormat().ago(rating.createdAt), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -710,12 +711,6 @@ private fun RatingRow(rating: Rating, onClickRater: () -> Unit) {
             }
         }
     }
-}
-
-/** "5m ago", "3h ago", "2d ago", then a date. */
-internal fun ago(epochMillis: Long): String {
-    val r = Format.relativeTime(epochMillis)
-    return if (r.isNotEmpty() && r.first().isDigit() && r.last() in "mhd" && ' ' !in r) "$r ago" else r
 }
 
 /** Conversations are about a listing, so "Message" asks which of their listings it's about. */

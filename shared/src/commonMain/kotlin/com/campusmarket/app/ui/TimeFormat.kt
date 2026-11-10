@@ -1,4 +1,4 @@
-package com.campusmarket.app.feature.chat
+package com.campusmarket.app.ui
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -27,11 +27,12 @@ fun rememberTimeFormat(): TimeFormat {
 }
 
 /**
- * Times and dates as people say them, on the device's 12- or 24-hour clock: "2:05 PM" / "14:05", "Yesterday",
- * "Thu, Nov 12 at 9:24 AM", "in 2 days, 4 hours". Pure; [now] and [tz] are injectable for tests.
+ * Every date and time the app shows, as people say them, on the device's 12- or 24-hour clock: "2:05 PM" / "14:05",
+ * "Yesterday", "Thu, Nov 12 at 9:24 AM", "in 2 days, 4 hours", "3h ago", "Joined Mar 2025". Composables get one from
+ * [rememberTimeFormat]. Pure; [now] and [tz] are injectable for tests.
  */
 class TimeFormat(
-    val use24h: Boolean,
+    val use24h: Boolean = false,
     private val tz: TimeZone = TimeZone.currentSystemDefault(),
     private val now: () -> Long = { Clock.System.now().toEpochMilliseconds() },
 ) {
@@ -94,6 +95,26 @@ class TimeFormat(
         val relative = s.startsWith("Today") || s.startsWith("Tomorrow") || s.startsWith("Yesterday")
         return if (relative) s.replaceFirstChar { it.lowercaseChar() } else "on $s"
     }
+
+    /** Time since [epochMillis], for tight spaces: "just now", "5m", "3h", "2d", then [date]. */
+    fun age(epochMillis: Long): String {
+        val minutes = (now() - epochMillis).coerceAtLeast(0) / MINUTE
+        return when {
+            minutes < 1 -> "just now"
+            minutes < 60 -> "${minutes}m"
+            minutes < 60 * 24 -> "${minutes / 60}h"
+            minutes < 60 * 24 * 7 -> "${minutes / (60 * 24)}d"
+            else -> date(epochMillis)
+        }
+    }
+
+    /** [age] in a phrase: "just now", "5m ago", "3h ago", "2d ago", then "Mar 4". */
+    fun ago(epochMillis: Long): String = age(epochMillis).let { if (it.first().isDigit()) "$it ago" else it }
+
+    /** "Joined Mar 2025". */
+    fun memberSince(epochMillis: Long): String = local(epochMillis).let { "Joined ${MONTHS[it.month.ordinal]} ${it.year}" }
+
+    fun sameDay(a: Long, b: Long): Boolean = local(a).date == local(b).date
 
     /** "Nov 12" this year, "Nov 12, 2025" otherwise. */
     fun date(epochMillis: Long): String {

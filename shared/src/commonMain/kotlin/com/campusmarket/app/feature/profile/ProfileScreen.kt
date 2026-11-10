@@ -56,6 +56,7 @@ import com.campusmarket.app.ui.components.ConfirmDialog
 import com.campusmarket.app.ui.components.SecondaryButton
 import com.campusmarket.app.ui.components.StatusChip
 import com.campusmarket.app.ui.label
+import com.campusmarket.app.ui.rememberTimeFormat
 import com.campusmarket.app.ui.state.UserMessages
 import com.campusmarket.app.ui.theme.Spacing
 import com.campusmarket.core.ApiRoutes
@@ -231,7 +232,7 @@ internal fun CampusLine(campusDomain: String, joinedAt: Long) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
         Icon(Glyphs.School, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
         Text(
-            "$campusDomain · ${Format.memberSince(joinedAt)}",
+            "$campusDomain · ${rememberTimeFormat().memberSince(joinedAt)}",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

@@ -51,7 +51,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.campusmarket.app.feature.chat.ConversationRoute
 import com.campusmarket.app.feature.chat.RowSkeletons
-import com.campusmarket.app.feature.chat.rememberTimeFormat
+import com.campusmarket.app.ui.rememberTimeFormat
 import com.campusmarket.app.feature.listing.ListingDetailRoute
 import com.campusmarket.app.feature.profile.UserProfileRoute
 import com.campusmarket.app.navigation.LocalCurrentUser

@@ -28,6 +28,7 @@ import com.campusmarket.app.platform.PlatformUrlLauncher
 import com.campusmarket.app.shows
 import com.campusmarket.app.signedIn
 import com.campusmarket.app.startTestApp
+import com.campusmarket.app.ui.TimeFormat
 import com.campusmarket.core.ApiJson
 import com.campusmarket.core.ApiRoutes
 import com.campusmarket.core.ChatEvent
@@ -48,12 +49,12 @@ import com.campusmarket.core.UserPrivate
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
-import org.koin.core.context.stopKoin
-import org.koin.dsl.module
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import org.koin.core.context.stopKoin
+import org.koin.dsl.module
 
 /**
  * Drives the real App() through B's flows against a stateful fake server (MockEngine) and a fake live connection:
@@ -167,7 +168,7 @@ class ChatOrdersUiTest {
 
         // Conversation: header, listing strip, history, day separator.
         awaitText("Is it still available?")
-        awaitText(ChatFormat.dayLabel(now - 120_000)) // "Today" (or "Yesterday" right after midnight)
+        awaitText(TimeFormat().dayLabel(now - 120_000)) // "Today" (or "Yesterday" right after midnight)
         awaitText("Buy")
 
         onAllNodes(hasSetTextAction()).onFirst().performTextInput("Can I come at 5?")

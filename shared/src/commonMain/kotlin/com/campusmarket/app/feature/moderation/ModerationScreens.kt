@@ -49,7 +49,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
-import com.campusmarket.app.feature.chat.rememberTimeFormat
+import com.campusmarket.app.ui.rememberTimeFormat
 import com.campusmarket.app.feature.listing.ListingDetailRoute
 import com.campusmarket.app.feature.profile.Chevron
 import com.campusmarket.app.feature.profile.Glyphs
@@ -60,9 +60,7 @@ import com.campusmarket.app.feature.profile.MenuGroup
 import com.campusmarket.app.feature.profile.MenuRow
 import com.campusmarket.app.feature.profile.SkeletonBlock
 import com.campusmarket.app.feature.profile.UserProfileRoute
-import com.campusmarket.app.feature.profile.ago
 import com.campusmarket.app.navigation.LocalCurrentUser
-import com.campusmarket.app.ui.Format
 import com.campusmarket.app.ui.components.AppTab
 import com.campusmarket.app.ui.components.AppTopBar
 import com.campusmarket.app.ui.components.Avatar
@@ -85,12 +83,9 @@ import com.campusmarket.core.Report
 import com.campusmarket.core.ReportStatus
 import com.campusmarket.core.ReportTargetType
 import com.campusmarket.core.UserRole
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toLocalDateTime
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
 import kotlin.time.Clock
-import kotlin.time.Instant
 
 // ---------------------------------------------------------------------------------------------------- queue
 
@@ -262,7 +257,7 @@ private fun ReportRow(report: Report, onClick: () -> Unit) {
 /** "9h" for a fresh report; anything waiting a day or more is flagged so the oldest get picked up first. */
 @Composable
 private fun AgeLabel(epochMillis: Long, waiting: Boolean) {
-    val age = Format.relativeTime(epochMillis)
+    val age = rememberTimeFormat().age(epochMillis)
     val overADay = Clock.System.now().toEpochMilliseconds() - epochMillis >= 24 * 3_600_000L
     if (waiting && overADay) StatusChip("Waiting $age", ChipTone.Warning)
     else Text(age, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -457,7 +452,7 @@ private fun ReportBody(report: Report, nav: NavController, onOpenDialog: (ModDia
                 Column(Modifier.weight(1f)) {
                     Text(report.reason.label, style = MaterialTheme.typography.titleMedium)
                     Text(
-                        "${report.targetType.label} report · ${ago(report.createdAt)}",
+                        "${report.targetType.label} report · ${rememberTimeFormat().ago(report.createdAt)}",
                         style = MaterialTheme.typography.bodySmall,
                         color = scheme.onSurfaceVariant,
                     )
@@ -645,6 +640,7 @@ fun ModerationLogScreen(nav: NavController) {
     ModeratorGate("Moderation log", nav) {
         val vm = koinViewModel<ModerationLogViewModel>()
         val paged by vm.entries.state.collectAsStateWithLifecycle()
+        val times = rememberTimeFormat()
         Scaffold(
             topBar = {
                 AppTopBar("Moderation log", onBack = { nav.popBackStack() }, actions = { ModerationToolLinks(nav, current = ModerationLogRoute) })
@@ -657,10 +653,9 @@ fun ModerationLogScreen(nav: NavController) {
                 empty = { EmptyState("No moderation actions yet", message = "Every decision on a report, dispute or staff role is recorded here.", icon = Glyphs.History) },
             ) { entry ->
                 val index = paged.items.indexOfFirst { it.id == entry.id }
-                val day = dayLabel(entry.createdAt)
-                if (index <= 0 || dayLabel(paged.items[index - 1].createdAt) != day) {
+                if (index <= 0 || !times.sameDay(paged.items[index - 1].createdAt, entry.createdAt)) {
                     Text(
-                        day,
+                        times.dayLabel(entry.createdAt),
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.fillMaxWidth().padding(start = Spacing.screen, top = Spacing.lg, bottom = Spacing.xs),
@@ -669,18 +664,6 @@ fun ModerationLogScreen(nav: NavController) {
                 LogRow(entry, onClick = logTarget(entry, nav))
             }
         }
-    }
-}
-
-/** "Today", "Yesterday", or a date. */
-private fun dayLabel(epochMillis: Long): String {
-    val tz = TimeZone.currentSystemDefault()
-    val day = Instant.fromEpochMilliseconds(epochMillis).toLocalDateTime(tz).date
-    val today = Clock.System.now().toLocalDateTime(tz).date
-    return when (today.toEpochDays() - day.toEpochDays()) {
-        0L -> "Today"
-        1L -> "Yesterday"
-        else -> Format.date(epochMillis)
     }
 }
 

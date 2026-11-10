@@ -1,6 +1,6 @@
 package com.campusmarket.app.feature.orders
 
-import com.campusmarket.app.feature.chat.TimeFormat
+import com.campusmarket.app.ui.TimeFormat
 import com.campusmarket.app.ui.Format
 import com.campusmarket.core.DisputeOutcome
 import com.campusmarket.core.DisputeReason

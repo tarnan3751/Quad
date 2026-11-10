@@ -74,7 +74,7 @@ import com.campusmarket.app.feature.moderation.ReportSheet
 import com.campusmarket.app.feature.orders.CheckoutRoute
 import com.campusmarket.app.feature.orders.OrdersRoute
 import com.campusmarket.app.feature.profile.UserProfileRoute
-import com.campusmarket.app.ui.Format
+import com.campusmarket.app.navigation.keepSnackbarsAbove
 import com.campusmarket.app.ui.components.AppTopBar
 import com.campusmarket.app.ui.components.Avatar
 import com.campusmarket.app.ui.components.CollectEvents
@@ -85,6 +85,7 @@ import com.campusmarket.app.ui.components.PriceText
 import com.campusmarket.app.ui.components.PrimaryButton
 import com.campusmarket.app.ui.components.RatingSummary
 import com.campusmarket.app.ui.components.SecondaryButton
+import com.campusmarket.app.ui.rememberTimeFormat
 import com.campusmarket.app.ui.state.UiState
 import com.campusmarket.app.ui.theme.CampusTheme
 import com.campusmarket.app.ui.theme.Spacing
@@ -96,7 +97,6 @@ import com.campusmarket.core.UserPublic
 import kotlinx.coroutines.launch
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
-import com.campusmarket.app.navigation.keepSnackbarsAbove
 
 /**
  * Listing detail: photo pager (side by side with the details on wide windows), price and title, scannable facts,
@@ -302,7 +302,7 @@ private fun DetailContent(listing: ListingDetail, onSellerClick: () -> Unit) {
             Text(listing.title, style = MaterialTheme.typography.titleLarge)
             Text(
                 buildString {
-                    append(listedLabel(listing.createdAt))
+                    append("Listed ${rememberTimeFormat().ago(listing.createdAt)}")
                     if (listing.favoriteCount > 0) {
                         append(" · ")
                         append(if (listing.favoriteCount == 1) "1 favorite" else "${listing.favoriteCount} favorites")
@@ -410,7 +410,7 @@ private fun SellerCard(seller: UserPublic, isMe: Boolean, onClick: () -> Unit) {
                     overflow = TextOverflow.Ellipsis,
                 )
                 RatingSummary(seller.ratingAverage, seller.ratingCount)
-                Text(Format.memberSince(seller.joinedAt), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(rememberTimeFormat().memberSince(seller.joinedAt), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "View profile", tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }

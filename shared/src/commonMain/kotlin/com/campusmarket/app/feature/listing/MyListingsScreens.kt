@@ -47,6 +47,7 @@ import com.campusmarket.app.ui.components.ListingStatusChip
 import com.campusmarket.app.ui.components.PagedLazyColumn
 import com.campusmarket.app.ui.components.PriceText
 import com.campusmarket.app.ui.label
+import com.campusmarket.app.ui.rememberTimeFormat
 import com.campusmarket.app.ui.theme.Spacing
 import com.campusmarket.core.ListingStatus
 import com.campusmarket.core.ListingSummary
@@ -175,7 +176,7 @@ private fun MyListingRow(listing: ListingSummary, onClick: () -> Unit) {
             Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm), verticalAlignment = Alignment.CenterVertically) {
                 ListingStatusChip(listing.status)
                 Text(
-                    listedLabel(listing.createdAt),
+                    "Listed ${rememberTimeFormat().ago(listing.createdAt)}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,

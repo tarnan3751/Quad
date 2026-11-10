@@ -37,7 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
-import com.campusmarket.app.feature.chat.rememberTimeFormat
+import com.campusmarket.app.ui.rememberTimeFormat
 import com.campusmarket.app.ui.components.AppTopBar
 import com.campusmarket.app.ui.components.ChipTone
 import com.campusmarket.app.ui.components.InlineError
