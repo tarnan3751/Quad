@@ -2,6 +2,7 @@ package com.campusmarket.app.feature.profile
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.AlertDialog
@@ -84,12 +85,12 @@ fun BlockUserDialog(user: UserPublic, onDismiss: () -> Unit, onDone: (blocked: B
                         Bullet("They aren't told that you blocked them.")
                     }
                     Text(
-                        "You can unblock them any time from Settings.",
+                        "You can unblock them any time from Profile › Blocked users. If they broke the rules, report them too.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 } else {
-                    Text("You'll be able to message and trade with ${user.displayName} again, and their listings will show up in Browse.")
+                    Text("You'll be able to message and trade with ${user.displayName} again, and their listings will show up in Browse. They aren't told.")
                 }
                 InlineError(state.error)
             }
@@ -116,5 +117,8 @@ fun BlockUserDialog(user: UserPublic, onDismiss: () -> Unit, onDone: (blocked: B
 
 @Composable
 private fun Bullet(text: String) {
-    Text("•  $text", style = MaterialTheme.typography.bodyMedium)
+    Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+        Text("•", style = MaterialTheme.typography.bodyMedium)
+        Text(text, style = MaterialTheme.typography.bodyMedium)
+    }
 }

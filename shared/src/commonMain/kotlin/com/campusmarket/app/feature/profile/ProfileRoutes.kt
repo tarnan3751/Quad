@@ -14,9 +14,9 @@ data object ProfileRoute
 @Serializable
 data object EditProfileRoute
 
-/** Someone's public profile: ratings, ACTIVE listings, block / report. */
+/** Someone's public profile: ratings, ACTIVE listings, message / block / report. [showRatings] opens the Ratings tab. */
 @Serializable
-data class UserProfileRoute(val userId: String)
+data class UserProfileRoute(val userId: String, val showRatings: Boolean = false)
 
 /** Sign out, blocked users, delete account, (debug) server URL. */
 @Serializable

@@ -1,15 +1,24 @@
 package com.campusmarket.app.feature.moderation
 
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -23,18 +32,29 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.campusmarket.app.data.ApiError
 import com.campusmarket.app.data.isModerator
+import com.campusmarket.app.feature.profile.Glyphs
 import com.campusmarket.app.navigation.LocalCurrentUser
 import com.campusmarket.app.ui.components.AppTextField
-import com.campusmarket.app.ui.components.FilterChip
 import com.campusmarket.app.ui.components.AppTopBar
+import com.campusmarket.app.ui.components.ChipTone
 import com.campusmarket.app.ui.components.EmptyState
+import com.campusmarket.app.ui.components.FilterChip
 import com.campusmarket.app.ui.components.InlineError
+import com.campusmarket.app.ui.components.StatusChip
+import com.campusmarket.app.ui.label
 import com.campusmarket.app.ui.theme.Spacing
 import com.campusmarket.core.Limits
+import com.campusmarket.core.ModerationAction
+import com.campusmarket.core.ReportTargetType
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -75,7 +95,7 @@ internal val SuspendDurations: List<Pair<String, Int?>> = listOf(
     "7 days" to 7,
     "30 days" to 30,
     "90 days" to 90,
-    "Indefinitely" to null,
+    "Until lifted" to null,
 )
 
 /**
@@ -91,10 +111,11 @@ fun ModerationActionDialog(
     onDismiss: () -> Unit,
     submitting: Boolean,
     error: String?,
-    noteLabel: String = "Note (optional)",
+    noteLabel: String = "Internal note (optional)",
     noteRequired: Boolean = false,
     showDuration: Boolean = false,
     destructive: Boolean = true,
+    noteMax: Int = Limits.REPORT_DETAILS_MAX,
 ) {
     var note by remember { mutableStateOf("") }
     var days by remember { mutableStateOf<Int?>(7) }
@@ -104,11 +125,11 @@ fun ModerationActionDialog(
         onDismissRequest = { if (!submitting) onDismiss() },
         title = { Text(title) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
                 Text(message, style = MaterialTheme.typography.bodyMedium)
                 if (showDuration) {
-                    Text("Duration", style = MaterialTheme.typography.labelLarge)
-                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                    Text("How long", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = Spacing.xs))
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
                         SuspendDurations.forEach { (label, value) ->
                             FilterChip(
                                 selected = days == value,
@@ -121,13 +142,14 @@ fun ModerationActionDialog(
                 }
                 AppTextField(
                     value = note,
-                    onValueChange = { note = it.take(Limits.REPORT_DETAILS_MAX); noteError = null },
+                    onValueChange = { note = it.take(noteMax); noteError = null },
                     label = noteLabel,
                     error = noteError,
+                    supportingText = "Only staff see this, in the moderation log",
                     singleLine = false,
                     minLines = 2,
                     maxLines = 4,
-                    maxLength = Limits.REPORT_DETAILS_MAX,
+                    maxLength = noteMax,
                     enabled = !submitting,
                 )
                 InlineError(error)
@@ -139,7 +161,7 @@ fun ModerationActionDialog(
                 onClick = {
                     val trimmed = note.trim()
                     if (noteRequired && trimmed.isEmpty()) {
-                        noteError = "Required"
+                        noteError = "Required: say why, for the other moderators"
                     } else {
                         onConfirm(trimmed, if (showDuration) days else null)
                     }
@@ -174,3 +196,58 @@ fun ModeratorGate(title: String, nav: NavController, content: @Composable () -> 
         }
     }
 }
+
+// ---------------------------------------------------------------------------------------------------- pieces
+
+/** Small heading inside a moderation screen ("Reported listing", "Decide"). */
+@Composable
+internal fun ModHeading(text: String, modifier: Modifier = Modifier, tone: ChipTone? = null) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelLarge,
+        color = if (tone == ChipTone.Negative) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = modifier.padding(start = Spacing.screen + Spacing.xs, end = Spacing.screen, top = Spacing.xl, bottom = Spacing.sm)
+            .semantics { heading() },
+    )
+}
+
+/** Someone's own words (a report's details, a buyer's problem), set off with a bar on the left. */
+@Composable
+internal fun QuoteBlock(text: String?, emptyText: String, modifier: Modifier = Modifier, style: TextStyle = MaterialTheme.typography.bodyLarge) {
+    Row(modifier.height(IntrinsicSize.Min)) {
+        Box(Modifier.width(3.dp).fillMaxHeight().background(MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(2.dp)))
+        if (text.isNullOrBlank()) {
+            Text(
+                emptyText,
+                style = MaterialTheme.typography.bodyMedium,
+                fontStyle = FontStyle.Italic,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = Spacing.md),
+            )
+        } else {
+            Text(text, style = style, modifier = Modifier.padding(start = Spacing.md))
+        }
+    }
+}
+
+/** Glyph for what was reported. */
+internal val ReportTargetType.glyph: ImageVector
+    get() = when (this) {
+        ReportTargetType.LISTING -> Glyphs.Tag
+        ReportTargetType.USER -> Icons.Default.Person
+        ReportTargetType.MESSAGE -> Glyphs.ChatBubble
+        ReportTargetType.ORDER -> Glyphs.Receipt
+    }
+
+/** How severe an action is, for its chip colour in the log and on closed reports. */
+internal val ModerationAction.tone: ChipTone
+    get() = when (this) {
+        ModerationAction.DISMISS -> ChipTone.Neutral
+        ModerationAction.WARN_USER -> ChipTone.Warning
+        ModerationAction.REMOVE_LISTING, ModerationAction.SUSPEND_USER -> ChipTone.Negative
+        ModerationAction.RESTORE_LISTING, ModerationAction.UNSUSPEND_USER -> ChipTone.Positive
+        ModerationAction.CHANGE_ROLE, ModerationAction.RESOLVE_DISPUTE -> ChipTone.Info
+    }
+
+@Composable
+internal fun ActionChip(action: ModerationAction, modifier: Modifier = Modifier) = StatusChip(action.label, action.tone, modifier)

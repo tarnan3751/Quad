@@ -143,20 +143,23 @@ Type-safe navigation-compose (2.9). Routes are `@Serializable` objects/classes i
 | `RateOrderRoute` | `orderId` | B | 〃 | |
 | `ReportProblemRoute` | `orderId` | B | `feature/orders/DisputeScreens.kt` | Buyer of a PAID order opens a dispute (`openDispute`); payment goes on hold. Opened from `OrderDetailRoute`, which also offers `withdrawDispute` |
 | `PayoutsRoute` | | B | 〃 | Deep link `campusmarket://payouts` |
-| `ProfileRoute` | | C | `feature/profile/ProfileScreen.kt` | **Tab**: links to my listings, favorites, orders, payouts, settings, moderation |
+| `ProfileRoute` | | C | `feature/profile/ProfileScreen.kt` | **Tab**: header + stats (active / sold from `myListings`, rating), grouped menus (buying & selling, moderation for staff, account, safety, legal), sign out, version |
 | `EditProfileRoute` | | C | `feature/profile/ProfileScreens.kt` | |
-| `UserProfileRoute` | `userId` | C | 〃 | Ratings, listings, block/report |
-| `SettingsRoute` | | C | 〃 | Sign out, delete account, blocked users, debug server |
+| `UserProfileRoute` | `userId`, `showRatings?` | C | 〃 | Listings / ratings (star breakdown) tabs; Message (pick one of their listings → `MessageSellerRoute`), Report, Block |
+| `SettingsRoute` | | C | 〃 | Email / campus, blocked users, legal links, version, debug server, sign out, delete account |
 | `BlockedUsersRoute` | | C | 〃 | |
-| `ModerationQueueRoute` | | C | `feature/moderation/ModerationScreens.kt` | Moderators only (server returns 403 otherwise) |
+| `ModerationQueueRoute` | | C | `feature/moderation/ModerationScreens.kt` | "Reports". Moderators only (server returns 403 otherwise). Status tabs + kind filter (client-side) |
 | `ReportDetailRoute` | `reportId` | C | 〃 | |
 | `ModerationLogRoute` | | C | 〃 | |
-| `DisputesRoute` | | C | `feature/moderation/ModerationDisputeScreens.kt` | Moderators only. Open / Closed tabs (`modDisputes`); opened from the queue's top bar |
+| `DisputesRoute` | | C | `feature/moderation/ModerationDisputeScreens.kt` | Moderators only. Open / Closed tabs (`modDisputes`); opened from the profile tab's Moderation group and the other moderation screens' top bars |
 | `DisputeDetailRoute` | `orderId` | C | 〃 | Both parties, listing, amounts, reason; refund the buyer or release to the seller (`modDispute`, `resolveDispute`, note required) |
-| `StaffRoute` | | C | `feature/moderation/StaffScreen.kt` | Admins only: list staff, search users, promote / demote moderators (`modStaff`, `searchUsers`, `setUserRole`) |
+| `StaffRoute` | | C | `feature/moderation/StaffScreen.kt` | Admins only: list staff, search users as you type, promote / demote moderators (`modStaff`, `searchUsers`, `setUserRole`) |
 
 Shared non-route UI owned by C with **final signatures** (A and B call them now, C fills them in):
 `ReportSheet(targetType, targetId, onDismiss, onReported)` in `feature/moderation/ReportSheet.kt` and `BlockUserDialog(user, onDismiss, onDone)` in `feature/profile/BlockUserDialog.kt`.
+The sheet shows its own "Report sent" confirmation, so callers don't need a snackbar. The server ignores a repeat report
+while the first is open, so the sheet remembers (for the app session, `ReportedTargets`) what was reported and reopens
+on "You already reported this" instead of the form.
 
 Route args are primitives/strings. Use enum *names* as strings if you need an enum (navigation's KMP enum support is uneven).
 
@@ -250,6 +253,10 @@ are code identifiers, like the `com.campusmarket` packages.)
   renders the main screens in light and dark against a running dev server (read-only); `*UiCoreScreenshotTest*` renders
   the auth screens, the shell's loading / offline states, the tab bar badge, 1.3× text and a gallery of the shared
   components (mostly against a fake server). Use `127.0.0.1`: the test JVM may not reach `localhost` over IPv6.
+  `ProfileModerationScreenshotTest` (same variables) covers every profile and moderation screen as students, a
+  moderator and an admin; `ProfileModerationStatesScreenshotTest` (only `CAMPUS_MARKET_SCREENSHOTS`) renders states the
+  demo data lacks (many ratings, photo avatars from `CAMPUS_MARKET_SHOT_PHOTOS`, loading, errors, a busy log) against a
+  fake server. Both honour `CAMPUS_MARKET_FONT_SCALE=1.3`.
 - Copy: plain English strings inline. No string resources yet (single locale). Sentence case. Money always via `Format.price` / `PriceText`.
 - Text inputs: enforce `Limits` with `maxLength` and `Validate.*`. The server stays authoritative, so always surface `ApiError.fields`.
 - Never call `HttpClient` directly from features, never store tokens, never load server URLs without `RemoteImage` / `ExternalLinks`.

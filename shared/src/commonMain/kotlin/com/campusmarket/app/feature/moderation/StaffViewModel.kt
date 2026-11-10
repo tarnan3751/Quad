@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.campusmarket.app.data.ApiClient
 import com.campusmarket.app.data.ApiError
-import com.campusmarket.app.ui.label
 import com.campusmarket.app.ui.state.EventQueue
 import com.campusmarket.app.ui.state.UiState
 import com.campusmarket.app.ui.state.UserMessages
@@ -13,6 +12,7 @@ import com.campusmarket.core.StaffMember
 import com.campusmarket.core.UserRole
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -20,6 +20,8 @@ import kotlinx.coroutines.launch
 
 /** Minimum characters before the admin lookup is sent (the server returns nothing below this). */
 const val STAFF_SEARCH_MIN_CHARS = 2
+
+private const val SEARCH_DEBOUNCE_MS = 350L
 
 /** The role a member can be switched to: moderators go back to student, students become moderators. Null = fixed (admins). */
 fun roleToggleTarget(member: StaffMember): UserRole? = when (member.role) {
@@ -68,31 +70,39 @@ class StaffViewModel(private val api: ApiClient, private val messages: UserMessa
         load(_staff) { api.modStaff() }
     }
 
+    /** Searches as you type, once typing pauses (the keyboard's search action skips the wait). */
     fun onQuery(text: String) {
         _query.value = text
+        searchJob?.cancel()
         if (text.trim().length < STAFF_SEARCH_MIN_CHARS) {
-            searchJob?.cancel()
             _search.value = StaffSearch.Idle
+            return
+        }
+        searchJob = viewModelScope.launch {
+            delay(SEARCH_DEBOUNCE_MS)
+            search(text.trim())
         }
     }
 
-    /** Looks the typed text up (call from the keyboard's search action or the search button). */
+    /** Looks the typed text up now (the keyboard's search action). */
     fun runSearch() {
         val q = _query.value.trim()
+        searchJob?.cancel()
         if (q.length < STAFF_SEARCH_MIN_CHARS) {
             _search.value = StaffSearch.Idle
             return
         }
-        searchJob?.cancel()
+        searchJob = viewModelScope.launch { search(q) }
+    }
+
+    private suspend fun search(q: String) {
         _search.value = StaffSearch.Searching
-        searchJob = viewModelScope.launch {
-            _search.value = try {
-                StaffSearch.Results(q, api.searchUsers(q))
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: ApiError) {
-                StaffSearch.Failed(e.fields.values.firstOrNull() ?: e.message)
-            }
+        _search.value = try {
+            StaffSearch.Results(q, api.searchUsers(q))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: ApiError) {
+            StaffSearch.Failed(e.fields.values.firstOrNull() ?: e.message)
         }
     }
 
@@ -109,7 +119,7 @@ class StaffViewModel(private val api: ApiClient, private val messages: UserMessa
             onSuccess = {
                 messages.show(
                     if (role == UserRole.MODERATOR) "${member.user.displayName} is now a moderator"
-                    else "${member.user.displayName} is now a ${role.label.lowercase()}",
+                    else "${member.user.displayName} is no longer a moderator",
                 )
                 reloadAfterChange()
                 actionDone.send(Unit)

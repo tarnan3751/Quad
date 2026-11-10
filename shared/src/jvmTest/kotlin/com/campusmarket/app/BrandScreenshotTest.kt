@@ -207,7 +207,7 @@ class BrandScreenshotTest {
             app(dark, "moderator@state.edu") {
                 awaitText("Browse")
                 click("Profile")
-                click("Moderation queue")
+                click("Reports")
                 waitForIdle()
                 shot("$t-13-moderation-queue")
             }
