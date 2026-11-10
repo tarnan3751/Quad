@@ -42,6 +42,8 @@ data class AppConfig(
     val supportEmail: String? = null,
     /** Per-user abuse limits on authenticated actions (see [UserRateLimits]); `USER_RATE_LIMITS_ENABLED=false` turns them off. */
     val userRateLimits: UserRateLimits = UserRateLimits(),
+    /** How long `GET /categories` may serve a campus's counts from memory (`CATEGORY_COUNTS_TTL_SECONDS`); 0 counts on every request. */
+    val categoryCountsTtlSeconds: Long = 30,
 ) {
     /**
      * Problems that make this configuration unsafe to serve real users with; empty when it's fine. Outside dev mode
@@ -99,6 +101,7 @@ data class AppConfig(
                 mailFrom = s("MAIL_FROM") ?: d.mailFrom,
                 legalEntityName = s("LEGAL_ENTITY_NAME"),
                 supportEmail = s("SUPPORT_EMAIL"),
+                categoryCountsTtlSeconds = s("CATEGORY_COUNTS_TTL_SECONDS")?.toLong()?.coerceAtLeast(0) ?: d.categoryCountsTtlSeconds,
                 userRateLimits = d.userRateLimits.copy(
                     enabled = s("USER_RATE_LIMITS_ENABLED")?.toBooleanStrictOrNull() ?: d.userRateLimits.enabled,
                 ),

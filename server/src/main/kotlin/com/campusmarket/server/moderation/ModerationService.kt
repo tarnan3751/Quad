@@ -46,6 +46,8 @@ import java.util.UUID
 
 private const val MAX_SUMMARY = 200
 private const val SEARCH_MAX = 20
+/** Users read in name order before the search turns to its index. */
+private const val SEARCH_WALK = 1000
 private const val SEARCH_MIN_CHARS = 2
 private const val SEARCH_MAX_CHARS = 100
 private const val MAX_SUSPEND_DAYS = 3650
@@ -334,15 +336,32 @@ internal class ModerationService(private val deps: AppDeps) {
         if (q.length < SEARCH_MIN_CHARS) return emptyList()
         if (q.length > SEARCH_MAX_CHARS) invalidField("q", "Search text must be at most $SEARCH_MAX_CHARS characters")
         val like = "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
-        return renderStaff(
-            c,
-            c.query(
+        // Same two steps as the listing search: a text many users match fills the page from the first users in name
+        // order; otherwise its matches come from the gram index, one lookup per field (an OR of the two would have
+        // every candidate row's grams computed again).
+        var rows = c.query(
+            """SELECT id, role, email
+               FROM (SELECT id, role, email, display_name, lower(display_name) AS name_key FROM users
+                     WHERE email_verified AND deleted_at IS NULL ORDER BY lower(display_name), id LIMIT $SEARCH_WALK) u
+               WHERE email ILIKE ? OR display_name ILIKE ?
+               ORDER BY name_key, id LIMIT ?""",
+            like, like, SEARCH_MAX,
+        ) { it.toStaffRow() }
+        if (rows.size < SEARCH_MAX) {
+            rows = c.query(
                 """SELECT id, role, email FROM users
-                   WHERE email_verified AND deleted_at IS NULL AND (email ILIKE ? OR display_name ILIKE ?)
+                   WHERE id IN (SELECT id FROM users
+                                WHERE email_verified AND deleted_at IS NULL
+                                  AND search_grams('', email) @> search_pattern_grams('', ?) AND email ILIKE ?
+                                UNION ALL
+                                SELECT id FROM users
+                                WHERE email_verified AND deleted_at IS NULL
+                                  AND search_grams('', display_name) @> search_pattern_grams('', ?) AND display_name ILIKE ?)
                    ORDER BY lower(display_name), id LIMIT ?""",
-                like, like, SEARCH_MAX,
-            ) { it.toStaffRow() },
-        )
+                q, like, q, like, SEARCH_MAX,
+            ) { it.toStaffRow() }
+        }
+        return renderStaff(c, rows)
     }
 
     /**

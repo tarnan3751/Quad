@@ -174,4 +174,32 @@ class StaffRolesTest {
         assertEquals(20, search("bulk person").body<List<StaffMember>>().size)
         search("x".repeat(101)).assertApiError(HttpStatusCode.BadRequest, ErrorCodes.VALIDATION)
     }
+
+    @Test
+    fun searchFindsRareAndCommonTextAmongManyUsersInNameOrder() = apiTest { env ->
+        val admin = env.user("boss", role = UserRole.ADMIN)
+        // 1,500 users sort before the rare ones, more than the search reads in name order
+        env.db.txBlocking { c ->
+            c.update(
+                """INSERT INTO users (id, email, password_hash, display_name, campus_domain, email_verified)
+                   SELECT gen_random_uuid(), 'crowd' || g || '@state.edu', 'x', 'Crowd ' || lpad(g::text, 4, '0'), 'state.edu', true
+                   FROM generate_series(1, 1500) g""",
+            )
+        }
+        val zed = env.user("Zed Quixote")
+        val zoe = env.user("Zoe Quixote")
+        val byMail = env.user("Yuri", domain = "quixote.edu")
+        val deleted = env.user("Zach Quixote")
+        env.db.txBlocking { c -> c.update("UPDATE users SET deleted_at = now() WHERE id = ?", deleted.id) }
+        suspend fun search(q: String) = client.get(ApiRoutes.MOD_USER_SEARCH + "?q=" + java.net.URLEncoder.encode(q, "UTF-8")) { auth(admin) }
+            .body<List<StaffMember>>()
+
+        assertEquals(listOf(byMail, zed, zoe).map { it.id.toString() }, search("QUIXOTE").map { it.user.id })
+        assertEquals(listOf(zoe.id.toString()), search("oe q").map { it.user.id })
+        assertEquals(emptyList(), search("zach").map { it.user.id })
+        assertEquals(emptyList(), search("%%").map { it.user.id })
+        assertEquals((1..20).map { "Crowd %04d".format(it) }, search("crowd").map { it.user.displayName })
+        assertEquals(listOf("boss") + (1..19).map { "Crowd %04d".format(it) }, search("@state.edu").map { it.user.displayName })
+        assertEquals(listOf("Crowd 1499"), search("crowd 1499").map { it.user.displayName })
+    }
 }
