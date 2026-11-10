@@ -232,13 +232,15 @@ class UiCoreScreenshotTest {
     private fun render(
         dark: Boolean,
         fontScale: Float = 1f,
+        landscape: Boolean = false,
         start: () -> Unit,
         content: @Composable () -> Unit = { App() },
         block: SkikoComposeUiTest.() -> Unit,
     ) {
         start()
         try {
-            runSkikoComposeUiTest(size = Size(412f * 2, 892f * 2), density = Density(2f, fontScale)) {
+            val size = if (landscape) Size(892f * 2, 412f * 2) else Size(412f * 2, 892f * 2)
+            runSkikoComposeUiTest(size = size, density = Density(2f, fontScale)) {
                 setContent {
                     CompositionLocalProvider(LocalSystemTheme provides if (dark) SystemTheme.Dark else SystemTheme.Light) { content() }
                 }
@@ -350,6 +352,13 @@ class UiCoreScreenshotTest {
                     shot("$t-d05-pushed")
                 }
             }
+        }
+
+        // Landscape: the Welcome screen scrolls rather than squashing the hero (here with the suspension notice).
+        render(false, landscape = true, start = { startFake(signedIn(), FakeBehaviour.Suspended) }) {
+            awaitText("suspended")
+            click("Close")
+            shot("light-g01-welcome-landscape")
         }
 
         // Large text (1.3×), light only.

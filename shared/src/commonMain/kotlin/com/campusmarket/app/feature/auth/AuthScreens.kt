@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -96,68 +98,77 @@ fun WelcomeScreen(nav: NavController) {
 
     // The hero's sky is amber at the top in both themes, so the status-bar icons over it are dark.
     StatusBarIcons(darkIcons = true)
-    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        // Golden Hour hero: the mark in the sky, the wordmark and tagline on the berry "horizon" (white type stays
-        // on the darker half of the gradient).
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .background(CampusTheme.heroGradient, RoundedCornerShape(bottomStart = 36.dp, bottomEnd = 36.dp))
-                .statusBarsPadding()
-                .padding(horizontal = Spacing.xl, vertical = Spacing.xl),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Spacer(Modifier.weight(1f))
-            QuadMark(size = 120.dp, modifier = Modifier.semantics { contentDescription = "Quad" })
-            Spacer(Modifier.weight(1f))
-            QuadWordmark(fontSize = 64.sp)
-            Text(
-                "Buy and sell with people on your campus",
-                style = MaterialTheme.typography.titleLarge,
-                color = Color.White,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.widthIn(max = 272.dp).padding(top = Spacing.xs),
-            )
-        }
-
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .navigationBarsPadding()
-                .padding(start = Spacing.xl, end = Spacing.xl, top = Spacing.xl, bottom = Spacing.lg),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(Spacing.md),
-        ) {
-            signOutReason?.let { SignOutNotice(it, Modifier.fillMaxWidth().widthIn(max = FormMaxWidth)) }
-            PrimaryButton(
-                "Create account",
-                onClick = { nav.navigate(RegisterRoute) },
-                modifier = Modifier.fillMaxWidth().widthIn(max = FormMaxWidth),
-            )
-            SecondaryButton(
-                "Sign in",
-                onClick = { nav.navigate(LoginRoute()) },
-                modifier = Modifier.fillMaxWidth().widthIn(max = FormMaxWidth),
-            )
-            Text(
-                "Only verified campus (.edu) emails can join.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-            )
-            // Debug builds only (release ignores overrides): which server this build talks to, and a way to change it.
-            if (server.canOverride) {
-                TextButton(
-                    onClick = { showServer = true },
-                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)),
-                ) {
-                    Text("Dev server · ${baseUrl.substringAfter("://")}", style = MaterialTheme.typography.labelSmall)
+    // Fills the screen, but scrolls on short ones (landscape, large text, a sign-out notice) instead of squashing.
+    BoxWithConstraints(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        // On a short screen the hero gets a fixed, smaller size and the page scrolls; otherwise it takes what's left.
+        val compact = maxHeight < 600.dp
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).heightIn(min = maxHeight)) {
+            WelcomeHero(compact, Modifier.fillMaxWidth().then(if (compact) Modifier.height(280.dp) else Modifier.weight(1f)))
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(start = Spacing.xl, end = Spacing.xl, top = Spacing.xl, bottom = Spacing.lg),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(Spacing.md),
+            ) {
+                signOutReason?.let { SignOutNotice(it, Modifier.fillMaxWidth().widthIn(max = FormMaxWidth)) }
+                PrimaryButton(
+                    "Create account",
+                    onClick = { nav.navigate(RegisterRoute) },
+                    modifier = Modifier.fillMaxWidth().widthIn(max = FormMaxWidth),
+                )
+                SecondaryButton(
+                    "Sign in",
+                    onClick = { nav.navigate(LoginRoute()) },
+                    modifier = Modifier.fillMaxWidth().widthIn(max = FormMaxWidth),
+                )
+                Text(
+                    "Only verified campus (.edu) emails can join.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                )
+                // Debug builds only (release ignores overrides): which server this build talks to, and a way to change it.
+                if (server.canOverride) {
+                    TextButton(
+                        onClick = { showServer = true },
+                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant),
+                    ) {
+                        Text("Dev server · ${baseUrl.substringAfter("://")}", style = MaterialTheme.typography.labelSmall)
+                    }
                 }
             }
         }
     }
     if (showServer) ServerSettingsDialog(onDismiss = { showServer = false })
+}
+
+/**
+ * Golden Hour hero: the mark in the sky, the wordmark and tagline on the berry "horizon" (white type stays on the
+ * darker half of the gradient).
+ */
+@Composable
+private fun WelcomeHero(compact: Boolean, modifier: Modifier) {
+    Column(
+        modifier
+            .background(CampusTheme.heroGradient, RoundedCornerShape(bottomStart = 36.dp, bottomEnd = 36.dp))
+            .statusBarsPadding()
+            .padding(horizontal = Spacing.xl, vertical = if (compact) Spacing.lg else Spacing.xl),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Spacer(Modifier.weight(1f))
+        QuadMark(size = if (compact) 64.dp else 120.dp, modifier = Modifier.semantics { contentDescription = "Quad" })
+        Spacer(Modifier.weight(1f))
+        QuadWordmark(fontSize = if (compact) 48.sp else 64.sp)
+        Text(
+            "Buy and sell with people on your campus",
+            style = MaterialTheme.typography.titleLarge,
+            color = Color.White,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.widthIn(max = 272.dp).padding(top = Spacing.xs),
+        )
+    }
 }
 
 // ---------------------------------------------------------------------------------------------------- register
