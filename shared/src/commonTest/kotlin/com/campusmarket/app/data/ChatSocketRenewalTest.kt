@@ -31,8 +31,13 @@ class ChatSocketRenewalTest {
         var closedByClient = false
         var answerPings = true
         private var rejected = false
+        private var death: Exception? = null
 
-        override suspend fun receive(): String? = incoming.receiveCatching().getOrNull()
+        override suspend fun receive(): String? {
+            val result = incoming.receiveCatching()
+            death?.let { throw it }
+            return result.getOrNull()
+        }
 
         override suspend fun send(text: String) {
             sent += text
@@ -41,10 +46,20 @@ class ChatSocketRenewalTest {
 
         override suspend fun close() {
             closedByClient = true
+            death?.let { throw it }
             incoming.close()
         }
 
-        override suspend fun wasRejected(): Boolean = rejected
+        override suspend fun wasRejected(): Boolean {
+            death?.let { throw it }
+            return rejected
+        }
+
+        /** The connection is gone without a close frame: everything on it throws from now on, as OkHttp's does. */
+        fun dies(cause: Exception) {
+            death = cause
+            incoming.close()
+        }
 
         fun push(event: ChatEvent) {
             incoming.trySend(ApiJson.encodeToString(ChatEvent.serializer(), event))
@@ -236,6 +251,42 @@ class ChatSocketRenewalTest {
         assertEquals(2, f.connections.size)
         assertEquals("access-1", f.connections.last().token)
         assertEquals(0, f.refreshes)
+    }
+
+    @Test
+    fun aSocketDyingMidReadIsADropNotACrash() = runTest {
+        val f = Fixture(this)
+        runCurrent()
+        f.connections.single().push(message("m1"))
+        runCurrent()
+
+        // The server is killed / the network goes: the read fails with EOF, and so does asking how it closed.
+        f.connections.single().dies(kotlinx.io.EOFException("\\n not found: limit=0 content=…"))
+        runCurrent()
+        assertEquals(ChatSocket.Status.Reconnecting, f.socket.status.value)
+        assertEquals(1, f.connections.size)
+
+        // The usual backoff and reconnect follow; nothing escaped into the app scope (runTest would report it).
+        advanceTimeBy(ChatSocket.MIN_BACKOFF_MS + 600)
+        runCurrent()
+        assertEquals(2, f.connections.size)
+        assertEquals(ChatSocket.Status.Connected, f.socket.status.value)
+        assertEquals(0, f.refreshes)
+        f.connections.last().push(message("m2"))
+        runCurrent()
+        assertEquals(2, f.events.size)
+
+        // The same while two sockets are open for a handover: the old one dying in its grace period changes nothing.
+        advanceTimeBy(TOKEN_LIFETIME - ChatSocket.RENEW_BEFORE_EXPIRY_MS)
+        runCurrent()
+        assertEquals(3, f.connections.size)
+        f.connections[1].dies(java.net.SocketException("Software caused connection abort"))
+        advanceTimeBy(ChatSocket.HANDOVER_GRACE_MS + 100)
+        runCurrent()
+        assertEquals(ChatSocket.Status.Connected, f.socket.status.value)
+        f.connections.last().push(message("m3"))
+        runCurrent()
+        assertEquals(3, f.events.size)
     }
 
     @Test

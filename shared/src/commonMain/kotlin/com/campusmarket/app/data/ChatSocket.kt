@@ -147,7 +147,15 @@ class ChatSocket(
                 if (connection != null) {
                     attempt = 0
                     val openedAt = nowMillis()
-                    rejectedToken = serve(out, connection, token)
+                    rejectedToken = try {
+                        serve(out, connection, token)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        // Whatever a dying socket throws (EOF, connection abort) is a drop like any other: this loop
+                        // runs in the app scope, where an exception that got out would take the process down.
+                        null
+                    }
                     if (nowMillis() - openedAt >= STABLE_MS) skipBackoffOnReject = true
                 }
 
@@ -236,10 +244,10 @@ class ChatSocket(
                         retiring += old
                         launch {
                             delay(HANDOVER_GRACE_MS)
-                            old.close()
+                            runCatching { old.close() }
                         }
                     }
-                    token.takeIf { current.wasRejected() }
+                    token.takeIf { wasRejected(current) }
                 } finally {
                     pinger.cancel()
                     coroutineContext.cancelChildren()
@@ -283,6 +291,16 @@ class ChatSocket(
         }
         return connection
     }
+
+    /** A socket that died without a close frame (network gone, server killed) was dropped, not rejected. */
+    private suspend fun wasRejected(connection: ChatConnection): Boolean =
+        try {
+            connection.wasRejected()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            false
+        }
 
     /** How long a socket opened with [token] may run before it should be replaced. */
     private fun renewalDelay(token: String): Long {
@@ -362,8 +380,15 @@ private class KtorChatConnection(private val session: DefaultClientWebSocketSess
         }
     }
 
+    // closeReason fails with the socket's own exception when the connection died without a close frame.
     override suspend fun wasRejected(): Boolean =
-        withTimeoutOrNull(CLOSE_TIMEOUT_MS) { session.closeReason.await() }?.code == CloseReason.Codes.VIOLATED_POLICY.code
+        try {
+            withTimeoutOrNull(CLOSE_TIMEOUT_MS) { session.closeReason.await() }?.code == CloseReason.Codes.VIOLATED_POLICY.code
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            false
+        }
 
     private companion object {
         const val CLOSE_TIMEOUT_MS = 2_000L
