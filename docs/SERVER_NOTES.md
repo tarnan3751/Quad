@@ -65,6 +65,12 @@ Decisions made while implementing the server that go beyond `CONTRACT.md`. Clien
 
 ## Listings
 - `GET /listings` params: `q`; `category`, `condition` (enum names, comma-separated); `minPrice`, `maxPrice` (cents, inclusive); `sort` (`NEWEST|PRICE_ASC|PRICE_DESC|RELEVANCE`; default RELEVANCE with `q`, else NEWEST); `limit`; `cursor`.
+- `q` of three or more letters/digits is a full-text search (stemmed, all terms required, the last term matches as a
+  prefix so results follow the typing). Shorter queries, stop words ("the") and punctuation ("%") match as a
+  case-insensitive substring of the title or description.
+- `RELEVANCE` is three classes, each newest first: every term in the title, then some of the terms in the title, then
+  description only (substring queries: title starts with the text, title contains it, description only). It is not a
+  score: a listing that repeats a word doesn't move up.
 - A cursor is only valid with the sort/filters that produced it: restart from page 1 whenever query, filters or sort change.
 - `/me/listings?status=ACTIVE,SOLD` uses the same list format.
 - Edit/delete someone else's listing → 403; editing a non-ACTIVE listing → 409; deleting RESERVED/SOLD → 409.

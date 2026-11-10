@@ -7,14 +7,14 @@
 -- '^^' + the first one / two characters marks how the text starts (for "title starts with").
 CREATE FUNCTION search_grams(scope text, s text) RETURNS text[]
 LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE AS $$
+    -- one pass over the characters (substr() by position would make this quadratic in the length of the text)
     SELECT ARRAY(
         SELECT DISTINCT scope || '|' || g
-        FROM lower(s) t,
-             LATERAL (SELECT substr(t, i, n) AS g
-                      FROM generate_series(1, length(t)) i, generate_series(1, 2) n
-                      WHERE i + n - 1 <= length(t)
-                      UNION ALL
-                      SELECT '^^' || left(t, n) FROM generate_series(1, 2) n WHERE length(t) >= n) x)
+        FROM (SELECT c, lead(c) OVER (ORDER BY i) AS next, i
+              FROM string_to_table(lower(s), NULL) WITH ORDINALITY AS t(c, i)) ch,
+             LATERAL (VALUES (c), (c || next),
+                             (CASE WHEN i = 1 THEN '^^' || c END), (CASE WHEN i = 1 THEN '^^' || c || next END)) x(g)
+        WHERE g IS NOT NULL)
 $$;
 
 -- The pieces every text containing q must have: q's two-character pieces, or q itself when it is one character.

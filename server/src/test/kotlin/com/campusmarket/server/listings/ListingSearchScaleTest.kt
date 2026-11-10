@@ -117,6 +117,17 @@ class ListingSearchScaleTest {
     }
 
     @Test
+    fun gramsAreTheOneAndTwoCharacterPiecesOfTheLowercasedText() = apiTest { env ->
+        fun grams(call: String, text: String) = env.db.txBlocking { c -> c.query("SELECT unnest($call)", "c", text) { it.getString(1) }.toSet() }
+        assertEquals(setOf("c|t", "c|v", "c|tv", "c|^^t", "c|^^tv"), grams("search_grams(?, ?)", "Tv"))
+        assertEquals(setOf("c|a", "c|^^a"), grams("search_grams(?, ?)", "A"))
+        assertEquals(emptySet(), grams("search_grams(?, ?)", ""))
+        assertEquals(setOf("c|é", "c| ", "c|🙂", "c|é ", "c| 🙂", "c|^^é", "c|^^é "), grams("search_grams(?, ?)", "É 🙂"))
+        assertEquals(setOf("c|t"), grams("search_pattern_grams(?, ?)", "T"))
+        assertEquals(setOf("c|th", "c|he", "c|e ", "c| o", "c|of"), grams("search_pattern_grams(?, ?)", "The of"))
+    }
+
+    @Test
     fun everyIndexedFormIsServedByItsIndex() = apiTest { env ->
         // Enough rows that reading a whole index costs visibly more than looking something up in the right one, and
         // vacuumed, as a GIN index whose entries are all still in its pending list is costed as a full read too.
