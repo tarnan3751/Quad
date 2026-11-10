@@ -32,7 +32,17 @@ android {
     }
     buildTypes {
         getByName("release") {
-            isMinifyEnabled = false
+            // R8 (full mode) shrinks, optimizes and obfuscates; unused resources are dropped afterwards.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+        }
+        // Release code (R8, not debuggable) signed with the local debug key and allowed to reach the HTTP dev server
+        // (src/benchmark/res/xml): for measuring performance and checking R8 on an emulator. Never distribute it.
+        create("benchmark") {
+            initWith(getByName("release"))
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += "release"
         }
     }
     compileOptions {
