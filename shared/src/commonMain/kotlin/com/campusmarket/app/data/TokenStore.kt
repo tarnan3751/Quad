@@ -123,11 +123,11 @@ class SecureTokenStore(
  * NOT SECURE. [SecretStorage] over plain multiplatform-settings (java.util.prefs on desktop). Only for the
  * desktop dev harness; never use it for a shipping platform.
  */
-class SettingsSecretStorage(private val settings: Settings) : SecretStorage {
+class SettingsSecretStorage(private val settings: Settings, private val key: String = SecureTokenStore.LEGACY_KEY) : SecretStorage {
     override val isSecure: Boolean get() = false
-    override fun read(): String? = settings.getStringOrNull(SecureTokenStore.LEGACY_KEY)
-    override fun write(value: String) = settings.putString(SecureTokenStore.LEGACY_KEY, value)
-    override fun delete() = settings.remove(SecureTokenStore.LEGACY_KEY)
+    override fun read(): String? = settings.getStringOrNull(key)
+    override fun write(value: String) = settings.putString(key, value)
+    override fun delete() = settings.remove(key)
 }
 
 /** Non-persistent store for tests and previews. */

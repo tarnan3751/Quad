@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.net.Uri
 import com.campusmarket.app.data.SecretStorage
+import com.campusmarket.app.di.OutboxSecrets
 import com.campusmarket.app.di.initKoin
 import io.ktor.client.HttpClient
 import io.ktor.client.HttpClientConfig
@@ -36,6 +37,7 @@ fun initCampusMarket(context: Context) {
         platformModule = module {
             single<PlatformUrlLauncher> { AndroidUrlLauncher(app) }
             single<SecretStorage> { KeystoreSecretStorage(app) }
+            single<SecretStorage>(OutboxSecrets) { KeystoreSecretStorage(app, name = "outbox") }
             single<NetworkMonitor> { AndroidNetworkMonitor(app) }
         },
     )

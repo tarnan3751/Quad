@@ -291,8 +291,12 @@ class ApiClient(
     suspend fun messages(conversationId: String, cursor: String? = null, limit: Int? = null): Page<Message> =
         request(HttpMethod.Get, ApiRoutes.conversationMessages(conversationId)) { page(cursor, limit) }
 
-    suspend fun sendMessage(conversationId: String, body: String): Message =
-        request(HttpMethod.Post, ApiRoutes.conversationMessages(conversationId)) { json(SendMessageRequest(body)) }
+    /**
+     * [clientId] names the message (see [SendMessageRequest]): sending it again with the same id returns the stored
+     * message, so a send whose response was lost can be retried without creating a duplicate.
+     */
+    suspend fun sendMessage(conversationId: String, body: String, clientId: String? = null): Message =
+        request(HttpMethod.Post, ApiRoutes.conversationMessages(conversationId)) { json(SendMessageRequest(body, clientId)) }
 
     suspend fun markConversationRead(conversationId: String) {
         request<OkResponse>(HttpMethod.Post, ApiRoutes.conversationRead(conversationId))
@@ -411,11 +415,11 @@ class ApiClient(
         return refreshTokens(staleAccessToken = session.accessToken)
     }
 
-    /** Forces a refresh (e.g. the websocket was rejected). Returns the new access token, or null if signed out. */
-    suspend fun forceRefresh(): String? {
-        val session = tokens.current() ?: return null
-        return refreshTokens(staleAccessToken = session.accessToken)
-    }
+    /**
+     * An access token other than [replacing] (the websocket's token is about to expire, or was rejected): refreshes
+     * unless someone already has. Null if signed out. Used by [ChatSocket].
+     */
+    suspend fun refreshedAccessToken(replacing: String): String? = withContext(requestContext) { refreshTokens(staleAccessToken = replacing) }
 
     /**
      * Single-flight refresh. If another caller already replaced [staleAccessToken] while we waited for the lock, its

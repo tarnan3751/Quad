@@ -19,6 +19,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.campusmarket.app.data.ApiClient
 import com.campusmarket.app.data.ApiError
+import com.campusmarket.app.data.SessionManager
 import com.campusmarket.app.ui.Validate
 import com.campusmarket.app.ui.components.DialogConfirmButton
 import com.campusmarket.app.ui.components.DialogDismissButton
@@ -57,7 +58,7 @@ data class DeleteAccountState(
 )
 
 /** Info → (Delete my account) → Credentials (email + password again) → Confirm (are you sure?) → Done. */
-class DeleteSuspendedAccountViewModel(private val api: ApiClient) : ViewModel() {
+class DeleteSuspendedAccountViewModel(private val api: ApiClient, private val session: SessionManager) : ViewModel() {
     private val _state = MutableStateFlow(DeleteAccountState())
     val state: StateFlow<DeleteAccountState> = _state.asStateFlow()
 
@@ -103,7 +104,7 @@ class DeleteSuspendedAccountViewModel(private val api: ApiClient) : ViewModel() 
         _state.update { it.copy(submitting = true, formError = null) }
         viewModelScope.launch {
             try {
-                api.deleteAccountWithCredentials(s.email.trim(), s.password)
+                session.deleteAccountWithCredentials(s.email.trim(), s.password)
                 _state.update { it.copy(step = DeleteAccountStep.Done, password = "") }
             } catch (e: CancellationException) {
                 throw e
