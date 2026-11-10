@@ -32,11 +32,12 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -75,18 +76,19 @@ fun SkeletonBox(modifier: Modifier = Modifier, shape: Shape = MaterialTheme.shap
         Box(
             modifier
                 .clip(shape)
-                .drawBehind {
-                    drawRect(base)
-                    // A band three widths wide travelling from off the left edge to off the right edge.
-                    val travel = size.width * 3f
-                    val x = -size.width + travel * progress.value
-                    drawRect(
-                        Brush.linearGradient(
-                            0f to base, 0.5f to highlight, 1f to base,
-                            start = Offset(x - size.width, 0f),
-                            end = Offset(x, size.height),
-                        ),
+                .drawWithCache {
+                    // A band three widths wide travelling from off the left edge to off the right edge. The gradient
+                    // is built once per size and moved by translating the canvas, so a frame allocates nothing.
+                    val band = Brush.linearGradient(
+                        0f to base, 0.5f to highlight, 1f to base,
+                        start = Offset(-size.width, 0f),
+                        end = Offset(0f, size.height),
                     )
+                    onDrawBehind {
+                        drawRect(base)
+                        val x = -size.width + size.width * 3f * progress.value
+                        translate(left = x) { drawRect(band, topLeft = Offset(-x, 0f), size = size) }
+                    }
                 },
         )
     }

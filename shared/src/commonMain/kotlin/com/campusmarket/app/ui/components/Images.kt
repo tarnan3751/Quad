@@ -189,8 +189,10 @@ private fun avatarIndex(name: String): Int {
     return (h and Int.MAX_VALUE) % AvatarPalette.size
 }
 
+private val Whitespace = Regex("\\s+")
+
 internal fun initials(name: String): String {
-    val parts = name.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+    val parts = name.trim().split(Whitespace).filter { it.isNotEmpty() }
     return when {
         parts.isEmpty() -> "?"
         parts.size == 1 -> parts[0].take(1).uppercase()

@@ -39,6 +39,9 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 
 private const val LOAD_MORE_THRESHOLD = 5
 
+/** Every row of a paged list is the same kind of item, so the lazy list can reuse any row's nodes for another. */
+private const val PAGED_ITEM = "__item"
+
 /**
  * Infinite list for a [Paginator]: starts the first load if nobody has, full-screen [loading] (skeleton rows by
  * default) / error / [empty] states, pull-to-refresh, load-more near the end, and a retry footer.
@@ -95,11 +98,15 @@ fun <T> PagedLazyColumn(
                 if (paged.isEmpty) {
                     item(key = "__empty") { Box(Modifier.fillParentMaxSize()) { empty() } }
                 } else {
-                    items(count = paged.items.size, key = key?.let { k -> { index: Int -> k(paged.items[index]) } }) { index ->
+                    items(
+                        count = paged.items.size,
+                        key = key?.let { k -> { index: Int -> k(paged.items[index]) } },
+                        contentType = { PAGED_ITEM },
+                    ) { index ->
                         itemContent(paged.items[index])
                     }
                 }
-                item(key = "__footer") { PagingFooter(paged, paginator::retry) }
+                item(key = "__footer", contentType = "__footer") { PagingFooter(paged, paginator::retry) }
             }
         }
     }
@@ -149,11 +156,15 @@ fun <T> PagedLazyGrid(
                 if (paged.isEmpty) {
                     item(key = "__empty", span = { GridItemSpan(maxLineSpan) }) { Box(Modifier.fillMaxWidth().padding(top = 48.dp)) { empty() } }
                 } else {
-                    items(count = paged.items.size, key = key?.let { k -> { index: Int -> k(paged.items[index]) } }) { index ->
+                    items(
+                        count = paged.items.size,
+                        key = key?.let { k -> { index: Int -> k(paged.items[index]) } },
+                        contentType = { PAGED_ITEM },
+                    ) { index ->
                         itemContent(paged.items[index])
                     }
                 }
-                item(key = "__footer", span = { GridItemSpan(maxLineSpan) }) { PagingFooter(paged, paginator::retry) }
+                item(key = "__footer", span = { GridItemSpan(maxLineSpan) }, contentType = "__footer") { PagingFooter(paged, paginator::retry) }
             }
         }
     }

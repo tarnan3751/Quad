@@ -129,3 +129,13 @@ kotlin {
 dependencies {
     androidRuntimeClasspath(libs.compose.uiTooling)
 }
+
+composeCompiler {
+    stabilityConfigurationFiles.add(layout.projectDirectory.file("compose-stability.conf"))
+    // Compiler reports for checking which composables skip: ./gradlew :shared:compileKotlinJvm -PcomposeReports
+    // (written to shared/build/compose-reports).
+    if (providers.gradleProperty("composeReports").isPresent) {
+        reportsDestination = layout.buildDirectory.dir("compose-reports")
+        metricsDestination = layout.buildDirectory.dir("compose-reports")
+    }
+}
