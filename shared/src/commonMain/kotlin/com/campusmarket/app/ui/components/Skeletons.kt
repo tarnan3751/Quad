@@ -173,5 +173,13 @@ fun ListSkeleton(
     }
 }
 
+/** [rows] of [ListRowSkeleton] in a plain column, for a list inside a sheet or a scrolling screen. */
+@Composable
+fun ListRowSkeletons(rows: Int, modifier: Modifier = Modifier, leading: SkeletonLeading = SkeletonLeading.Thumbnail) {
+    ShimmerGroup {
+        Column(modifier.fillMaxWidth().loadingSemantics()) { repeat(rows) { ListRowSkeleton(leading = leading) } }
+    }
+}
+
 /** Screen readers hear "Loading" once instead of a pile of empty boxes. */
 private fun Modifier.loadingSemantics(): Modifier = clearAndSetSemantics { contentDescription = "Loading" }

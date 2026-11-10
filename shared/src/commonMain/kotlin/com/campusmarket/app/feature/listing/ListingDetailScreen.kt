@@ -58,13 +58,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -85,6 +83,8 @@ import com.campusmarket.app.ui.components.PriceText
 import com.campusmarket.app.ui.components.PrimaryButton
 import com.campusmarket.app.ui.components.RatingSummary
 import com.campusmarket.app.ui.components.SecondaryButton
+import com.campusmarket.app.ui.components.ShimmerGroup
+import com.campusmarket.app.ui.components.SkeletonBox
 import com.campusmarket.app.ui.rememberTimeFormat
 import com.campusmarket.app.ui.state.UiState
 import com.campusmarket.app.ui.theme.CampusTheme
@@ -467,24 +467,22 @@ private fun PagerArrow(icon: ImageVector, description: String, visible: Boolean,
 @Composable
 private fun DetailSkeleton(modifier: Modifier) {
     BoxWithConstraints(modifier) {
-        val block = MaterialTheme.colorScheme.surfaceContainerHighest
         val photoHeight = if (maxWidth >= 600.dp && maxWidth > maxHeight) maxHeight else minOf(maxWidth, maxHeight * 0.6f, 560.dp)
-        Column {
-            Pulse(Modifier.fillMaxWidth().height(photoHeight), block)
-            Column(Modifier.padding(Spacing.screen), verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
-                SkeletonLine(96.dp, 28.dp, block)
-                SkeletonLine(280.dp, 22.dp, block)
-                SkeletonLine(140.dp, 14.dp, block)
-                Spacer(Modifier.height(Spacing.sm))
-                Pulse(Modifier.fillMaxWidth().height(150.dp).clip(MaterialTheme.shapes.medium), block)
+        val line = RoundedCornerShape(6.dp)
+        ShimmerGroup {
+            Column {
+                SkeletonBox(Modifier.fillMaxWidth().height(photoHeight), RectangleShape)
+                Column(Modifier.padding(Spacing.screen), verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
+                    SkeletonBox(Modifier.width(96.dp).height(28.dp), line)
+                    SkeletonBox(Modifier.width(280.dp).height(22.dp), line)
+                    SkeletonBox(Modifier.width(140.dp).height(14.dp), line)
+                    Spacer(Modifier.height(Spacing.sm))
+                    SkeletonBox(Modifier.fillMaxWidth().height(150.dp), MaterialTheme.shapes.medium)
+                }
             }
         }
     }
 }
-
-@Composable
-private fun SkeletonLine(width: Dp, height: Dp, color: Color) =
-    Pulse(Modifier.width(width).height(height).clip(RoundedCornerShape(6.dp)), color)
 
 // ---------------------------------------------------------------------------------------------------- action bar
 

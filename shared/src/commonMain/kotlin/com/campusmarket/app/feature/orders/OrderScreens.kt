@@ -37,7 +37,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
@@ -50,7 +49,6 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.campusmarket.app.feature.chat.ConversationRoute
-import com.campusmarket.app.feature.chat.RowSkeletons
 import com.campusmarket.app.ui.rememberTimeFormat
 import com.campusmarket.app.feature.listing.ListingDetailRoute
 import com.campusmarket.app.feature.profile.UserProfileRoute
@@ -109,13 +107,7 @@ fun OrdersScreen(route: OrdersRoute, nav: NavController) {
             }
             key(tab) {
                 val paginator = vm.paginator(tab)
-                val paged by paginator.state.collectAsStateWithLifecycle()
-                // Skeleton rows until the tab's first page arrives (each tab loads when first shown).
-                LaunchedEffect(paginator) {
-                    val s = paginator.state.value
-                    if (!s.loaded && !s.isLoading && s.error == null) paginator.refresh()
-                }
-                if (!paged.loaded && paged.error == null) RowSkeletons(thumb = 60.dp) else PagedLazyColumn(
+                PagedLazyColumn(
                     paginator,
                     key = { it.id },
                     empty = {

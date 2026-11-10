@@ -55,8 +55,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -75,6 +75,7 @@ import com.campusmarket.app.ui.components.ErrorState
 import com.campusmarket.app.ui.components.ListingStatusChip
 import com.campusmarket.app.ui.components.LocalUrlResolver
 import com.campusmarket.app.ui.components.PriceText
+import com.campusmarket.app.ui.components.SkeletonBox
 import com.campusmarket.app.ui.rememberTimeFormat
 import com.campusmarket.app.ui.state.PagedState
 import com.campusmarket.app.ui.state.Paginator
@@ -151,7 +152,7 @@ internal fun ListingImage(
     }
 }
 
-/** A gently breathing placeholder block (image loading, skeletons). */
+/** A gently breathing placeholder while a photo loads. */
 @Composable
 internal fun Pulse(modifier: Modifier, color: Color = MaterialTheme.colorScheme.surfaceContainerHighest) {
     val transition = rememberInfiniteTransition()
@@ -276,21 +277,21 @@ internal fun ListingTile(
 /** Placeholder with the tile's exact shape while the first page loads. */
 @Composable
 internal fun ListingTileSkeleton(modifier: Modifier = Modifier) {
-    val block = MaterialTheme.colorScheme.surfaceContainerHighest
+    val line = RoundedCornerShape(4.dp)
     Card(
         modifier = modifier,
         shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
-        Pulse(Modifier.fillMaxWidth().aspectRatio(1f), block)
+        SkeletonBox(Modifier.fillMaxWidth().aspectRatio(1f), RectangleShape)
         Column(
             Modifier.padding(start = Spacing.md, end = Spacing.md, top = 12.dp, bottom = Spacing.md),
             verticalArrangement = Arrangement.spacedBy(Spacing.sm),
         ) {
-            Pulse(Modifier.width(56.dp).height(16.dp).clip(RoundedCornerShape(4.dp)), block)
-            Pulse(Modifier.fillMaxWidth().height(12.dp).clip(RoundedCornerShape(4.dp)), block)
-            Pulse(Modifier.fillMaxWidth(0.6f).height(12.dp).clip(RoundedCornerShape(4.dp)), block)
-            Pulse(Modifier.fillMaxWidth(0.4f).height(10.dp).clip(RoundedCornerShape(4.dp)), block)
+            SkeletonBox(Modifier.width(56.dp).height(16.dp), line)
+            SkeletonBox(Modifier.fillMaxWidth().height(12.dp), line)
+            SkeletonBox(Modifier.fillMaxWidth(0.6f).height(12.dp), line)
+            SkeletonBox(Modifier.fillMaxWidth(0.4f).height(10.dp), line)
         }
     }
 }

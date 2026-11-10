@@ -64,7 +64,6 @@ import org.koin.compose.viewmodel.koinViewModel
 fun InboxScreen(nav: NavController) {
     val vm = koinViewModel<InboxViewModel>()
     val connection by vm.connection.collectAsStateWithLifecycle()
-    val paged by vm.conversations.state.collectAsStateWithLifecycle()
     val times = rememberTimeFormat()
     LifecycleResumeEffect(vm) {
         vm.onResume()
@@ -77,8 +76,7 @@ fun InboxScreen(nav: NavController) {
     Scaffold(topBar = { AppTopBar("Inbox") }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             ConnectionBanner(connection, onRetry = vm::retryConnection)
-            // The view model starts loading on creation; skeleton rows stand in until the first page arrives.
-            if (!paged.loaded && paged.error == null) RowSkeletons() else PagedLazyColumn(
+            PagedLazyColumn(
                 vm.conversations,
                 key = { it.id },
                 state = listState,

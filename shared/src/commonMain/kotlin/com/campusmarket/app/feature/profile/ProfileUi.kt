@@ -1,10 +1,5 @@
 package com.campusmarket.app.feature.profile
 
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -37,7 +32,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.addPathNodes
@@ -338,39 +332,5 @@ private fun RowScope.StatCell(stat: Stat, loading: Boolean) {
             textAlign = TextAlign.Center,
             maxLines = 2,
         )
-    }
-}
-
-// ---------------------------------------------------------------------------------------------------- skeleton
-
-/** A softly pulsing placeholder block in the shape of content that is still loading. */
-@Composable
-internal fun SkeletonBlock(modifier: Modifier = Modifier, shape: Shape = MaterialTheme.shapes.small) {
-    val pulse by rememberInfiniteTransition(label = "skeleton").animateFloat(
-        initialValue = 0.55f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(800), RepeatMode.Reverse),
-        label = "skeleton-alpha",
-    )
-    Box(modifier.alpha(pulse).background(MaterialTheme.colorScheme.surfaceContainerHighest, shape))
-}
-
-/** Placeholder rows for a list of people or items: [rows] × (circle/square + two lines). */
-@Composable
-internal fun SkeletonRows(rows: Int = 6, round: Boolean = true, modifier: Modifier = Modifier) {
-    Column(modifier.semantics { contentDescription = "Loading" }) {
-        repeat(rows) {
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = Spacing.screen, vertical = Spacing.md),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(Spacing.lg),
-            ) {
-                SkeletonBlock(Modifier.size(44.dp), if (round) RoundedCornerShape(50) else MaterialTheme.shapes.small)
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                    SkeletonBlock(Modifier.fillMaxWidth(0.55f).height(14.dp))
-                    SkeletonBlock(Modifier.fillMaxWidth(0.8f).height(10.dp))
-                }
-            }
-        }
     }
 }

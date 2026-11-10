@@ -4,9 +4,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -42,7 +42,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.campusmarket.app.feature.profile.MenuDivider
 import com.campusmarket.app.feature.profile.MenuGroup
-import com.campusmarket.app.feature.profile.SkeletonRows
 import com.campusmarket.app.navigation.LocalCurrentUser
 import com.campusmarket.app.ui.components.AppTextField
 import com.campusmarket.app.ui.components.AppTopBar
@@ -52,6 +51,8 @@ import com.campusmarket.app.ui.components.CollectEvents
 import com.campusmarket.app.ui.components.EmptyState
 import com.campusmarket.app.ui.components.ErrorState
 import com.campusmarket.app.ui.components.InlineError
+import com.campusmarket.app.ui.components.ListRowSkeletons
+import com.campusmarket.app.ui.components.SkeletonLeading
 import com.campusmarket.app.ui.components.StatusChip
 import com.campusmarket.app.ui.label
 import com.campusmarket.app.ui.state.UiState
@@ -115,11 +116,11 @@ private fun StaffContent(nav: NavController) {
             )
             when (val s = search) {
                 StaffSearch.Idle -> when (val st = staff) {
-                    UiState.Loading -> SkeletonRows(rows = 3, modifier = Modifier.padding(top = Spacing.md))
+                    UiState.Loading -> ListRowSkeletons(rows = 3, Modifier.padding(top = Spacing.md), leading = SkeletonLeading.Avatar)
                     is UiState.Error -> ErrorState(st.error, Modifier.fillMaxWidth().padding(top = Spacing.xl), onRetry = vm::reload)
                     is UiState.Content -> MemberGroup("Moderators and admins (${st.value.size})", st.value, me.id, onAction)
                 }
-                StaffSearch.Searching -> SkeletonRows(rows = 3, modifier = Modifier.padding(top = Spacing.md))
+                StaffSearch.Searching -> ListRowSkeletons(rows = 3, Modifier.padding(top = Spacing.md), leading = SkeletonLeading.Avatar)
                 is StaffSearch.Failed -> InlineError(s.message, Modifier.fillMaxWidth().padding(Spacing.screen))
                 is StaffSearch.Results ->
                     if (s.members.isEmpty()) {

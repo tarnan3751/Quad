@@ -7,15 +7,11 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
@@ -88,7 +84,6 @@ fun FavoritesScreen(nav: NavController) {
 fun MyListingsScreen(nav: NavController) {
     val vm = koinViewModel<MyListingsViewModel>()
     val filter by vm.filter.collectAsStateWithLifecycle()
-    val paged by vm.listings.state.collectAsStateWithLifecycle()
     LifecycleResumeEffect(vm) {
         vm.onResume()
         onPauseOrDispose { }
@@ -120,32 +115,28 @@ fun MyListingsScreen(nav: NavController) {
                     )
                 }
             }
-            if (!paged.loaded && paged.error == null) {
-                RowSkeletons()
-            } else {
-                // Fresh scroll position per filter.
-                val listState = rememberSaveable(filter, saver = LazyListState.Saver) { LazyListState() }
-                PagedLazyColumn(
-                    paginator = vm.listings,
-                    key = { it.id },
-                    state = listState,
-                    empty = {
-                        if (filter == null) {
-                            EmptyState(
-                                "You haven't listed anything yet",
-                                message = "Turn the stuff you don't need into cash from students nearby.",
-                                icon = ListingIcons.Box,
-                                actionLabel = "Sell something",
-                                onAction = { nav.navigateToTab(TopLevelTab.Sell) },
-                            )
-                        } else {
-                            EmptyState(emptyTitle(filter ?: ListingStatus.ACTIVE), icon = ListingIcons.Box)
-                        }
-                    },
-                ) { listing ->
-                    MyListingRow(listing, onClick = { nav.navigate(ListingDetailRoute(listing.id)) })
-                    HorizontalDivider(Modifier.padding(start = 96.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
-                }
+            // Fresh scroll position per filter.
+            val listState = rememberSaveable(filter, saver = LazyListState.Saver) { LazyListState() }
+            PagedLazyColumn(
+                paginator = vm.listings,
+                key = { it.id },
+                state = listState,
+                empty = {
+                    if (filter == null) {
+                        EmptyState(
+                            "You haven't listed anything yet",
+                            message = "Turn the stuff you don't need into cash from students nearby.",
+                            icon = ListingIcons.Box,
+                            actionLabel = "Sell something",
+                            onAction = { nav.navigateToTab(TopLevelTab.Sell) },
+                        )
+                    } else {
+                        EmptyState(emptyTitle(filter ?: ListingStatus.ACTIVE), icon = ListingIcons.Box)
+                    }
+                },
+            ) { listing ->
+                MyListingRow(listing, onClick = { nav.navigate(ListingDetailRoute(listing.id)) })
+                HorizontalDivider(Modifier.padding(start = 96.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
             }
         }
     }
@@ -185,27 +176,6 @@ private fun MyListingRow(listing: ListingSummary, onClick: () -> Unit) {
             }
         }
         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-}
-
-@Composable
-private fun RowSkeletons() {
-    val block = MaterialTheme.colorScheme.surfaceContainerHighest
-    LazyColumn(Modifier.fillMaxSize(), userScrollEnabled = false) {
-        items(6) {
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = Spacing.screen, vertical = Spacing.md),
-                horizontalArrangement = Arrangement.spacedBy(Spacing.md),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Pulse(Modifier.size(68.dp).clip(MaterialTheme.shapes.small), block)
-                Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                    Pulse(Modifier.width(200.dp).height(14.dp).clip(RoundedCornerShape(4.dp)), block)
-                    Pulse(Modifier.width(64.dp).height(14.dp).clip(RoundedCornerShape(4.dp)), block)
-                    Pulse(Modifier.width(120.dp).height(12.dp).clip(RoundedCornerShape(4.dp)), block)
-                }
-            }
-        }
     }
 }
 

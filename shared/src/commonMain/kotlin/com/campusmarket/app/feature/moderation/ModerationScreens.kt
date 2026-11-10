@@ -49,16 +49,14 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
-import com.campusmarket.app.ui.rememberTimeFormat
 import com.campusmarket.app.feature.listing.ListingDetailRoute
 import com.campusmarket.app.feature.profile.Chevron
 import com.campusmarket.app.feature.profile.Glyphs
 import com.campusmarket.app.feature.profile.ListingLine
-import com.campusmarket.app.feature.profile.PersonLine
 import com.campusmarket.app.feature.profile.MenuDivider
 import com.campusmarket.app.feature.profile.MenuGroup
 import com.campusmarket.app.feature.profile.MenuRow
-import com.campusmarket.app.feature.profile.SkeletonBlock
+import com.campusmarket.app.feature.profile.PersonLine
 import com.campusmarket.app.feature.profile.UserProfileRoute
 import com.campusmarket.app.navigation.LocalCurrentUser
 import com.campusmarket.app.ui.components.AppTab
@@ -72,8 +70,11 @@ import com.campusmarket.app.ui.components.FilterChip
 import com.campusmarket.app.ui.components.PagedLazyColumn
 import com.campusmarket.app.ui.components.RemoteImage
 import com.campusmarket.app.ui.components.ReportStatusChip
+import com.campusmarket.app.ui.components.ShimmerGroup
+import com.campusmarket.app.ui.components.SkeletonBox
 import com.campusmarket.app.ui.components.StatusChip
 import com.campusmarket.app.ui.label
+import com.campusmarket.app.ui.rememberTimeFormat
 import com.campusmarket.app.ui.state.UiState
 import com.campusmarket.app.ui.theme.Spacing
 import com.campusmarket.core.ListingStatus
@@ -83,9 +84,9 @@ import com.campusmarket.core.Report
 import com.campusmarket.core.ReportStatus
 import com.campusmarket.core.ReportTargetType
 import com.campusmarket.core.UserRole
+import kotlin.time.Clock
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
-import kotlin.time.Clock
 
 // ---------------------------------------------------------------------------------------------------- queue
 
@@ -623,12 +624,14 @@ private fun MissingTarget(summary: String, note: String) {
 /** First-load stand-in for a report or dispute: a header card and two content cards. */
 @Composable
 internal fun DetailSkeleton(modifier: Modifier = Modifier) {
-    Column(modifier.fillMaxWidth().padding(Spacing.screen), verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
-        SkeletonBlock(Modifier.fillMaxWidth().height(150.dp), MaterialTheme.shapes.medium)
-        SkeletonBlock(Modifier.width(120.dp).height(14.dp))
-        SkeletonBlock(Modifier.fillMaxWidth().height(72.dp), MaterialTheme.shapes.medium)
-        SkeletonBlock(Modifier.width(120.dp).height(14.dp))
-        SkeletonBlock(Modifier.fillMaxWidth().height(72.dp), MaterialTheme.shapes.medium)
+    ShimmerGroup {
+        Column(modifier.fillMaxWidth().padding(Spacing.screen), verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
+            SkeletonBox(Modifier.fillMaxWidth().height(150.dp), MaterialTheme.shapes.medium)
+            SkeletonBox(Modifier.width(120.dp).height(14.dp))
+            SkeletonBox(Modifier.fillMaxWidth().height(72.dp), MaterialTheme.shapes.medium)
+            SkeletonBox(Modifier.width(120.dp).height(14.dp))
+            SkeletonBox(Modifier.fillMaxWidth().height(72.dp), MaterialTheme.shapes.medium)
+        }
     }
 }
 

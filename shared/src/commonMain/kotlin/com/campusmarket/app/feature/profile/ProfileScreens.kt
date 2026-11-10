@@ -102,10 +102,15 @@ import com.campusmarket.app.ui.components.ConfirmDialog
 import com.campusmarket.app.ui.components.EmptyState
 import com.campusmarket.app.ui.components.ErrorState
 import com.campusmarket.app.ui.components.InlineError
+import com.campusmarket.app.ui.components.ListRowSkeletons
+import com.campusmarket.app.ui.components.ListSkeleton
 import com.campusmarket.app.ui.components.PagedLazyColumn
 import com.campusmarket.app.ui.components.PrimaryButton
 import com.campusmarket.app.ui.components.RatingStars
 import com.campusmarket.app.ui.components.ServerSettingsDialog
+import com.campusmarket.app.ui.components.ShimmerGroup
+import com.campusmarket.app.ui.components.SkeletonBox
+import com.campusmarket.app.ui.components.SkeletonLeading
 import com.campusmarket.app.ui.label
 import com.campusmarket.app.ui.rememberTimeFormat
 import com.campusmarket.app.ui.state.UiState
@@ -610,18 +615,20 @@ private fun ActionTile(
 /** First-load stand-in for the profile header, in its shape. */
 @Composable
 private fun ProfileHeaderSkeleton() {
-    Column(
-        Modifier.fillMaxWidth().padding(Spacing.screen).semantics { contentDescription = "Loading profile" },
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(Spacing.sm),
-    ) {
-        SkeletonBlock(Modifier.size(96.dp), CircleShape)
-        SkeletonBlock(Modifier.width(180.dp).height(24.dp))
-        SkeletonBlock(Modifier.width(140.dp).height(14.dp))
-        SkeletonBlock(Modifier.fillMaxWidth(0.8f).height(14.dp))
-        Spacer(Modifier.height(Spacing.sm))
-        SkeletonBlock(Modifier.fillMaxWidth().height(72.dp), MaterialTheme.shapes.medium)
-        SkeletonBlock(Modifier.fillMaxWidth().height(64.dp), MaterialTheme.shapes.medium)
+    ShimmerGroup {
+        Column(
+            Modifier.fillMaxWidth().padding(Spacing.screen).semantics { contentDescription = "Loading profile" },
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+        ) {
+            SkeletonBox(Modifier.size(96.dp), CircleShape)
+            SkeletonBox(Modifier.width(180.dp).height(24.dp))
+            SkeletonBox(Modifier.width(140.dp).height(14.dp))
+            SkeletonBox(Modifier.fillMaxWidth(0.8f).height(14.dp))
+            Spacer(Modifier.height(Spacing.sm))
+            SkeletonBox(Modifier.fillMaxWidth().height(72.dp), MaterialTheme.shapes.medium)
+            SkeletonBox(Modifier.fillMaxWidth().height(64.dp), MaterialTheme.shapes.medium)
+        }
     }
 }
 
@@ -735,7 +742,7 @@ private fun MessageAboutSheet(
                 modifier = Modifier.padding(horizontal = Spacing.screen).padding(bottom = Spacing.sm),
             )
             when {
-                loading -> SkeletonRows(rows = 3, round = false)
+                loading -> ListRowSkeletons(rows = 3)
                 listings.isEmpty() -> Text(
                     "${user.displayName} has nothing for sale right now, so there's nothing to message them about yet.",
                     style = MaterialTheme.typography.bodyMedium,
@@ -917,7 +924,7 @@ fun BlockedUsersScreen(nav: NavController) {
 
     Scaffold(topBar = { AppTopBar("Blocked users", onBack = { nav.popBackStack() }) }) { padding ->
         when (val s = state) {
-            UiState.Loading -> SkeletonRows(modifier = Modifier.padding(padding).padding(top = Spacing.md))
+            UiState.Loading -> ListSkeleton(Modifier.padding(padding), leading = SkeletonLeading.Avatar)
             is UiState.Error -> ErrorState(s.error, Modifier.fillMaxSize().padding(padding), onRetry = vm::reload)
             is UiState.Content -> PullToRefreshBox(refreshing, onRefresh = vm::refresh, modifier = Modifier.fillMaxSize().padding(padding)) {
                 Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = Spacing.xl)) {
