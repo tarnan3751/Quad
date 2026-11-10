@@ -67,6 +67,11 @@ import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
@@ -429,9 +434,17 @@ private fun ResultsHeader(title: String, sort: ListingSort, searching: Boolean, 
             modifier = Modifier.weight(1f),
         )
         androidx.compose.foundation.layout.Box {
-            TextButton(onClick = { open = true }, modifier = Modifier.padding(start = Spacing.sm)) {
+            val label = sort.label(searching)
+            TextButton(
+                onClick = { open = true },
+                modifier = Modifier.padding(start = Spacing.sm).clearAndSetSemantics {
+                    contentDescription = "Sort by: $label"
+                    role = Role.DropdownList
+                    onClick { open = true; true }
+                },
+            ) {
                 Icon(ListingIcons.Sort, contentDescription = null, modifier = Modifier.size(18.dp))
-                Text(sort.label(searching), modifier = Modifier.padding(start = Spacing.xs))
+                Text(label, modifier = Modifier.padding(start = Spacing.xs))
                 Icon(Icons.Filled.ArrowDropDown, contentDescription = null)
             }
             DropdownMenu(expanded = open, onDismissRequest = { open = false }) {

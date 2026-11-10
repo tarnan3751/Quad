@@ -221,7 +221,7 @@ class BrowseFlowSmokeTest {
 
         click("My old bike")
         awaitText("Edit listing")
-        awaitText("Your listing")
+        awaitText("(you)")
         assertTrue(onAllNodesWithText("Message").fetchSemanticsNodes().isEmpty())
         assertTrue(onAllNodesWithText("Buy now").fetchSemanticsNodes().isEmpty())
 

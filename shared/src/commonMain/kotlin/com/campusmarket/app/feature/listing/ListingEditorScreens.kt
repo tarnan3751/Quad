@@ -127,6 +127,7 @@ fun SellScreen(nav: NavController) {
             vm = vm,
             intro = "Students on your campus see it right away. Buyers pay in the app and you hand the item over in person.",
             submitLabel = "Post listing",
+            submittingLabel = "Posting…",
             modifier = Modifier.padding(padding),
             scroll = scroll,
         )
@@ -190,7 +191,14 @@ fun EditListingScreen(route: EditListingRoute, nav: NavController) {
                     onAction = { nav.popBackStack() },
                 )
             } else {
-                ListingForm(form = form, vm = vm, intro = null, submitLabel = "Save changes", modifier = Modifier.padding(padding))
+                ListingForm(
+                    form = form,
+                    vm = vm,
+                    intro = null,
+                    submitLabel = "Save changes",
+                    submittingLabel = "Saving…",
+                    modifier = Modifier.padding(padding),
+                )
             }
         }
     }
@@ -222,6 +230,7 @@ private fun ListingForm(
     vm: ListingFormViewModel,
     intro: String?,
     submitLabel: String,
+    submittingLabel: String,
     modifier: Modifier = Modifier,
     scroll: ScrollState = rememberScrollState(),
 ) {
@@ -324,7 +333,7 @@ private fun ListingForm(
             val uploading = form.uploadingCount
             PrimaryButton(
                 text = when {
-                    form.submitting -> if (submitLabel == "Post listing") "Posting…" else "Saving…"
+                    form.submitting -> submittingLabel
                     uploading > 0 -> if (uploading == 1) "Uploading 1 photo…" else "Uploading $uploading photos…"
                     else -> submitLabel
                 },

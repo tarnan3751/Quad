@@ -321,7 +321,7 @@ private fun DetailContent(listing: ListingDetail, onSellerClick: () -> Unit) {
             Section("Description") { Text(listing.description, style = MaterialTheme.typography.bodyLarge) }
         }
 
-        Section(if (listing.isMine) "Your listing" else "Seller") { SellerCard(listing.seller, isMe = listing.isMine, onClick = onSellerClick) }
+        Section("Seller") { SellerCard(listing.seller, isMe = listing.isMine, onClick = onSellerClick) }
 
         if (listing.canBuy) {
             Row(horizontalArrangement = Arrangement.spacedBy(Spacing.md), verticalAlignment = Alignment.CenterVertically) {

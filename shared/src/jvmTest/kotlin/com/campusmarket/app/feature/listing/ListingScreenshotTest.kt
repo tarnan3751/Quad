@@ -465,7 +465,7 @@ class ListingScreenshotTest {
         }
         app(dark, "browse-sort", Knobs()) {
             awaitText("Campbell Biology")
-            click("Newest")
+            clickDescription("Sort by")
             awaitText("Price: low to high")
             shot("01-sort-menu")
             click("Price: low to high")
