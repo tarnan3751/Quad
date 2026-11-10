@@ -198,7 +198,7 @@ private fun SignedInShell(snackbar: SnackbarHostState) {
                             icon = if (selected) tab.selectedIcon else tab.icon,
                             label = tab.label,
                             badgeCount = badge,
-                            badgeDescription = if (badge == 1) "1 unread message" else "$badge unread messages",
+                            badgeDescription = if (badge == 1) "1 unread conversation" else "$badge unread conversations",
                         )
                     }
                 }
