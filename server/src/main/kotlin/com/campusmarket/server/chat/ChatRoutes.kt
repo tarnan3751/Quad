@@ -13,9 +13,10 @@ import com.campusmarket.server.AUTH_JWT
 import com.campusmarket.server.asUuid
 import com.campusmarket.server.authenticateToken
 import com.campusmarket.server.loadPrincipal
+import com.campusmarket.server.pageParams
+import com.campusmarket.server.receiveBody
 import com.campusmarket.server.user
 import io.ktor.server.auth.authenticate
-import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.application
@@ -69,24 +70,18 @@ fun Route.chatRoutes(deps: AppDeps, hub: ChatHub = InProcessChatHub()) {
     authenticate(AUTH_JWT) {
         route(ApiRoutes.CONVERSATIONS) {
             post {
-                val req = call.receive<StartConversationRequest>()
+                val req = call.receiveBody<StartConversationRequest>()
                 call.respond(service.start(call.user, req.listingId, req.initialMessage))
             }
-            get {
-                val q = call.request.queryParameters
-                call.respond(service.list(call.user, KeysetCursor.decode(q["cursor"]), parseLimit(q["limit"])))
-            }
+            get { call.respond(service.list(call.user, call.pageParams())) }
             route("{id}") {
                 get { call.respond(service.get(call.user, call.parameters["id"].asUuid("Conversation"))) }
                 get("messages") {
-                    val q = call.request.queryParameters
-                    call.respond(
-                        service.messages(call.user, call.parameters["id"].asUuid("Conversation"), KeysetCursor.decode(q["cursor"]), parseLimit(q["limit"])),
-                    )
+                    call.respond(service.messages(call.user, call.parameters["id"].asUuid("Conversation"), call.pageParams()))
                 }
                 post("messages") {
                     val id = call.parameters["id"].asUuid("Conversation")
-                    val req = call.receive<SendMessageRequest>()
+                    val req = call.receiveBody<SendMessageRequest>()
                     call.respond(service.send(call.user, id, req.body))
                 }
                 post("read") {

@@ -9,6 +9,7 @@ import com.campusmarket.core.RegisterRequest
 import com.campusmarket.core.ResendCodeRequest
 import com.campusmarket.core.VerifyEmailRequest
 import com.campusmarket.server.AppDeps
+import com.campusmarket.server.receiveBody
 import io.ktor.server.application.install
 import io.ktor.server.application.pluginOrNull
 import io.ktor.server.plugins.origin

@@ -4,11 +4,14 @@ import com.campusmarket.core.ErrorCodes
 import com.campusmarket.core.ErrorResponse
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
+import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.install
 import io.ktor.server.plugins.BadRequestException
 import io.ktor.server.plugins.statuspages.StatusPages
 import io.ktor.server.request.path
+import io.ktor.server.request.receive
 import io.ktor.server.response.respond
+import kotlinx.coroutines.CancellationException
 import org.slf4j.LoggerFactory
 import java.util.UUID
 
@@ -35,6 +38,21 @@ fun notFound(what: String = "Resource"): Nothing =
 
 fun conflict(message: String, code: String = ErrorCodes.CONFLICT): Nothing =
     throw ApiException(HttpStatusCode.Conflict, code, message)
+
+/**
+ * `call.receive<T>()` that maps every deserialisation problem (malformed JSON, missing fields, missing or wrong
+ * content type) to 400 VALIDATION.
+ */
+suspend inline fun <reified T : Any> ApplicationCall.receiveBody(): T =
+    try {
+        receive<T>()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: ApiException) {
+        throw e
+    } catch (e: Exception) {
+        badRequest("Malformed request body")
+    }
 
 /** Parses a path/body id; a malformed id is reported as 404 for [what]. */
 fun String?.asUuid(what: String = "Resource"): UUID = this?.toUuidOrNull() ?: notFound(what)

@@ -7,17 +7,22 @@ import com.campusmarket.core.Limits
 import com.campusmarket.core.Message
 import com.campusmarket.core.Page
 import com.campusmarket.server.AppDeps
+import com.campusmarket.server.KeysetCursor
+import com.campusmarket.server.PageParams
+import com.campusmarket.server.Sql
 import com.campusmarket.server.UserPrincipal
 import com.campusmarket.server.UserThrottle
 import com.campusmarket.server.conflict
 import com.campusmarket.server.forbidden
-import com.campusmarket.server.instant
 import com.campusmarket.server.invalidField
 import com.campusmarket.server.isBlockedEitherWay
+import com.campusmarket.server.keyset
 import com.campusmarket.server.loadListingSummaries
 import com.campusmarket.server.loadUsersPublic
 import com.campusmarket.server.millis
 import com.campusmarket.server.notFound
+import com.campusmarket.server.page
+import com.campusmarket.server.pageOfIds
 import com.campusmarket.server.query
 import com.campusmarket.server.queryOne
 import com.campusmarket.server.toUuidOrNull
@@ -121,22 +126,10 @@ internal class ChatService(private val deps: AppDeps, private val hub: ChatHub) 
         return conversation
     }
 
-    suspend fun list(user: UserPrincipal, cursor: KeysetCursor?, limit: Int): Page<Conversation> = db.tx { c ->
-        val rows = c.query(
-            """SELECT x.id, x.sort_at FROM (
-                   SELECT id, COALESCE(last_message_at, created_at) AS sort_at
-                   FROM conversations WHERE buyer_id = ? OR seller_id = ?
-               ) x
-               WHERE (?::timestamptz IS NULL OR (x.sort_at, x.id) < (?::timestamptz, ?::uuid))
-               ORDER BY x.sort_at DESC, x.id DESC LIMIT ?""",
-            user.id, user.id, cursor?.at, cursor?.at, cursor?.id, limit + 1,
-        ) { KeysetCursor(it.instant("sort_at"), it.uuid("id")) }
-        val pageRows = rows.take(limit)
-        val byId = c.loadConversations(user, pageRows.map { it.id })
-        Page(
-            items = pageRows.mapNotNull { byId[it.id] },
-            nextCursor = if (rows.size > limit) pageRows.last().encode() else null,
-        )
+    suspend fun list(user: UserPrincipal, page: PageParams): Page<Conversation> = db.tx { c ->
+        val sql = Sql("SELECT c.id, COALESCE(c.last_message_at, c.created_at) FROM conversations c WHERE (c.buyer_id = ? OR c.seller_id = ?)", user.id, user.id)
+            .keysetPage("COALESCE(c.last_message_at, c.created_at)", "c.id", KeysetCursor.decode(page.cursor), page.limit)
+        c.pageOfIds(sql, page.limit) { ids -> loadConversations(user, ids).let { byId -> ids.mapNotNull(byId::get) } }
     }
 
     suspend fun get(user: UserPrincipal, id: UUID): Conversation = db.tx { c ->
@@ -144,20 +137,15 @@ internal class ChatService(private val deps: AppDeps, private val hub: ChatHub) 
         c.loadConversations(user, listOf(id)).getValue(id)
     }
 
-    suspend fun messages(user: UserPrincipal, id: UUID, cursor: KeysetCursor?, limit: Int): Page<Message> = db.tx { c ->
+    suspend fun messages(user: UserPrincipal, id: UUID, page: PageParams): Page<Message> = db.tx { c ->
         c.requireParticipation(user, id)
-        val rows = c.query(
-            """SELECT id, conversation_id, sender_id, body, created_at FROM messages
-               WHERE conversation_id = ?
-                 AND (?::timestamptz IS NULL OR (created_at, id) < (?::timestamptz, ?::uuid))
-               ORDER BY created_at DESC, id DESC LIMIT ?""",
-            id, cursor?.at, cursor?.at, cursor?.id, limit + 1,
-        ) {
+        val sql = Sql("SELECT id, created_at, conversation_id, sender_id, body FROM messages WHERE conversation_id = ?", id)
+            .keysetPage("created_at", "id", KeysetCursor.decode(page.cursor), page.limit)
+        val rows = c.page(sql, page.limit, { it.second }) {
             Message(it.uuid("id").toString(), it.uuid("conversation_id").toString(), it.uuid("sender_id").toString(), it.getString("body"), it.millis("created_at")) to
-                KeysetCursor(it.instant("created_at"), it.uuid("id"))
+                it.keyset()
         }
-        val page = rows.take(limit)
-        Page(page.map { it.first }, if (rows.size > limit) page.last().second.encode() else null)
+        Page(rows.items.map { it.first }, rows.nextCursor)
     }
 
     /** REST and websocket sends share one budget. */

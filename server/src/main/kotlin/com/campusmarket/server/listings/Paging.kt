@@ -1,23 +1,9 @@
 package com.campusmarket.server.listings
 
-import com.campusmarket.core.Limits
 import com.campusmarket.server.invalidField
-import io.ktor.server.application.ApplicationCall
 import java.time.Instant
 import java.util.Base64
 import java.util.UUID
-
-/** `?limit=&cursor=` of a paged request. */
-internal data class PageParams(val limit: Int, val cursor: String?)
-
-internal fun ApplicationCall.pageParams(): PageParams {
-    val qp = request.queryParameters
-    val limit = qp["limit"]?.trim()?.takeIf { it.isNotEmpty() }?.let { raw ->
-        raw.toIntOrNull()?.coerceIn(1, Limits.PAGE_MAX) ?: invalidField("limit", "limit must be a whole number")
-    } ?: Limits.PAGE_DEFAULT
-    val cursor = qp["cursor"]?.trim()?.takeIf { it.isNotEmpty() }
-    return PageParams(limit, cursor)
-}
 
 /**
  * Position of the last row of a page in a keyset ordering: every column of that ordering's ORDER BY.
@@ -68,19 +54,3 @@ internal object Cursors {
 /** Trims a `limit + 1` fetch to a page and computes the cursor for the next one. */
 internal fun <R> paginate(rows: List<R>, limit: Int, keyOf: (R) -> Keyset): Pair<List<R>, String?> =
     if (rows.size > limit) rows.subList(0, limit) to Cursors.encode(keyOf(rows[limit - 1])) else rows to null
-
-/** Accumulates SQL text and its positional parameters in lock step. */
-internal class Sql(initial: String = "", vararg params: Any?) {
-    private val text = StringBuilder(initial)
-    val params: MutableList<Any?> = params.toMutableList()
-
-    fun add(fragment: String, vararg ps: Any?): Sql {
-        text.append(fragment)
-        params.addAll(ps)
-        return this
-    }
-
-    fun paramsArray(): Array<Any?> = params.toTypedArray()
-
-    override fun toString(): String = text.toString()
-}

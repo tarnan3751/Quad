@@ -14,6 +14,9 @@ import com.campusmarket.core.ReportTargetType
 import com.campusmarket.core.ResolveDisputeRequest
 import com.campusmarket.server.AppConfig
 import com.campusmarket.server.AppDeps
+import com.campusmarket.server.KeysetCursor
+import com.campusmarket.server.PageParams
+import com.campusmarket.server.Sql
 import com.campusmarket.server.UserPrincipal
 import com.campusmarket.server.asUuid
 import com.campusmarket.server.forbidden
@@ -23,6 +26,7 @@ import com.campusmarket.server.invalidField
 import com.campusmarket.server.loadListingSummaries
 import com.campusmarket.server.loadUsersPublic
 import com.campusmarket.server.notFound
+import com.campusmarket.server.pageOfIds
 import com.campusmarket.server.query
 import com.campusmarket.server.queryOne
 import com.campusmarket.server.update
@@ -138,24 +142,12 @@ internal class DisputeService(private val deps: AppDeps, private val orders: Ord
     private val config = deps.config
 
     /** OPEN: oldest first (the queue). CLOSED: most recently closed first. */
-    suspend fun list(status: DisputeStatus, page: PageRequest): Page<DisputeCase> {
-        val after = page.after
-        val (column, cmp, dir) = when (status) {
-            DisputeStatus.OPEN -> Triple("opened_at", ">", "ASC")
-            DisputeStatus.CLOSED -> Triple("closed_at", "<", "DESC")
-        }
-        val sql = buildString {
-            append("SELECT d.id, d.$column AS at FROM order_disputes d WHERE d.status = ?")
-            if (after != null) append(" AND (d.$column, d.id) $cmp (?, ?)")
-            append(" ORDER BY d.$column $dir, d.id $dir LIMIT ?")
-        }
-        val params: List<Any> = listOf<Any>(status) + listOfNotNull(after?.createdAt, after?.id) + (page.limit + 1)
+    suspend fun list(status: DisputeStatus, page: PageParams): Page<DisputeCase> {
+        val column = if (status == DisputeStatus.OPEN) "d.opened_at" else "d.closed_at"
+        val sql = Sql("SELECT d.id, $column FROM order_disputes d WHERE d.status = ?", status)
+            .keysetPage(column, "d.id", KeysetCursor.decode(page.cursor), page.limit, ascending = status == DisputeStatus.OPEN)
         val now = orders.now()
-        return db.tx { c ->
-            val keys = c.query(sql, *params.toTypedArray()) { rs -> PageKey(rs.instant("at"), rs.uuid("id")) to rs.uuid("id") }
-            val (ids, next) = keys.toPage(page.limit)
-            Page(c.loadDisputeCases(config, ids, now), next)
-        }
+        return db.tx { c -> c.pageOfIds(sql, page.limit) { ids -> loadDisputeCases(config, ids, now) } }
     }
 
     /** The order's most recent dispute (open or closed). */

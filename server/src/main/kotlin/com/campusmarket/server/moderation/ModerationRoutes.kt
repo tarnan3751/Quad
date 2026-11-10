@@ -2,7 +2,6 @@ package com.campusmarket.server.moderation
 
 import com.campusmarket.core.ApiRoutes
 import com.campusmarket.core.CreateReportRequest
-import com.campusmarket.core.Limits
 import com.campusmarket.core.ModerationNoteRequest
 import com.campusmarket.core.OkResponse
 import com.campusmarket.core.ReportStatus
@@ -16,14 +15,15 @@ import com.campusmarket.server.AUTH_JWT
 import com.campusmarket.server.AppDeps
 import com.campusmarket.server.UserThrottle
 import com.campusmarket.server.asUuid
-import com.campusmarket.server.invalidField
+import com.campusmarket.server.enumParam
 import com.campusmarket.server.notFound
+import com.campusmarket.server.pageParams
+import com.campusmarket.server.receiveBody
 import com.campusmarket.server.requireModerator
 import com.campusmarket.server.user
 import io.ktor.http.HttpHeaders
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.auth.authenticate
-import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
@@ -36,7 +36,7 @@ fun Route.moderationRoutes(deps: AppDeps) {
 
     authenticate(AUTH_JWT) {
         post(ApiRoutes.REPORTS) {
-            val req = call.receive<CreateReportRequest>()
+            val req = call.receiveBody<CreateReportRequest>()
             val reporter = call.user
             deps.throttle.acquire(UserThrottle.Action.REPORT, reporter.id, "You've sent a lot of reports recently. Try again later.")
             deps.db.tx { c -> svc.createReport(c, reporter, req) }
@@ -45,13 +45,9 @@ fun Route.moderationRoutes(deps: AppDeps) {
 
         get(ApiRoutes.MOD_REPORTS) {
             call.requireModerator()
-            val status = when (val s = call.request.queryParameters["status"]) {
-                null, "" -> ReportStatus.OPEN
-                else -> runCatching { ReportStatus.valueOf(s) }.getOrNull() ?: invalidField("status", "Unknown status '$s'")
-            }
-            val cursor = call.request.queryParameters["cursor"]
-            val limit = call.pageLimit()
-            call.respond(deps.db.tx { c -> svc.listReports(c, status, cursor, limit) })
+            val status = call.enumParam("status", ReportStatus.OPEN)
+            val page = call.pageParams()
+            call.respond(deps.db.tx { c -> svc.listReports(c, status, page) })
         }
 
         get("${ApiRoutes.MOD_REPORTS}/{id}") {
@@ -63,14 +59,14 @@ fun Route.moderationRoutes(deps: AppDeps) {
         post("${ApiRoutes.MOD_REPORTS}/{id}/resolve") {
             val mod = call.requireModerator()
             val id = call.parameters["id"].asUuid("Report")
-            val req = call.receive<ResolveReportRequest>()
+            val req = call.receiveBody<ResolveReportRequest>()
             call.respond(deps.db.tx { c -> svc.resolveReport(c, mod, id, req) })
         }
 
         post("${ApiRoutes.BASE}/mod/users/{id}/suspend") {
             val mod = call.requireModerator()
             val id = call.parameters["id"].asUuid("User")
-            val req = call.receive<SuspendUserRequest>()
+            val req = call.receiveBody<SuspendUserRequest>()
             deps.db.tx { c -> svc.suspendUserDirect(c, mod, id, req) }
             call.respond(OkResponse())
         }
@@ -115,28 +111,21 @@ fun Route.moderationRoutes(deps: AppDeps) {
         put("${ApiRoutes.BASE}/mod/users/{id}/role") {
             val admin = call.requireAdmin()
             val id = call.parameters["id"].asUuid("User")
-            val req = call.receive<SetRoleRequest>()
+            val req = call.receiveBody<SetRoleRequest>()
             call.respond(deps.db.tx { c -> svc.setRole(c, admin, id, req.role) })
         }
 
         get(ApiRoutes.MOD_LOG) {
             call.requireModerator()
-            val cursor = call.request.queryParameters["cursor"]
-            val limit = call.pageLimit()
-            call.respond(deps.db.tx { c -> svc.log(c, cursor, limit) })
+            val page = call.pageParams()
+            call.respond(deps.db.tx { c -> svc.log(c, page) })
         }
     }
 }
 
-private fun ApplicationCall.pageLimit(): Int {
-    val raw = request.queryParameters["limit"] ?: return Limits.PAGE_DEFAULT
-    val n = raw.toIntOrNull() ?: invalidField("limit", "limit must be a number")
-    return n.coerceIn(1, Limits.PAGE_MAX)
-}
-
 /** The note body is optional: a request without a content type means an empty note. */
 private suspend fun ApplicationCall.receiveNote(): ModerationNoteRequest =
-    if (request.headers[HttpHeaders.ContentType] == null) ModerationNoteRequest() else receive()
+    if (request.headers[HttpHeaders.ContentType] == null) ModerationNoteRequest() else receiveBody()
 
 /** Throws 403 unless the caller is an admin (moderators are not enough). */
 private fun ApplicationCall.requireAdmin(): UserPrincipal =

@@ -1,12 +1,8 @@
 package com.campusmarket.server.auth
 
 import com.campusmarket.core.Limits
-import com.campusmarket.server.ApiException
 import com.campusmarket.server.badRequest
 import com.campusmarket.server.isInvisibleFormatChar
-import io.ktor.server.application.ApplicationCall
-import io.ktor.server.request.receive
-import kotlinx.coroutines.CancellationException
 
 /*
  * Input normalisation and validation for account fields. Validators return a user-facing message
@@ -90,18 +86,3 @@ private fun isForbiddenChar(c: Char, allowNewline: Boolean): Boolean =
 fun throwIfInvalid(errors: Map<String, String>) {
     if (errors.isNotEmpty()) badRequest(errors.values.first(), errors)
 }
-
-/**
- * `call.receive<T>()` that maps every deserialisation problem (malformed JSON, missing fields, wrong
- * content type) to 400 VALIDATION instead of letting it surface as a 415/500.
- */
-suspend inline fun <reified T : Any> ApplicationCall.receiveBody(): T =
-    try {
-        receive<T>()
-    } catch (e: CancellationException) {
-        throw e
-    } catch (e: ApiException) {
-        throw e
-    } catch (e: Exception) {
-        badRequest("Malformed request body")
-    }

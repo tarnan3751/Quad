@@ -9,6 +9,7 @@ import com.campusmarket.core.Photo
 import com.campusmarket.core.UpdateListingRequest
 import com.campusmarket.server.AppConfig
 import com.campusmarket.server.AppDeps
+import com.campusmarket.server.Sql
 import com.campusmarket.server.UserPrincipal
 import com.campusmarket.server.UserThrottle
 import com.campusmarket.server.conflict
