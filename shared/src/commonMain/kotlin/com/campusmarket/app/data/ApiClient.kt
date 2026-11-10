@@ -74,11 +74,14 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import kotlin.coroutines.CoroutineContext
 import kotlin.time.Clock
 
 /** Filters for `GET /listings`. Null / empty = not applied. */
@@ -109,6 +112,11 @@ class ApiClient(
     private val tokens: TokenStore,
     private val nowMillis: () -> Long = { Clock.System.now().toEpochMilliseconds() },
 ) {
+    // Callers are mostly view models on the main thread. Requests, token refreshes (Keystore writes) and JSON decoding
+    // run on the engine's I/O dispatcher instead (tests give the mock engine their test dispatcher).
+    private val requestContext: CoroutineContext =
+        http.engine.dispatcher.takeUnless { it == Dispatchers.Unconfined } ?: Dispatchers.Default
+
     private val refreshMutex = Mutex()
     private val _sessionEndReason = MutableStateFlow<ApiError?>(null)
 
@@ -456,7 +464,7 @@ class ApiClient(
         path: String,
         auth: Boolean = true,
         crossinline block: HttpRequestBuilder.() -> Unit = {},
-    ): T {
+    ): T = withContext(requestContext) {
         val response = execute(auth) { token ->
             this.method = method
             url(server.url(path))
@@ -468,7 +476,7 @@ class ApiClient(
             if (auth && error.code == ErrorCodes.ACCOUNT_SUSPENDED) endSession(error)
             throw error
         }
-        return decodeBody(response)
+        decodeBody<T>(response)
     }
 
     /** Sends a request; for [auth] requests handles token freshness, 401 → refresh → retry once. */
