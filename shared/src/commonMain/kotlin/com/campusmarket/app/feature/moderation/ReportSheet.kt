@@ -43,6 +43,7 @@ import com.campusmarket.app.ui.components.FormColumn
 import com.campusmarket.app.ui.components.InlineError
 import com.campusmarket.app.ui.components.PrimaryButton
 import com.campusmarket.app.ui.components.QuadIcons
+import com.campusmarket.app.ui.components.SheetKeyboardBackdropEffect
 import com.campusmarket.app.ui.components.formSubmit
 import com.campusmarket.app.ui.theme.Spacing
 import com.campusmarket.core.CreateReportRequest
@@ -168,6 +169,7 @@ fun ReportSheet(
     // typing on iOS: characters were dropped and reordered. See docs/CLIENT.md, "Text fields in sheets and dialogs".
     var details by remember(controller) { mutableStateOf(controller.state.value.details) }
     val noun = targetType.noun
+    SheetKeyboardBackdropEffect()
     val finish = { if (state.submitted) onReported() else onDismiss() }
 
     ModalBottomSheet(

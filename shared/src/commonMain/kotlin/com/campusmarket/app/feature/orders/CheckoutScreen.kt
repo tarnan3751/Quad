@@ -28,6 +28,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -127,7 +128,7 @@ fun CheckoutScreen(route: CheckoutRoute, nav: NavController) {
                     }
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
-                    Text("What happens next", style = MaterialTheme.typography.titleMedium)
+                    Text("What happens next", style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
                     NumberedStep(
                         1,
                         "Pay securely with Stripe",

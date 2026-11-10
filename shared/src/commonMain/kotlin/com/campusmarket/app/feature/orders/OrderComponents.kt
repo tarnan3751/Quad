@@ -40,6 +40,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -378,7 +380,7 @@ private fun AmountLine(label: String, value: String, emphasize: Boolean, muted: 
 /** Numbered "what happens next" step (checkout, payouts). */
 @Composable
 internal fun NumberedStep(number: Int, title: String, body: String) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+    Row(Modifier.fillMaxWidth().clearAndSetSemantics { contentDescription = "Step $number: $title. $body" }, verticalAlignment = Alignment.Top) {
         Surface(shape = CircleShape, color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.size(28.dp)) {
             Box(contentAlignment = Alignment.Center) {
                 Text(

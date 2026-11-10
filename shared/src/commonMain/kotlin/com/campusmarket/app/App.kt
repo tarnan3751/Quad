@@ -1,5 +1,6 @@
 package com.campusmarket.app
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
@@ -12,6 +13,7 @@ import com.campusmarket.app.data.ServerConfig
 import com.campusmarket.app.data.SessionManager
 import com.campusmarket.app.navigation.AppNavigation
 import com.campusmarket.app.ui.components.LocalUrlResolver
+import com.campusmarket.app.ui.components.SheetKeyboardBackdrop
 import com.campusmarket.app.ui.components.newImageLoader
 import com.campusmarket.app.ui.theme.CampusMarketTheme
 import org.koin.compose.koinInject
@@ -31,7 +33,10 @@ fun App() {
     CampusMarketTheme {
         CompositionLocalProvider(LocalUrlResolver provides resolver) {
             Surface(Modifier.fillMaxSize()) {
-                AppNavigation()
+                Box {
+                    AppNavigation()
+                    SheetKeyboardBackdrop()
+                }
             }
         }
     }

@@ -124,7 +124,8 @@ fun ConversationScreen(route: ConversationRoute, nav: NavController) {
             UiState.Loading -> Column(body) {
                 Box(Modifier.weight(1f)) { BubbleSkeletons(Modifier.align(Alignment.BottomCenter)) }
             }
-            is UiState.Error -> ErrorState(s.error, body, onRetry = vm::loadConversation)
+            // The messages were loading at the same time and failed with it.
+            is UiState.Error -> ErrorState(s.error, body, onRetry = { vm.loadConversation(); vm.retryHistory() })
             is UiState.Content -> BoxWithConstraints(body) {
                 // Typing in landscape leaves only a strip above the keyboard: give it to the messages and the composer.
                 val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
@@ -299,7 +300,8 @@ private fun MessageList(vm: ConversationViewModel, conversation: Conversation, o
                 item(key = "__top", contentType = "top") {
                     HistoryTop(
                         loadingMore = paged.isLoadingMore,
-                        failed = paged.loadMoreError != null,
+                        // An unsent message can be on screen before the first page ever loaded.
+                        failed = paged.loadMoreError != null || (!paged.loaded && paged.error != null),
                         endReached = paged.endReached,
                         listingTitle = conversation.listing.title,
                         onRetry = vm::retryHistory,
