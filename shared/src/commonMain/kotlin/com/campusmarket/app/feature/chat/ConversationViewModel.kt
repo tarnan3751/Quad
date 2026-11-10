@@ -86,6 +86,8 @@ sealed interface ChatRow {
         val error: String? = null,
         /** The message drawn above (older) is from the same person a moment earlier: tighter spacing. */
         val groupedWithOlder: Boolean = false,
+        /** The message drawn below (newer) continues this group: the time is shown on the group's last bubble only. */
+        val groupedWithNewer: Boolean = false,
         /** "Sent" / "Seen" under my newest message. */
         val receipt: Receipt? = null,
     ) : ChatRow
@@ -183,6 +185,12 @@ class ConversationViewModel(
         }
         resumedOnce = true
         maybeMarkRead()
+    }
+
+    /** "Retry" on the connection banner: skip the backoff wait and catch up over REST meanwhile. */
+    fun retryConnection() {
+        live.reconnectNow()
+        viewModelScope.launch { syncNewest() }
     }
 
     private fun maybeMarkRead() {
@@ -433,12 +441,17 @@ internal fun buildChatRows(
         )
     }
 
+    val groupedWithOlder = BooleanArray(bubbles.size) { i ->
+        val bubble = bubbles[i]
+        val older = bubbles.getOrNull(i + 1)
+        older != null && older.mine == bubble.mine && sameDay(older.createdAt, bubble.createdAt) &&
+            bubble.createdAt - older.createdAt in 0..GROUP_WINDOW_MS
+    }
     val rows = ArrayList<ChatRow>(bubbles.size + 8)
     bubbles.forEachIndexed { i, bubble ->
         val older = bubbles.getOrNull(i + 1)
-        val grouped = older != null && older.mine == bubble.mine && sameDay(older.createdAt, bubble.createdAt) &&
-            bubble.createdAt - older.createdAt in 0..GROUP_WINDOW_MS
-        rows += if (grouped) bubble.copy(groupedWithOlder = true) else bubble
+        val withNewer = i > 0 && groupedWithOlder[i - 1]
+        rows += if (groupedWithOlder[i] || withNewer) bubble.copy(groupedWithOlder = groupedWithOlder[i], groupedWithNewer = withNewer) else bubble
         val dayStarts = if (older == null) endReached else !sameDay(older.createdAt, bubble.createdAt)
         if (dayStarts) rows += ChatRow.DayHeader(key = "day-${bubble.key}", dayOf = bubble.createdAt)
     }

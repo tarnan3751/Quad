@@ -11,7 +11,9 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SkikoComposeUiTest
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
@@ -412,7 +414,7 @@ class ChatOrdersGalleryTest {
         sendFails = true
         onAllNodes(hasSetTextAction()).onFirst().performTextInput("No worries, I'm by the front desk.")
         clickDesc("Send")
-        await("Retry", 8_000)
+        await("Tap to retry", 8_000)
         shot("chat-03-failed-send")
         sendFails = false
         sendSlow = true
@@ -421,8 +423,16 @@ class ChatOrdersGalleryTest {
         clickDesc("Send")
         shot("chat-05-sending")
         live.status.value = ChatSocket.Status.Reconnecting
+        mainClock.advanceTimeBy(2_500)
+        await("Reconnecting")
         shot("chat-06-reconnecting")
         live.status.value = ChatSocket.Status.Connected
+        // Scrolled up when new messages arrive: the jump chip counts them.
+        onAllNodes(hasScrollToIndexAction()).onFirst().performScrollToIndex(9)
+        live.emit(ChatEvent.MessageCreated(Message("live-2", "c-maya", maya.id, "I'm here now", System.currentTimeMillis())))
+        live.emit(ChatEvent.MessageCreated(Message("live-3", "c-maya", maya.id, "Blue jacket, by the stairs", System.currentTimeMillis() + 1)))
+        await("2 new messages")
+        shot("chat-06b-new-messages")
         back()
         await("Priya Shah")
         click("Priya Shah")

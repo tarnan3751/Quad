@@ -66,6 +66,12 @@ class InboxViewModel(
         viewModelScope.launch { syncFirstPage() }
     }
 
+    /** "Retry" on the connection banner: skip the backoff wait and catch up over REST meanwhile. */
+    fun retryConnection() {
+        live.reconnectNow()
+        viewModelScope.launch { syncFirstPage() }
+    }
+
     internal fun onEvent(event: ChatEvent) {
         when (event) {
             is ChatEvent.MessageCreated -> onMessage(event.message)

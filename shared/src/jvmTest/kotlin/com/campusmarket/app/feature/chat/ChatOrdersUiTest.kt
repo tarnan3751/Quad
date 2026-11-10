@@ -212,7 +212,7 @@ class ChatOrdersUiTest {
         awaitText("Maya Chen")
         awaitText("See you at the library")
         awaitText("Desk lamp")
-        waitUntil(timeoutMillis = 5_000) { onAllNodesWithContentDescription("2 unread").fetchSemanticsNodes().isNotEmpty() }
+        waitUntil(timeoutMillis = 5_000) { onAllNodesWithContentDescription("2 unread", substring = true).fetchSemanticsNodes().isNotEmpty() }
         click("Maya Chen")
 
         // Conversation: header, listing strip, history, day separator.
