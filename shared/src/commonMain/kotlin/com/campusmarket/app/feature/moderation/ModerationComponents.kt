@@ -43,6 +43,8 @@ import com.campusmarket.app.data.ApiError
 import com.campusmarket.app.data.isModerator
 import com.campusmarket.app.navigation.LocalCurrentUser
 import com.campusmarket.app.ui.components.AppTextField
+import com.campusmarket.app.ui.components.DialogConfirmButton
+import com.campusmarket.app.ui.components.DialogDismissButton
 import com.campusmarket.app.ui.components.AppTopBar
 import com.campusmarket.app.ui.components.ChipTone
 import com.campusmarket.app.ui.components.EmptyState
@@ -156,8 +158,8 @@ fun ModerationActionDialog(
             }
         },
         confirmButton = {
-            TextButton(
-                enabled = !submitting,
+            DialogConfirmButton(
+                confirmLabel,
                 onClick = {
                     val trimmed = note.trim()
                     if (noteRequired && trimmed.isEmpty()) {
@@ -166,14 +168,11 @@ fun ModerationActionDialog(
                         onConfirm(trimmed, if (showDuration) days else null)
                     }
                 },
-                colors = if (destructive) ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                else ButtonDefaults.textButtonColors(),
-            ) {
-                if (submitting) CircularProgressIndicator(Modifier.padding(end = 8.dp).size(16.dp), strokeWidth = 2.dp)
-                Text(confirmLabel)
-            }
+                destructive = destructive,
+                loading = submitting,
+            )
         },
-        dismissButton = { TextButton(onClick = onDismiss, enabled = !submitting) { Text("Cancel") } },
+        dismissButton = { DialogDismissButton("Cancel", onDismiss, enabled = !submitting) },
     )
 }
 

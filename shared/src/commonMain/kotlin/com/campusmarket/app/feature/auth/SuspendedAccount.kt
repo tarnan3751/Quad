@@ -24,6 +24,8 @@ import androidx.lifecycle.viewModelScope
 import com.campusmarket.app.data.ApiClient
 import com.campusmarket.app.data.ApiError
 import com.campusmarket.app.ui.Validate
+import com.campusmarket.app.ui.components.DialogConfirmButton
+import com.campusmarket.app.ui.components.DialogDismissButton
 import com.campusmarket.app.ui.components.EmailField
 import com.campusmarket.app.ui.components.InfoBanner
 import com.campusmarket.app.ui.components.InlineError
@@ -204,26 +206,17 @@ fun SuspendedAccountDialog(message: String, initialEmail: String?, onDismiss: (d
         },
         confirmButton = {
             when (state.step) {
-                DeleteAccountStep.Info -> TextButton(
-                    onClick = vm::startDeletion,
-                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                ) { Text("Delete my account") }
+                DeleteAccountStep.Info -> DialogConfirmButton("Delete my account", onClick = vm::startDeletion, destructive = true)
                 DeleteAccountStep.Credentials -> TextButton(onClick = vm::continueToConfirm) { Text("Continue") }
-                DeleteAccountStep.Confirm -> TextButton(
-                    onClick = vm::delete,
-                    enabled = !state.submitting,
-                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                ) {
-                    if (state.submitting) CircularProgressIndicator(Modifier.padding(end = 8.dp).size(16.dp), strokeWidth = 2.dp)
-                    Text("Delete permanently")
-                }
+                DeleteAccountStep.Confirm ->
+                    DialogConfirmButton("Delete permanently", onClick = vm::delete, destructive = true, loading = state.submitting)
                 DeleteAccountStep.Done -> TextButton(onClick = close) { Text("OK") }
             }
         },
         dismissButton = {
             when (state.step) {
-                DeleteAccountStep.Info -> TextButton(onClick = close) { Text("Close") }
-                DeleteAccountStep.Credentials, DeleteAccountStep.Confirm -> TextButton(onClick = vm::back, enabled = !state.submitting) { Text("Back") }
+                DeleteAccountStep.Info -> DialogDismissButton("Close", close)
+                DeleteAccountStep.Credentials, DeleteAccountStep.Confirm -> DialogDismissButton("Back", vm::back, enabled = !state.submitting)
                 DeleteAccountStep.Done -> Unit
             }
         },
