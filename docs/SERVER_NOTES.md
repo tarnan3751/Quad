@@ -108,6 +108,17 @@ Decisions made while implementing the server that go beyond `CONTRACT.md`. Clien
 - Search needs >= 2 characters (shorter returns an empty list, so debounce or search on submit) and returns at most 20 rows.
 
 ## Demo data (after `./gradlew :server:seed`)
-Password `password123`: `admin@state.edu` (ADMIN), `moderator@state.edu` (MODERATOR), sellers `maya@ jordan@ priya@ sofia@state.edu`, buyers `liam@ noah@state.edu`; `dev@ ava@ ethan@ zoe@tech.edu` on the second campus.
-Paid demo orders were paid a few hours before seeding (their 72 h hold runs from then); one of them (zoe@tech.edu buying
-from ava@tech.edu) is disputed, so the moderators' dispute queue isn't empty.
+Password `password123`: `admin@state.edu` (ADMIN), `moderator@state.edu` (MODERATOR), sellers `maya@ jordan@ priya@ sofia@state.edu`, buyers `liam@ noah@ tyler@state.edu`; `dev@ ava@ ethan@ zoe@tech.edu` on the second campus.
+- 44 listings posted over the last few weeks (newest minutes ago), each with 1-3 real product photos bundled in
+  `server/src/main/resources/seed/photos/` (sources and licences in `CREDITS.md` there). A listing whose file is missing
+  gets a generated placeholder and the seed names it. Eight users have illustrated avatars (shapes on Golden Hour
+  gradients, never photos of people); the rest show the app's initials.
+- Orders in every state but awaiting-payment: completed (rated, some 3-4 stars), paid and awaiting handoff (sofia@ buying
+  jordan@'s monitor, ethan@ buying ava@'s tent), refunded, cancelled, and one disputed (zoe@tech.edu buying from
+  ava@tech.edu), so the moderators' dispute queue isn't empty. Paid orders were paid hours before seeding (their 72 h
+  hold runs from then).
+- 14 conversations with realistic timing; four have unread messages (for maya@, liam@, dev@ and ava@). The open reports
+  all concern tyler@, who asks buyers to pay off-app.
+- Ids derive from stable keys, so re-running is a no-op (after changing listing keys, reseed with `--reset`). Seed photo
+  files are named `seed-<photo id>-<content hash>.jpg`, so a replaced photo gets a new URL despite the immutable cache
+  headers; unreferenced `seed-*` files in `UPLOADS_DIR` are deleted at the end of each run (other uploads are left alone).
