@@ -58,6 +58,8 @@ data class PendingMessage(
     val createdAt: Long,
     val delivery: Delivery = Delivery.Sending,
     val error: String? = null,
+    /** The send was cut off (I left the chat while it was sending), so the server may have the message after all. */
+    val unconfirmed: Boolean = false,
 )
 
 data class ConversationUiState(
@@ -106,7 +108,8 @@ enum class Receipt { Sent, Seen }
  * - History: [history] pages `GET /conversations/{id}/messages` (newest first) backwards in time.
  * - Live: `MessageCreated` events for this conversation are merged by id (the server also echoes my own REST sends),
  *   `ConversationRead` from the other person drives the "Seen" receipt.
- * - Sending: REST with an optimistic bubble; failures stay in the list as "Not sent" with retry / discard.
+ * - Sending: REST with an optimistic bubble; failures stay in the list as "Not sent" with retry / discard. The draft
+ *   and unsent messages live in the [ChatOutbox], so they are still here after leaving the conversation and coming back.
  *   `BLOCKED` and deleted-user errors disable the composer with an explanation ([ConversationUiState.restriction]).
  * - Read: marked read when the screen becomes visible and on every new incoming message while visible.
  * - Fallback: while the socket is down the newest page is re-fetched every [CHAT_POLL_INTERVAL_MS], and once on reconnect.
@@ -118,6 +121,7 @@ class ConversationViewModel(
     private val session: SessionManager,
     private val userMessages: UserMessages,
     private val unread: UnreadConversations? = null,
+    private val outbox: ChatOutbox = ChatOutbox(),
     private val nowMillis: () -> Long = { Clock.System.now().toEpochMilliseconds() },
 ) : ViewModel() {
 
@@ -131,7 +135,17 @@ class ConversationViewModel(
         api.messages(conversationId, cursor, limit)
     }
 
-    private val _state = MutableStateFlow(ConversationUiState())
+    private val _state = MutableStateFlow(
+        outbox.load(myId, conversationId).let { saved ->
+            ConversationUiState(
+                draft = saved.draft,
+                // A send that was still running when the chat was left was cancelled with it.
+                pending = saved.pending.map {
+                    if (it.delivery == Delivery.Sending) it.copy(delivery = Delivery.Failed, error = "Not sent", unconfirmed = true) else it
+                },
+            )
+        },
+    )
     val state: StateFlow<ConversationUiState> = _state.asStateFlow()
 
     val connection: StateFlow<ChatSocket.Status> = live.status
@@ -156,7 +170,32 @@ class ConversationViewModel(
         viewModelScope.launch { live.events.collect(::onEvent) }
         viewModelScope.launch { live.syncWhileDown(pollWhileConnecting = true, onReconnected = ::syncNewest, poll = ::syncNewest) }
         viewModelScope.launch {
-            history.state.map { it.loaded }.distinctUntilChanged().collect { loaded -> if (loaded) mergeLiveMessages() }
+            history.state.map { it.loaded }.distinctUntilChanged().collect { loaded ->
+                if (loaded) {
+                    mergeLiveMessages()
+                    dropDeliveredPending()
+                }
+            }
+        }
+        viewModelScope.launch { _state.collect(::saveUnsent) }
+    }
+
+    override fun onCleared() {
+        saveUnsent(_state.value)
+    }
+
+    private fun saveUnsent(s: ConversationUiState) = outbox.save(myId, conversationId, s.draft, s.pending)
+
+    /** An interrupted send that did reach the server is in the history now: drop its "Not sent" copy. */
+    private fun dropDeliveredPending() {
+        if (_state.value.pending.none { it.unconfirmed }) return
+        val mine = history.state.value.items.filter { it.senderId == myId }
+        _state.update { s ->
+            s.copy(
+                pending = s.pending.filterNot { p ->
+                    p.unconfirmed && mine.any { it.body == p.body && it.createdAt >= p.createdAt - CLOCK_SKEW_MS }
+                },
+            )
         }
     }
 
@@ -234,7 +273,7 @@ class ConversationViewModel(
             _state.update { it.copy(draftError = error) }
             return
         }
-        val pending = PendingMessage(localId = "local-${localCounter++}", body = body, createdAt = nowMillis())
+        val pending = PendingMessage(localId = "local-${nowMillis()}-${localCounter++}", body = body, createdAt = nowMillis())
         _state.update { it.copy(draft = "", draftError = null, pending = it.pending + pending) }
         deliver(pending)
     }
@@ -242,7 +281,7 @@ class ConversationViewModel(
     fun retry(localId: String) {
         if (_state.value.restriction != null) return
         val p = _state.value.pending.firstOrNull { it.localId == localId && it.delivery == Delivery.Failed } ?: return
-        val again = p.copy(delivery = Delivery.Sending, error = null)
+        val again = p.copy(delivery = Delivery.Sending, error = null, unconfirmed = false)
         updatePending(localId) { again }
         deliver(again)
     }
@@ -366,6 +405,7 @@ class ConversationViewModel(
         const val NEVER = Long.MIN_VALUE
         const val MARK_READ_DEBOUNCE_MS = 250L
         const val LIVE_CAP = 200
+        const val CLOCK_SKEW_MS = 2 * 60_000L
     }
 }
 

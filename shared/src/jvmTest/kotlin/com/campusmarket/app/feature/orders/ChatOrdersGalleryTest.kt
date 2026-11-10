@@ -344,7 +344,7 @@ class ChatOrdersGalleryTest : ScreenshotGallery(settleMillis = 500) {
         sendFails = true
         onAllNodes(hasSetTextAction()).onFirst().performTextInput("No worries, I'm by the front desk.")
         clickDesc("Send")
-        await("Tap to retry", 8_000)
+        await("Retry", 8_000)
         shot("chat-03-failed-send")
         sendFails = false
         sendSlow = true
